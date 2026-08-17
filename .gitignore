@@ -1,1 +1,9 @@
-.venv/\n__pycache__/\n*.py[cod]\n*.db\n*.sqlite3\nmodels/*.gguf\nmodels/*.bin\n.DS_Store\n
+.venv/
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite3
+models/*.gguf
+models/*.bin
+.DS_Store
+docs/memory/summaries/

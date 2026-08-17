@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+import argparse
+import json
+from pathlib import Path
+import os
+
+from memory import Memory
+from agent import index_folder, suggest_organization
+
+def load_config():
+    cfg_path = Path(__file__).parent / 'config.json'
+    try:
+        cfg = json.loads(cfg_path.read_text())
+        # Resolve project-relative paths independently of the current directory.
+        for key in ('db_path', 'faiss_index_path', 'local_model_path', 'gpt4all_model_path'):
+            value = cfg.get(key)
+            if isinstance(value, str) and not os.path.isabs(value):
+                cfg[key] = str((Path(__file__).parent / value.replace('ADA/', '', 1)).resolve())
+        return cfg
+    except Exception:
+        return {"name": "ADA", "max_threads": 4, "use_mps": False, "db_path": str(Path(__file__).parent / 'memory.db')}
+
+def main():
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest='cmd')
+    p_index = sub.add_parser('index')
+    p_index.add_argument('--dir', required=True)
+    p_suggest = sub.add_parser('suggest')
+    p_suggest.add_argument('--dir', required=True)
+    p_run = sub.add_parser('run')
+    p_prompt = sub.add_parser('prompt')
+    p_prompt.add_argument('text', help='Natural language prompt for ADA')
+
+    args = parser.parse_args()
+    cfg = load_config()
+    print(f"Starting {cfg.get('name', 'ADA')}")
+    mem = Memory(cfg.get('db_path', str(Path(__file__).parent / 'memory.db')))
+    if args.cmd == 'index':
+        index_folder(args.dir, mem)
+    elif args.cmd == 'suggest':
+        suggest_organization(args.dir, mem)
+    elif args.cmd == 'run':
+        # start interactive agent loop
+        from agent_loop import Agent
+        agent = Agent(cfg)
+        agent.interactive_loop()
+    elif args.cmd == 'prompt':
+        text = args.text.strip()
+        # simple heuristics: detect index or suggest commands in natural language
+        lowered = text.lower()
+        if lowered.startswith('index') or 'index' in lowered or 'scan' in lowered:
+            # try to extract a path
+            parts = text.split()
+            path = None
+            for p in parts:
+                if p.startswith('/') or p.startswith('~') or p.startswith('.'): 
+                    path = os.path.expanduser(p)
+                    break
+            if path:
+                print('Heuristic: calling index on', path)
+                mem = Memory(cfg.get('db_path', str(Path(__file__).parent / 'memory.db')))
+                index_folder(path, mem)
+                return
+        if 'suggest' in lowered or 'organize' in lowered or 'orden' in lowered:
+            parts = text.split()
+            path = None
+            for p in parts:
+                if p.startswith('/') or p.startswith('~') or p.startswith('.'):
+                    path = os.path.expanduser(p)
+                    break
+            if path:
+                print('Heuristic: calling suggest on', path)
+                mem = Memory(cfg.get('db_path', str(Path(__file__).parent / 'memory.db')))
+                suggest_organization(path, mem)
+                return
+        # Otherwise, use the agent parser to interpret the prompt.
+        from agent_loop import Agent
+        agent = Agent(cfg)
+        parsed = agent.parse_prompt(text)
+        action = parsed.get('action')
+        if action == 'organize':
+            path = parsed.get('path') or None
+            if not path:
+                # try simple extraction from quotes
+                import re
+                m = re.search(r'"([^"]+)"', text)
+                if m:
+                    candidate = m.group(1)
+                    if candidate.startswith('/') or candidate.startswith('~') or candidate.startswith('.'):
+                        path = os.path.expanduser(candidate)
+            if not path:
+                print('Could not find a path to organize; please specify a directory.')
+            else:
+                confirm = input(f"Esto moverá archivos en {path}. ¿Confirmás? [s/N] ").lower().strip() in ('s', 'si', 'sí', 'y', 'yes')
+                print(agent.decide_and_run({'type': 'organize_photos', 'payload': {'dir': path}, 'confirm': confirm, 'complexity': 4}))
+            return
+        if action == 'index':
+            path = parsed.get('path')
+            if path:
+                mem = Memory(cfg.get('db_path', str(Path(__file__).parent / 'memory.db')))
+                index_folder(path, mem)
+            else:
+                print('No path detected for indexing')
+            return
+        if action == 'suggest':
+            path = parsed.get('path')
+            if path:
+                mem = Memory(cfg.get('db_path', str(Path(__file__).parent / 'memory.db')))
+                suggest_organization(path, mem)
+            else:
+                print('No path detected for suggest')
+            return
+        if action == 'run':
+            cmd = parsed.get('command')
+            if cmd:
+                confirm = input(f"¿Confirmás ejecutar '{cmd}'? [s/N] ").lower().strip() in ('s', 'si', 'sí', 'y', 'yes')
+                print(agent.decide_and_run({'type': 'run_script', 'payload': {'command': cmd}, 'confirm': confirm, 'complexity': 2}))
+                return
+            print('No command found to run')
+            return
+        # fallback: send as general prompt to agent
+        task = {'type': None, 'prompt': text, 'complexity': parsed.get('complexity', 5)}
+        res = agent.decide_and_run(task)
+        print(res)
+    else:
+        parser.print_help()
+
+if __name__ == '__main__':
+    main()
