@@ -5,6 +5,7 @@
   "use_mps": false,
   "ollama_url": "http://127.0.0.1:11434",
   "ollama_model": "llama3.2:3b",
+  "vision_model": "qwen2.5vl:3b",
   "local_max_complexity": 5,
   "privacy_default": "normal",
   "confirm_risky": true,

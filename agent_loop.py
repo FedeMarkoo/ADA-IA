@@ -102,6 +102,9 @@ class Agent:
         if name == 'mcp' and 'servers' not in args:
             args = dict(args)
             args['servers'] = self.cfg.get('mcp_servers', {})
+        if name == 'analyze_photo' and 'config' not in args:
+            args = dict(args)
+            args['config'] = self.cfg
         risky_filesystem = name == 'filesystem' and args.get('action') in {'move_files', 'copy_files', 'mkdir'}
         risky_lightroom = name == 'lightroom' and args.get('action') in {'organize', 'organizar', 'mover', 'limpiar', 'recuperar'}
         risky_mcp = name == 'mcp' and not args.get('list_tools')
@@ -142,6 +145,8 @@ class Agent:
             return {"action": "run", "command": command, "complexity": 2}
         if any(w in lowered for w in ("index", "indexar", "scan", "escanear")):
             return {"action": "index", "path": path, "complexity": 2}
+        if any(w in lowered for w in ("analizar foto", "analizá foto", "analiza foto", "analizar imagen", "evaluar foto", "criticar foto")):
+            return {"action": "analyze_photo", "path": path, "complexity": 5}
         if any(w in lowered for w in ("listar fotos", "lista de fotos", "listá mis fotos", "listar mis fotos", "liste mis fotos", "listes mis fotos", "fotos")) and any(w in lowered for w in ("listar", "lista", "liste", "listes", "mostrar", "mostrá", "ver", "encontrar")):
             return {"action": "list_photos", "path": path, "complexity": 2}
         if (re.search(r"list\w*.*carpet", lowered) or re.search(r"carpet.*list\w*", lowered) or any(w in lowered for w in ("listar directorios", "ver directorios"))):
@@ -228,6 +233,11 @@ class Agent:
             elif parsed["action"] == "organize":
                 answer = input("Esto moverá archivos. ¿Confirmás? [s/N] ").lower().strip() in ("s", "si", "sí", "y", "yes")
                 task = {"type": "organize_photos", "payload": {"dir": parsed["path"]}, "complexity": 4, "confirm": answer}
+            elif parsed["action"] == "analyze_photo":
+                if not parsed.get("path"):
+                    print("Necesito la ruta de la imagen.")
+                    continue
+                task = {"type": "analyze_photo", "payload": {"path": parsed["path"]}, "complexity": 5}
             else:
                 task = {"prompt": text, "complexity": parsed.get("complexity", 3), "use_memory": True}
             result = self.decide_and_run(task)

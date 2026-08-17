@@ -74,6 +74,11 @@ class ModelManager:
             return self._call_anthropic(prompt, **kwargs)
         raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
 
+    def call_vision(self, provider, prompt, image_base64, **kwargs):
+        if provider != "ollama":
+            raise RuntimeError("El análisis visual local está configurado para Ollama")
+        return self._call_ollama_vision(prompt, image_base64, **kwargs)
+
     def _call_ollama(self, prompt, **kwargs):
         model = kwargs.get("ollama_model") or self.config.get("ollama_model", "llama3.2:3b")
         payload = json.dumps({
@@ -93,6 +98,25 @@ class ModelManager:
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError("Ollama devolvió un error: %s" % detail) from exc
+
+    def _call_ollama_vision(self, prompt, image_base64, **kwargs):
+        model = kwargs.get("ollama_model") or self.config.get("vision_model", "qwen2.5vl:3b")
+        payload = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": prompt, "images": [image_base64]}],
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": kwargs.get("temperature", 0.1)},
+        }).encode("utf-8")
+        request = urllib.request.Request(self.ollama_url + "/api/chat", data=payload,
+                                         headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            return data.get("message", {}).get("content", "").strip()
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError("Ollama devolvió un error visual: %s" % detail) from exc
 
     def _call_openai(self, prompt, **kwargs):
         client = OpenAI(api_key=self.openai_key)

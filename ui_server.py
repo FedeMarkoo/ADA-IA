@@ -217,6 +217,17 @@ def chat():
         parsed = {'action': 'list_photos', 'complexity': 2}
     elif ('escritorio' in text.lower() or 'desktop' in text.lower()) and ('carpet' in previous or 'directori' in previous) and any(w in previous for w in ('list', 'mostrar', 'ver')):
         parsed = {'action': 'list_dirs', 'complexity': 2}
+    if parsed.get('action') == 'analyze_photo':
+        path = parsed.get('path')
+        if not path:
+            reply = 'Necesito la ruta de la imagen. Por ejemplo: “analizá la foto /ruta/imagen.jpg”.'
+            conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+            return jsonify({'reply': reply, 'model': 'ADA · agente'})
+        result = agent.decide_and_run({'type': 'analyze_photo', 'payload': {'path': path}, 'complexity': 5})
+        out = result.get('result', {})
+        reply = json.dumps(out, ensure_ascii=False, indent=2)
+        conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+        return jsonify({'reply': reply, 'model': result.get('model', 'tool: analyze_photo')})
     if parsed.get('action') in {'list_dirs', 'list_files'}:
         folder = parsed.get('path') or _resolve_folder(text, previous)
         if not folder:
