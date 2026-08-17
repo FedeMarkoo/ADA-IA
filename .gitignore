@@ -1,0 +1,1 @@
+.venv/\n__pycache__/\n*.py[cod]\n*.db\n*.sqlite3\nmodels/*.gguf\nmodels/*.bin\n.DS_Store\n
