@@ -1,0 +1,88 @@
+# ADA Documentation
+
+ADA es un agente local orientado a automatizar tareas sobre archivos, fotos y
+datos. Puede conversar, ejecutar skills, consultar memoria y pedir confirmación
+antes de realizar operaciones que modifican información.
+
+## Estructura del proyecto
+
+- `ada.py`: CLI para indexar fotos, sugerir organización y ejecutar ADA.
+- `agent_loop.py`: agente interactivo, parser de solicitudes y routing de skills.
+- `models.py`: selección de proveedores y adaptadores para Ollama, OpenAI y Anthropic.
+- `memory.py`: memoria persistente SQLite para tareas, conocimiento y procedimientos.
+- `image_embedding.py`: embeddings visuales y de texto usados por el indexador.
+- `ui_server.py` y `ui/`: interfaz web local.
+- `skills/operations/`: ejecución de comandos y operaciones sobre archivos.
+- `skills/photos/`: análisis, listado, organización y workflows de Lightroom.
+- `skills/system/`: puente opcional con servidores MCP.
+- `skills/data/`: consultas de bases SQLite en modo lectura.
+- `scripts/`: scripts auxiliares y pruebas manuales.
+- `docs/`: documentación histórica y notas internas del proyecto.
+
+## Seguridad y permisos
+
+Las skills de lectura no modifican archivos. Las operaciones de ejecución,
+movimiento, copia, creación de carpetas y organización requieren confirmación
+cuando `confirm_risky` está activo en `config.json`.
+
+La skill `sqlite` abre bases en modo lectura. El puente MCP permanece desactivado
+hasta que se configure explícitamente `mcp_servers`.
+
+## Configuración
+
+`config.json` define el modelo de conversación (`ollama_model`), el modelo
+visual (`vision_model`), rutas de fotos, límites de ejecución, memoria y nivel
+de confirmación. Los modelos remotos se habilitan mediante sus variables de
+entorno correspondientes.
+
+## Analizador de fotos
+
+La skill `photos/analyze_photo.py` combina dos fuentes:
+
+1. **Análisis local rápido:** Pillow y NumPy calculan enfoque mediante varianza
+   del Laplaciano, luminancia media, clipping de sombras y altas luces, contraste,
+   orientación y una puntuación general técnica.
+2. **Análisis semántico opcional:** Ollama recibe la imagen y devuelve sujeto,
+   contexto, estilo, feedback fotográfico, puntuación artística y una estimación
+   de coincidencia con la sesión de la carpeta.
+
+El análisis local no requiere descargar un modelo. La parte semántica requiere
+Ollama y un modelo con visión, por ejemplo:
+
+```bash
+ollama pull qwen2.5vl:3b
+```
+
+La puntuación técnica es una ayuda consistente, no una verdad absoluta. La
+coincidencia de sesión también usa confianza: nombres, carpeta y contexto visual
+son evidencias, no una identificación definitiva de lugar o personas.
+
+Uso desde Python:
+
+```python
+from skills.photos.analyze_photo import run
+
+result = run({
+    "path": "/ruta/a/imagen.jpg",
+    "folder": "/ruta/a/sesion",
+    "vision": False,
+})
+```
+
+Uso desde ADA:
+
+```text
+Analizá la foto /ruta/a/imagen.jpg
+```
+
+Con `vision=False` se obtiene únicamente el análisis técnico. Esto permite
+probar la skill y procesar grandes carpetas aun cuando Ollama no esté activo.
+
+## Pruebas
+
+Las pruebas del analizador no necesitan red ni modelo visual: verifican imágenes
+válidas, imágenes inexistentes, cálculo de métricas y carga recursiva de skills.
+
+```bash
+ADA/.venv/bin/python -m unittest discover -s tests -v
+```
