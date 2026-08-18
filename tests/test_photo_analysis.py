@@ -122,6 +122,15 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertEqual(result['repaired_count'], 1)
         self.assertIn('xmpDM:good="False"', (folder / 'frame_0.xmp').read_text(encoding='utf-8'))
 
+    def test_burst_label_is_yellow(self):
+        folder = Path(self.tempdir.name) / 'burst_batch'
+        folder.mkdir()
+        for name in ('_DSC4740.ARW', '_DSC4741.ARW'):
+            (folder / name).write_bytes(self.path.read_bytes())
+        result = select_photo_batch({'path': str(folder), 'workers': 1, 'vision': False, 'write_xmp': True})
+        self.assertEqual(result['burst_count'], 2)
+        self.assertIn('xmp:Label="Amarillo"', (folder / '_DSC4740.xmp').read_text(encoding='utf-8'))
+
 
 if __name__ == '__main__':
     unittest.main()
