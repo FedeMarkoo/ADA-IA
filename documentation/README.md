@@ -136,11 +136,11 @@ selección local sin enviar miles de imágenes al modelo visual:
 Seleccioná las fotos de /ruta/al/evento y prepará una shortlist de 300
 ```
 
-El primer paso calcula métricas técnicas en paralelo, agrupa ráfagas o frames
-casi idénticos consecutivos y conserva el mejor representante de cada grupo.
-Devuelve una shortlist preliminar; la etapa siguiente debe pasar esos
-representantes por visión para validar momentos, sujetos y cobertura del evento.
-No mueve ni elimina archivos.
+Cada archivo del lote invoca el mismo workflow multiagente que una foto
+individual (`analyze_photo`). No existe un cupo fijo de seleccionadas: cada
+foto queda `Seleccionada` o `Rechazada` según su propia revisión. Si se pide
+XMP, el sidecar se escribe inmediatamente al terminar ese archivo, con rating
+Lightroom, puntaje ADA y motivo. No mueve ni elimina archivos.
 
 Con `vision=False` se obtiene únicamente el análisis técnico. Esto permite
 probar la skill y procesar grandes carpetas aun cuando Ollama no esté activo.
