@@ -64,13 +64,6 @@ def _mentions_desktop(text):
 
 
 def _resolve_folder(text, previous):
-    value = text.lower() + ' ' + previous.lower()
-    if _mentions_desktop(text):
-        return _desktop_path()
-    if 'organized' in value and ('archivo' in value or 'carpeta' in value or 'agrupar' in value):
-        return os.path.expanduser('~/Desktop/ADA/test_photos/organized')
-    if 'test' in value:
-        return os.path.expanduser('~/Desktop/ADA/test_photos')
     if _mentions_desktop(text):
         return _desktop_path()
     return None
@@ -78,8 +71,6 @@ def _resolve_folder(text, previous):
 
 def _last_known_folder(previous):
     """Resolve the most specific folder ADA mentioned in the conversation."""
-    if 'organized' in previous.lower():
-        return os.path.expanduser('~/Desktop/ADA/test_photos/organized')
     return _resolve_folder('', previous)
 
 

@@ -10,7 +10,7 @@ mensaje o evento
       ↓
 parser y router
       ↓
-skill, agente especialista o motor
+capability, agente especialista o motor
       ↓
 confirmación si hay riesgo
       ↓
@@ -27,8 +27,8 @@ memoria y auditoría
 - `src/ada/infrastructure/persistence/sqlite.py`: memoria persistente SQLite.
 - `src/ada/agents/`: registro, coordinador y especialistas.
 - `src/ada/capabilities/`: capacidades ejecutables agrupadas por categoría.
-- `ui_server.py` y `ui/`: conversación web e historial.
-- `resource_policy.py`: presupuesto de CPU, concurrencia y throttling.
+- `src/ada/interfaces/web/server.py` y `ui/`: conversación web e historial.
+- `src/ada/infrastructure/runtime/resources.py`: presupuesto de CPU, concurrencia y throttling.
 
 ## Workflow de fotos
 
