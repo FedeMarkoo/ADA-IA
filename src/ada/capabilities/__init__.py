@@ -1,0 +1,1 @@
+"""Discoverable ADA capabilities."""
