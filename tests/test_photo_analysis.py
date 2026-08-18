@@ -109,6 +109,7 @@ class PhotoAnalysisTests(unittest.TestCase):
         xmp = (folder / 'frame_0.xmp').read_text(encoding='utf-8')
         self.assertIn('ada:Status=', xmp)
         self.assertIn('xmp:Rating=', xmp)
+        self.assertIn('xmpDM:good=', xmp)
         ET.parse(folder / 'frame_0.xmp')
 
 

@@ -18,9 +18,12 @@ def write_photo_xmp(path, status, rating, score, reason):
         content = content.replace('<rdf:Description', '<rdf:Description xmlns:ada="https://ada.local/ns/1.0/"', 1)
     if 'xmlns:xmp=' not in content:
         content = content.replace('<rdf:Description', '<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/"', 1)
+    if 'xmlns:xmpDM=' not in content:
+        content = content.replace('<rdf:Description', '<rdf:Description xmlns:xmpDM="http://ns.adobe.com/xmp/1.0/DynamicMedia/"', 1)
     values = {
         'xmp:Rating': str(int(rating if status == 'Seleccionada' else 0)),
         'xmp:Label': status,
+        'xmpDM:good': 'True' if status == 'Seleccionada' else 'False',
         'ada:Status': status,
         'ada:Score': f'{float(score):.2f}',
         'ada:Reason': reason,
