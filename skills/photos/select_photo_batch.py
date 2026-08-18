@@ -38,7 +38,7 @@ def _write_xmp(path, status, rating, score, reason):
     content = sidecar.read_text(encoding='utf-8', errors='ignore') if sidecar.is_file() else (
         '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
         ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
-        '  <rdf:Description rdf:about=""/>\n'
+        '  <rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" rdf:about=""/>\n'
         ' </rdf:RDF>\n</x:xmpmeta>\n'
     )
     attributes = {
@@ -51,6 +51,9 @@ def _write_xmp(path, status, rating, score, reason):
     if 'xmlns:ada=' not in content:
         content = content.replace('<rdf:Description',
                                   '<rdf:Description xmlns:ada="https://ada.local/ns/1.0/"', 1)
+    if 'xmlns:xmp=' not in content:
+        content = content.replace('<rdf:Description',
+                                  '<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/"', 1)
     for key, value in attributes.items():
         escaped = value.replace('&', '&amp;').replace('"', '&quot;')
         pattern = rf'{re.escape(key)}="[^"]*"'
