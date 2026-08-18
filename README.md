@@ -18,6 +18,7 @@ reversibilidad y uso responsable de CPU, memoria, batería y red.
 ## Capacidades actuales
 
 - chat local por web y CLI;
+- entrada opcional por Telegram mediante el mismo endpoint interno que la web;
 - memoria persistente SQLite;
 - routing de capabilities y arquitectura multiagente;
 - motores locales mediante Ollama;

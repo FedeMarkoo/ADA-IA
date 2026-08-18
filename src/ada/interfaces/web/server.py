@@ -5,6 +5,7 @@ from pathlib import Path
 
 from src.ada.application.agent import Agent
 from src.ada.capabilities.files.filesystem import IMAGE_EXTENSIONS
+from src.ada.interfaces.telegram import TelegramListener
 import re
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -556,6 +557,8 @@ def chat():
 
 def main():
     port = int(os.environ.get('ADA_UI_PORT', '5005'))
+    telegram = TelegramListener(cfg, base_url=f'http://127.0.0.1:{port}')
+    telegram.start()
     app.run(host='127.0.0.1', port=port)
 
 

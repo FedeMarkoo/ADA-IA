@@ -29,5 +29,11 @@
   "photo_root": "/Users/home/Desktop/Fotos",
   "lightroom_script": "/Users/home/Desktop/gestor_fotos_lightroom.py",
   "lightroom_db": "/Users/home/Desktop/limpieza_lightroom.sqlite3",
-  "mcp_servers": {}
+  "mcp_servers": {},
+  "telegram": {
+    "enabled": false,
+    "poll_seconds": 2,
+    "allowed_chat_ids": [],
+    "inbox": "telegram_inbox"
+  }
 }
