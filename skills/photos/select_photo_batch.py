@@ -5,6 +5,7 @@ from pathlib import Path
 from skills.photos.analyze_photo import IMAGE_EXTENSIONS
 from skills.photos.burst_detection import detect_burst_groups
 from skills.photos.xmp import mark_xmp_label, repair_photo_xmp
+from resource_policy import wait_for_cpu_budget
 
 
 def _burst_groups(files):
@@ -33,11 +34,12 @@ def run(args):
     # Import lazily so skill discovery remains independent from agent startup.
     from agents import MultiAgentCoordinator
     config = dict(args.get('config') or {})
-    config.setdefault('agent_max_workers', int(args.get('workers', 2)))
+    config.setdefault('agent_max_workers', int(args.get('workers', config.get('photo_workers', 1))))
     coordinator = MultiAgentCoordinator(config)
     records, failures, xmp_written = [], [], []
 
     def analyze(path):
+        wait_for_cpu_budget(config)
         return coordinator.analyze_photo({
             'path': str(path),
             'folder': str(root),
@@ -45,7 +47,8 @@ def run(args):
             'write_xmp': args.get('write_xmp', False),
         })
 
-    with ThreadPoolExecutor(max_workers=max(1, int(args.get('workers', 2)))) as pool:
+    max_workers = max(1, int(args.get('workers', config.get('photo_workers', 1))))
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {pool.submit(analyze, path): path for path in files}
         for future in as_completed(futures):
             path = futures[future]
