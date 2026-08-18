@@ -1,18 +1,20 @@
 # ADA
 
-Documentación principal del asistente local y autónomo.
+Índice general de documentación de ADA. El contenido está separado por
+responsabilidad: proyecto, skills y memoria.
 
 ## Por dónde empezar
 
-- [Objetivo y roadmap](roadmap.md)
-- [Arquitectura](architecture/overview.md)
-- [Análisis de fotos](features/photo-analysis.md)
-- [Compras y recetas](features/shopping-and-recipes.md)
-- [XMP y ráfagas](features/xmp-and-bursts.md)
-- [Telegram y Ollama](integrations/telegram-and-ollama.md)
-- [Operación y recursos](operations.md)
+- [Documentación del proyecto](project/README.md)
 - [Skills](skills/README.md)
 - [Memoria](memory/README.md)
+
+## Separación de contenidos
+
+- `docs/project/`: objetivos, arquitectura, funcionalidades e integración de
+  ADA como producto.
+- `docs/skills/`: contratos y uso de capacidades ejecutables individuales.
+- `docs/memory/`: resúmenes generados para memoria y auditoría.
 
 ## Instalación rápida
 
