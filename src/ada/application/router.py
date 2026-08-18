@@ -42,7 +42,7 @@ class IntentRouter:
             raw = self.model_manager.call(
                 provider,
                 prompt,
-                ollama_model=self.config.get("router_model", self.config.get("ollama_model")),
+                ollama_model=self.config.get("models", {}).get("router") or self.config.get("router_model"),
                 temperature=0,
                 max_tokens=600,
                 timeout=self.config.get("router_timeout", 45),

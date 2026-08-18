@@ -64,7 +64,8 @@ python3 -m venv .venv
 
 La interfaz queda disponible en `http://127.0.0.1:5005/`.
 
-Ollama es el backend local actual. Los modelos configurados son:
+El proveedor activo y los modelos se configuran en `config.json`. Por ejemplo,
+la configuración inicial usa un proveedor local con estos modelos:
 
 ```bash
 ollama pull llama3.2:3b
@@ -73,6 +74,10 @@ ollama pull qwen2.5vl:3b
 
 El análisis técnico puede ejecutarse sin modelo visual; el análisis semántico de
 fotos necesita un modelo con visión.
+
+Para cambiar el proveedor conversacional, modificá `engine_provider` y la
+sección correspondiente (`models` o `gpt4all`) en `config.json`. Las interfaces
+y el router no necesitan cambios.
 
 ## Pruebas
 
