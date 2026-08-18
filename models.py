@@ -8,6 +8,8 @@ import os
 import urllib.error
 import urllib.request
 
+from runtime import LocalModelRuntime
+
 try:
     from openai import OpenAI
 except Exception:  # optional dependency
@@ -27,20 +29,30 @@ class ModelManager:
         ).rstrip("/")
         self.openai_key = os.environ.get("OPENAI_API_KEY")
         self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        self.local_runtime = LocalModelRuntime(self.config)
 
     def available(self):
+        local_available = self._ollama_available()
         return {
-            "ollama": self._ollama_available(),
+            # `local` is the stable ADA capability; `ollama` is the current
+            # implementation so callers can remain backwards compatible.
+            "local": local_available,
+            "ollama": local_available,
             "openai": bool(OpenAI and self.openai_key),
             "anthropic": bool(Anthropic and self.anthropic_key),
         }
 
     def _ollama_available(self):
-        try:
-            with urllib.request.urlopen(self.ollama_url + "/api/tags", timeout=1.5) as response:
-                return response.status == 200
-        except Exception:
-            return False
+        return self.local_runtime.ensure_ready().available
+
+    def runtime_status(self):
+        """Expose runtime and installed-model state for the UI and diagnostics."""
+        status = self.local_runtime.ensure_ready()
+        models = self.local_runtime.ensure_models([
+            self.config.get("ollama_model", "llama3.2:3b"),
+            self.config.get("vision_model", "qwen2.5vl:3b"),
+        ]) if status.available else {"ready": False, "installed": [], "missing": []}
+        return {"status": status.as_dict(), "models": models}
 
     def choose(self, task):
         """Choose a provider using complexity, privacy and explicit preferences."""
@@ -56,11 +68,12 @@ class ModelManager:
             return "ollama"
         if complexity <= int(self.config.get("local_max_complexity", 5)) and available["ollama"]:
             return "ollama"
+        priority = self.config.get("engine_priority", ["openai", "anthropic", "ollama"])
         if complexity >= 7:
-            for provider in ("openai", "anthropic", "ollama"):
+            for provider in priority:
                 if available[provider]:
                     return provider
-        for provider in ("openai", "anthropic", "ollama"):
+        for provider in priority:
             if available[provider]:
                 return provider
         return None
