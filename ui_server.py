@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 import json
 import os
+from pathlib import Path
 
 from agent_loop import Agent
 from skills.operations.files.filesystem import IMAGE_EXTENSIONS
