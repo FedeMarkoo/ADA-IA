@@ -70,7 +70,13 @@ def technical_analysis(path):
     mean = float(np.mean(gray))
     shadow_clip = float(np.mean(gray <= 0.02) * 100.0)
     highlight_clip = float(np.mean(gray >= 0.98) * 100.0)
-    exposure_score = 10.0 - abs(mean - 0.5) * 13.0 - shadow_clip * 0.35 - highlight_clip * 0.35
+    # A dark event image is not automatically a failed image: faces may be
+    # recoverable from RAW and a dark background can be intentional. Keep
+    # clipping as a warning, but avoid turning moderate underexposure into a
+    # near-zero score (the previous formula did exactly that).
+    exposure_score = (10.0 - abs(mean - 0.46) * 8.0
+                      - min(shadow_clip * 0.12, 2.0)
+                      - min(highlight_clip * 0.12, 2.0))
     contrast = float(np.percentile(gray, 90) - np.percentile(gray, 10))
     contrast_score = _clamp(contrast * 14.0)
     focus_score = _score_from_log(focus_raw)

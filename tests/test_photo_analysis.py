@@ -61,6 +61,12 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertEqual(review['selection_label'], 'aceptada')
         self.assertIn('aceptar', review['recommendation'])
 
+    def test_recoverable_underexposure_is_not_scored_as_rejection(self):
+        image = Image.new('RGB', (320, 200), (45, 45, 50))
+        image.save(self.path, quality=95)
+        result = technical_analysis(self.path)
+        self.assertGreaterEqual(result['exposure']['score'], 4)
+
 
 if __name__ == '__main__':
     unittest.main()

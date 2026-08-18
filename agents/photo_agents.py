@@ -72,8 +72,10 @@ class PhotoReviewAgent(SpecialistAgent):
             issues.append('nitidez limitada; conviene revisar foco y trepidación')
         if exposure.get('score', 0) >= 6:
             strengths.append('exposición equilibrada')
+        elif exposure.get('score', 0) >= 4:
+            issues.append('exposición algo baja; probablemente recuperable al revelar')
         else:
-            issues.append('exposición baja o irregular; revisar sombras')
+            issues.append('exposición baja o irregular; revisar sombras y altas luces')
         if semantic.get('photographer_feedback'):
             strengths.append('el análisis visual encontró contexto fotográfico')
         return AgentResult(self.name, True, {
