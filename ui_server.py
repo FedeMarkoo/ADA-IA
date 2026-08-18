@@ -128,6 +128,30 @@ def _resolve_photo_reference(text, previous, parsed):
     return {'not_found': name}
 
 
+def _last_photo_path(previous):
+    paths = []
+    for match in re.finditer(r"(/[^\n\"]+?\.(?:nef|arw|cr2|dng|raf|orf|jpg|jpeg|png))", previous, re.I):
+        candidate = Path(match.group(1).rstrip('.,;:!?'))
+        if candidate.is_file():
+            paths.append(candidate)
+    return paths[-1] if paths else None
+
+
+def _resolve_contextual_photo(text, previous):
+    """Resolve short follow-ups such as 'otra' using the active photo session."""
+    lowered = text.strip().lower()
+    if not re.search(r"\b(otra|otro|siguiente|seguí|sigue|continuá|continua)\b", lowered):
+        return None
+    last = _last_photo_path(previous)
+    if not last or not last.parent.is_dir():
+        return None
+    extensions = {'.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}
+    reviewed = {item.lower() for item in re.findall(r"(/[^\n\"]+?\.(?:nef|arw|cr2|dng|raf|orf))", previous, re.I)}
+    candidates = [item for item in sorted(last.parent.iterdir())
+                  if item.is_file() and item.suffix.lower() in extensions and str(item).lower() not in reviewed]
+    return candidates[0] if candidates else None
+
+
 def _reply(text, model='ADA · agente'):
     conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': text}])
     return jsonify({'reply': text, 'model': model})
@@ -241,6 +265,9 @@ def chat():
     parsed = agent.parse_prompt(text)
     previous_text = ' '.join(item['text'] for item in conversation[-4:])
     previous = previous_text.lower()
+    contextual_photo = _resolve_contextual_photo(text, previous_text)
+    if contextual_photo and parsed.get('action') in {'ask', 'suggest'}:
+        parsed = {'action': 'analyze_photo', 'path': str(contextual_photo), 'photo_name': contextual_photo.name, 'complexity': 5}
     if pending_action and pending_action.get('type') == 'photo_choice':
         extension = text.strip().lower().lstrip('.')
         candidates = pending_action.get('candidates', [])
