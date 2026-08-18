@@ -9,6 +9,7 @@ import io
 import json
 import math
 import os
+import re
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +45,75 @@ def _metadata(image):
     return exif
 
 
+def _capture_metadata(path, image):
+    """Collect capture data from EXIF, RAW headers and an adjacent XMP sidecar."""
+    metadata = _metadata(image)
+    raw_path = Path(path)
+    if raw_path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}:
+        try:
+            import rawpy
+            with rawpy.imread(str(raw_path)) as raw:
+                other = raw.other
+                if getattr(other, 'iso_speed', None):
+                    metadata.setdefault('ISO', str(round(float(other.iso_speed))))
+                if getattr(other, 'shutter_speed', None):
+                    metadata.setdefault('ExposureTime', str(other.shutter_speed))
+                if getattr(other, 'aperture', None):
+                    metadata.setdefault('FNumber', str(other.aperture))
+                lens = getattr(raw, 'lens', None)
+                if lens and getattr(lens, 'model', None):
+                    metadata.setdefault('LensModel', str(lens.model))
+        except Exception:
+            pass
+    sidecar = raw_path.with_suffix('.xmp')
+    if sidecar.is_file():
+        try:
+            content = sidecar.read_text(encoding='utf-8', errors='ignore')
+            for key, output in {
+                'tiff:Make': 'Make', 'tiff:Model': 'Model',
+                'exif:RecommendedExposureIndex': 'ISO',
+                'exif:ExposureTime': 'ExposureTime', 'exif:FNumber': 'FNumber',
+                'exif:FocalLength': 'FocalLength', 'aux:Lens': 'LensModel',
+            }.items():
+                match = re.search(rf'{re.escape(key)}="([^"]+)"', content)
+                if match:
+                    metadata[output] = match.group(1)
+        except OSError:
+            pass
+    return metadata
+
+
+def _noise_score(metadata):
+    """Estimate high-ISO risk using conservative, explainable camera priors."""
+    try:
+        iso = float(str(metadata.get('ISO', '')).replace(',', '.'))
+    except (TypeError, ValueError):
+        return 8.0, None, 'sin ISO disponible'
+    if iso <= 800:
+        score = 9.5
+    elif iso <= 1600:
+        score = 8.5
+    elif iso <= 3200:
+        score = 7.2
+    elif iso <= 6400:
+        score = 5.8
+    elif iso <= 12800:
+        score = 4.3
+    else:
+        score = 3.2
+    make = str(metadata.get('Make', '')).lower()
+    model = str(metadata.get('Model', '')).lower()
+    # Initial priors, intentionally modest: the user's own accepted/rejected
+    # photos should eventually calibrate these values per camera body.
+    if 'sony' in make or 'ilce' in model or 'alpha' in model:
+        score += 0.5
+    elif 'nikon' in make or model.startswith('d'):
+        score -= 0.2
+    score = _clamp(score)
+    label = 'bajo' if score >= 8 else 'moderado' if score >= 6 else 'alto'
+    return score, round(iso), f'riesgo de ruido {label} para ISO {round(iso)}'
+
+
 def _load_rgb(path):
     """Load a normal image or develop a camera RAW into an RGB preview."""
     if path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}:
@@ -60,7 +130,8 @@ def _load_rgb(path):
 def technical_analysis(path):
     """Return deterministic image-quality measurements in a compact report."""
     image = ImageOps.exif_transpose(_load_rgb(Path(path)))
-    exif = _metadata(image)
+    is_raw = Path(path).suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}
+    exif = _capture_metadata(path, image)
     image.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
     array = np.asarray(image, dtype=np.float32) / 255.0
     gray = (0.299 * array[:, :, 0] + 0.587 * array[:, :, 1] + 0.114 * array[:, :, 2])
@@ -77,12 +148,17 @@ def technical_analysis(path):
     exposure_score = (10.0 - abs(mean - 0.46) * 8.0
                       - min(shadow_clip * 0.12, 2.0)
                       - min(highlight_clip * 0.12, 2.0))
+    raw_recovery_bonus = 0.0
+    if is_raw and mean < 0.4 and highlight_clip < 2.0:
+        raw_recovery_bonus = 0.75
+        exposure_score += raw_recovery_bonus
     contrast = float(np.percentile(gray, 90) - np.percentile(gray, 10))
     contrast_score = _clamp(contrast * 14.0)
     focus_score = _score_from_log(focus_raw)
     exposure_score = _clamp(exposure_score)
     composition_score = _clamp(4.0 + contrast_score * 0.35 + (1.0 if 0.18 < mean < 0.82 else 0.0))
-    overall = _clamp(focus_score * 0.4 + exposure_score * 0.3 + composition_score * 0.3)
+    noise_score, iso, noise_note = _noise_score(exif)
+    overall = _clamp(focus_score * 0.35 + exposure_score * 0.3 + composition_score * 0.25 + noise_score * 0.1)
     return {
         'width': image.width,
         'height': image.height,
@@ -90,7 +166,10 @@ def technical_analysis(path):
         'focus': {'score': focus_score, 'measure': round(focus_raw, 3), 'note': 'higher is sharper'},
         'exposure': {'score': exposure_score, 'mean_luminance': round(mean, 4),
                      'shadow_clip_percent': round(shadow_clip, 3),
-                     'highlight_clip_percent': round(highlight_clip, 3)},
+                     'highlight_clip_percent': round(highlight_clip, 3),
+                     'raw_recovery_bonus': raw_recovery_bonus,
+                     'note': 'subexposición potencialmente recuperable desde RAW' if raw_recovery_bonus else 'evaluación del render disponible'},
+        'noise': {'score': noise_score, 'iso': iso, 'note': noise_note},
         'contrast': {'score': contrast_score, 'range': round(contrast, 4)},
         'composition': {'score': composition_score, 'note': 'technical proxy; semantic composition requires a vision model'},
         'overall_score': overall,

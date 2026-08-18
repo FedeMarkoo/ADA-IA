@@ -166,6 +166,7 @@ def _photo_reply(result):
     focus = technical.get('focus', {})
     exposure = technical.get('exposure', {})
     composition = technical.get('composition', {})
+    noise = technical.get('noise', {})
     match = semantic.get('session_match') or {}
     selection_rating = review.get('selection_rating', '—')
     selection_score = review.get('selection_score', '—')
@@ -182,8 +183,9 @@ def _photo_reply(result):
         '| Área | Puntuación | Lectura |',
         '|---|---:|---|',
         f"| Enfoque | {focus.get('score', '—')}/10 | {'Nitidez limitada; revisar foco o trepidación' if focus.get('score', 0) < 5 else 'Nitidez aceptable'} |",
-        f"| Exposición | {exposure.get('score', '—')}/10 | {'Subexpuesta o con sombras densas' if exposure.get('score', 0) < 5 else 'Equilibrada'} |",
+        f"| Exposición | {exposure.get('score', '—')}/10 | {'Algo baja, pero potencialmente recuperable desde RAW' if exposure.get('raw_recovery_bonus') else ('Subexpuesta o con sombras densas' if exposure.get('score', 0) < 5 else 'Equilibrada')} |",
         f"| Composición técnica | {composition.get('score', '—')}/10 | {composition.get('note', 'Evaluación técnica')} |",
+        f"| Ruido / ISO | {noise.get('score', '—')}/10 | {noise.get('note', 'Sin datos de ISO')} |",
         '',
     ]
     if semantic.get('subject'):

@@ -85,6 +85,21 @@ La skill `photos/analyze_photo.py` combina dos fuentes:
    contexto, estilo, feedback fotográfico, puntuación artística y una estimación
    de coincidencia con la sesión de la carpeta.
 
+### Calibración RAW e ISO
+
+Los RAW no se evalúan como si fueran JPG terminados. ADA lee el encabezado RAW
+y, cuando existe, el XMP asociado para recuperar cámara, ISO, velocidad, apertura
+y lente. Una subexposición con altas luces no recortadas recibe un margen de
+recuperación, porque todavía puede revelarse desde el negativo digital. Ese
+margen no se aplica si hay clipping importante en altas luces.
+
+El riesgo de ruido se calcula por ISO y se incorpora al puntaje técnico. Los
+perfiles de fabricante son priors iniciales y deliberadamente modestos: Sony
+recibe una tolerancia algo mayor a ISO alto y Nikon una penalización ligeramente
+mayor. No reemplazan la evidencia de la imagen ni pretenden afirmar que todos
+los cuerpos de una marca rinden igual; deben calibrarse con fotos aceptadas y
+rechazadas de cada cámara.
+
 El análisis local no requiere descargar un modelo. La parte semántica requiere
 Ollama y un modelo con visión, por ejemplo:
 
