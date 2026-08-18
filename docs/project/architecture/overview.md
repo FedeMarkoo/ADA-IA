@@ -22,12 +22,15 @@ memoria y auditoría
 ## Componentes
 
 - `src/ada/application/agent.py`: interpreta solicitudes y selecciona acciones.
+- `src/ada/application/router.py`: clasifica intenciones, valida planes y usa
+  un fallback determinístico cuando el motor no está disponible.
 - `src/ada/infrastructure/engines/`: abstrae Ollama y motores opcionales.
 - `src/ada/infrastructure/runtime/`: administra procesos, salud y recursos.
 - `src/ada/infrastructure/persistence/sqlite.py`: memoria persistente SQLite.
 - `src/ada/agents/`: registro, coordinador y especialistas.
 - `src/ada/capabilities/`: capacidades ejecutables agrupadas por categoría.
-- `src/ada/interfaces/web/server.py` y `ui/`: conversación web e historial.
+- `src/ada/interfaces/web/server.py`, `src/ada/interfaces/telegram.py` y `ui/`:
+  adapters de entrada/salida que llegan al mismo flujo de conversación.
 - `src/ada/infrastructure/runtime/resources.py`: presupuesto de CPU, concurrencia y throttling.
 
 ## Workflow de fotos
@@ -51,3 +54,12 @@ watcher → evento → regla → tarea → agente → acción → auditoría
 
 El scheduler, los watchers y los adaptadores móviles todavía son trabajo
 pendiente. Las acciones autónomas deberán ser pausables, trazables y revocables.
+
+## Routing inteligente
+
+Las órdenes explícitas se resuelven primero con reglas seguras para evitar una
+llamada innecesaria al modelo. Las solicitudes abiertas pasan por
+`IntentRouter`, que solicita una intención y un plan JSON al motor configurado,
+valida las capabilities resultantes y conserva un fallback semántico local.
+El router nunca ejecuta directamente una respuesta del modelo: solo produce un
+plan validado que el agente y las interfaces pueden ejecutar con sus controles.

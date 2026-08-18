@@ -7,6 +7,7 @@ from src.ada.infrastructure.engines.model_manager import ModelManager
 from src.ada.infrastructure.persistence.sqlite import Memory
 from src.ada.capabilities.registry import load_capabilities
 from src.ada.agents import MultiAgentCoordinator
+from src.ada.application.router import IntentRouter
 
 
 class Agent:
@@ -19,6 +20,7 @@ class Agent:
         self.mem = Memory(db_path)
         self.skills = load_capabilities()
         self.coordinator = MultiAgentCoordinator(self.cfg)
+        self.router = IntentRouter(self.model_manager, self.cfg)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
@@ -142,7 +144,7 @@ class Agent:
         self.mem.add_procedure(name, instructions, meta={"source": "user"})
         return {"saved": True, "name": name}
 
-    def parse_prompt(self, text):
+    def _parse_prompt_rules(self, text):
         lowered = text.lower()
         quoted_path = re.search(r'["“]([^"”]+)["”]', text)
         path_match = re.search(r"(?:^|\s)(/(?:[^\n]+)|~/(?:[^\n]+)|\./(?:[^\n]+))", text)
@@ -205,6 +207,13 @@ class Agent:
         if any(w in lowered for w in ("sugerí", "sugerir", "sugerencia", "recomendá")):
             return {"action": "suggest", "path": path, "complexity": 4}
         return {"action": "ask", "complexity": self.estimate_complexity(text)}
+
+    def parse_prompt(self, text):
+        """Parse explicit commands first and route open-ended requests intelligently."""
+        parsed = self._parse_prompt_rules(text)
+        if parsed.get("action") != "ask":
+            return parsed
+        return self.router.route(text, history=" ".join(item.get("text", "") for item in self.mem.conversation(limit=6)))
 
     def interactive_loop(self):
         print('ADA activa. Escribí "exit" para salir. Usá /help para ayuda.')
