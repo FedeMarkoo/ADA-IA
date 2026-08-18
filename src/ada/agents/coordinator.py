@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .base import AgentRegistry
 from .photo_agents import ContextPhotoAgent, PhotoReviewAgent, TechnicalPhotoAgent
-from skills.photos.xmp import write_photo_xmp
+from src.ada.capabilities.photography.xmp import write_photo_xmp
 from src.ada.infrastructure.runtime.resources import wait_for_cpu_budget
 
 
