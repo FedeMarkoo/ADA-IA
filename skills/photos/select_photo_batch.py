@@ -3,30 +3,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from skills.photos.analyze_photo import IMAGE_EXTENSIONS
+from skills.photos.burst_detection import detect_burst_groups
 from skills.photos.xmp import mark_xmp_label, repair_photo_xmp
 
 
 def _burst_groups(files):
-    """Find likely bursts from adjacent camera sequence numbers."""
-    numbered = []
-    for path in files:
-        match = __import__('re').search(r'(\d{4,})$', path.stem)
-        if match:
-            numbered.append((path, int(match.group(1))))
-    numbered.sort(key=lambda item: (str(item[0].parent), item[1]))
-    groups, current = [], []
-    previous_parent, previous_number = None, None
-    for path, number in numbered:
-        if previous_parent == path.parent and previous_number is not None and number - previous_number <= 2:
-            current.append(path)
-        else:
-            if len(current) >= 2:
-                groups.append(current)
-            current = [path]
-        previous_parent, previous_number = path.parent, number
-    if len(current) >= 2:
-        groups.append(current)
-    return groups
+    """Compatibility wrapper returning only groups."""
+    return detect_burst_groups(files)[0]
 
 
 def run(args):
