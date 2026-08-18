@@ -6,6 +6,7 @@ does not move or delete files.
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+import re
 
 import numpy as np
 from PIL import ImageOps
@@ -29,6 +30,37 @@ def _analyze(path):
     result = technical_analysis(path)
     result['_signature'] = _signature(path)
     return result
+
+
+def _write_xmp(path, status, rating, score, reason):
+    """Create or update only ADA's fields while preserving an existing XMP."""
+    sidecar = Path(path).with_suffix('.xmp')
+    content = sidecar.read_text(encoding='utf-8', errors='ignore') if sidecar.is_file() else (
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
+        ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
+        '  <rdf:Description rdf:about=""/>\n'
+        ' </rdf:RDF>\n</x:xmpmeta>\n'
+    )
+    attributes = {
+        'xmp:Rating': str(rating if status == 'Seleccionada' else 0),
+        'xmp:Label': status,
+        'ada:Status': status,
+        'ada:Score': f'{score:.2f}',
+        'ada:Reason': reason,
+    }
+    if 'xmlns:ada=' not in content:
+        content = content.replace('<rdf:Description',
+                                  '<rdf:Description xmlns:ada="https://ada.local/ns/1.0/"', 1)
+    for key, value in attributes.items():
+        escaped = value.replace('&', '&amp;').replace('"', '&quot;')
+        pattern = rf'{re.escape(key)}="[^"]*"'
+        replacement = f'{key}="{escaped}"'
+        if re.search(pattern, content):
+            content = re.sub(pattern, replacement, content, count=1)
+        else:
+            content = content.replace('<rdf:Description ', f'<rdf:Description {replacement} ', 1)
+    sidecar.write_text(content, encoding='utf-8')
+    return str(sidecar)
 
 
 def run(args):
@@ -69,6 +101,18 @@ def run(args):
     selected = representatives[:target]
     for item in selected:
         item.pop('signature', None)
+    selected_paths = {item['path'] for item in selected}
+    xmp_written = []
+    if args.get('write_xmp'):
+        # Write a sidecar for every scanned file, including duplicate frames,
+        # so Lightroom can show the decision on every original.
+        for item in records:
+            score = float(item['technical'].get('overall_score', 0) or 0)
+            selected_item = item['path'] in selected_paths
+            rating = max(1, min(5, round(score / 2))) if selected_item else 0
+            status = 'Seleccionada' if selected_item else 'Rechazada'
+            reason = 'Incluida en la shortlist de ADA' if selected_item else 'Fuera de la shortlist preliminar'
+            xmp_written.append(_write_xmp(item['path'], status, rating, score, reason))
     return {
         'ok': True,
         'workflow': 'photo_batch_selection',
@@ -80,5 +124,6 @@ def run(args):
         'representatives': len(representatives),
         'target': target,
         'selected': selected,
+        'xmp_written': xmp_written,
         'next_stage': 'Enviar selected a ContextPhotoAgent para validar momento, sujeto y cobertura del evento.',
     }

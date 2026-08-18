@@ -98,6 +98,17 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertLessEqual(len(result['selected']), 2)
         self.assertTrue(all((folder / f'frame_{index}.jpg').exists() for index in range(3)))
 
+    def test_batch_selection_can_write_lightroom_xmp_status_and_rating(self):
+        folder = Path(self.tempdir.name) / 'xmp_batch'
+        folder.mkdir()
+        for index in range(2):
+            (folder / f'frame_{index}.jpg').write_bytes(self.path.read_bytes())
+        result = select_photo_batch({'path': str(folder), 'target': 1, 'workers': 1, 'write_xmp': True})
+        self.assertEqual(len(result['xmp_written']), 2)
+        xmp = (folder / 'frame_0.xmp').read_text(encoding='utf-8')
+        self.assertIn('ada:Status=', xmp)
+        self.assertIn('xmp:Rating=', xmp)
+
 
 if __name__ == '__main__':
     unittest.main()
