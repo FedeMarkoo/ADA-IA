@@ -10,7 +10,7 @@
     "auto_pull": false,
     "startup_timeout": 12
   },
-  "engine_priority": ["openai", "anthropic", "ollama"],
+  "engine_priority": ["ollama"],
   "ollama_model": "llama3.2:3b",
   "vision_model": "qwen2.5vl:3b",
   "local_max_complexity": 5,

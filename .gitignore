@@ -7,3 +7,7 @@ models/*.gguf
 models/*.bin
 .DS_Store
 docs/memory/summaries/
+.env
+.env.*
+!.env.example
+telegram_inbox/

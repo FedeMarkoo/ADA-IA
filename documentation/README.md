@@ -6,6 +6,7 @@
 - [Análisis fotográfico](PHOTO_ANALYSIS.md)
 - [XMP y detección de ráfagas](XMP_AND_BURST_DETECTION.md)
 - [Operación y pruebas](OPERATIONS.md)
+- [Integración con Telegram y Ollama](TELEGRAM_LOCAL.md)
 
 ADA es un agente local orientado a automatizar tareas sobre archivos, fotos y
 datos. Puede conversar, ejecutar skills, consultar memoria y pedir confirmación
@@ -19,9 +20,9 @@ Ollama manualmente. Al necesitar una respuesta generativa o visual, el
 espera a que esté listo. Si el servicio ya estaba activo, ADA lo reutiliza y
 no lo detiene al finalizar.
 
-La capacidad se llama `local`; Ollama es su backend actual. La misma interfaz
-permite sumar otros motores (`openai` y `anthropic`) mediante
-`engine_priority`, sin acoplar los agentes a un proveedor específico.
+La capacidad se llama `local`; Ollama es su backend actual. Los motores remotos
+siguen siendo opcionales en el código, pero la configuración actual de ADA usa
+exclusivamente Ollama.
 
 En `config.json`:
 
