@@ -6,6 +6,7 @@ from pathlib import Path
 from models import ModelManager
 from memory import Memory
 from skills import load_skills
+from agents import MultiAgentCoordinator
 
 
 class Agent:
@@ -17,6 +18,7 @@ class Agent:
         db_path = self.cfg.get("db_path", str(Path(__file__).parent / "memory.db"))
         self.mem = Memory(db_path)
         self.skills = load_skills()
+        self.coordinator = MultiAgentCoordinator(self.cfg)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
@@ -51,6 +53,12 @@ class Agent:
         self.history.append({"task": task, "chosen_model": provider})
 
         skill_name = task.get("type")
+        if skill_name == 'analyze_photo':
+            payload = dict(task.get('payload', {}))
+            payload.setdefault('config', self.cfg)
+            result = self.coordinator.run({'workflow': 'photo_review', **payload})
+            self.mem.record_task(task, result, provider=provider or 'multi-agent', success=not bool(result.get('error')))
+            return {"model": provider or "multi-agent", "result": result}
         if skill_name in self.skills:
             skill_args = dict(task.get("payload", {}))
             if task.get("confirm") is not None:
@@ -136,8 +144,10 @@ class Agent:
 
     def parse_prompt(self, text):
         lowered = text.lower()
-        path_match = re.search(r"(?:^|\s)(/[^\s]+|~[^\s]+|\.[^\s]+)", text)
-        path = os.path.expanduser(path_match.group(1)) if path_match else None
+        quoted_path = re.search(r'["“]([^"”]+)["”]', text)
+        path_match = re.search(r"(?:^|\s)(/(?:[^\n]+)|~/(?:[^\n]+)|\./(?:[^\n]+))", text)
+        candidate_path = quoted_path.group(1) if quoted_path and ("/" in quoted_path.group(1) or quoted_path.group(1).startswith("~")) else (path_match.group(1) if path_match else None)
+        path = os.path.expanduser(candidate_path.strip().rstrip(".,;:!?\"'")) if candidate_path else None
         if any(w in lowered for w in ('reporte de mis fotos', 'reporte de fotos', 'informe de mis fotos', 'informe de fotos')):
             return {'action': 'lightroom', 'lightroom_action': 'report', 'path': path, 'complexity': 3}
         if lowered.startswith("run:") or lowered.startswith(("ejecuta", "execute", "corré", "corre")):
@@ -145,7 +155,7 @@ class Agent:
             return {"action": "run", "command": command, "complexity": 2}
         if any(w in lowered for w in ("index", "indexar", "scan", "escanear")):
             return {"action": "index", "path": path, "complexity": 2}
-        if any(w in lowered for w in ("analizar foto", "analizá foto", "analiza foto", "analizar imagen", "evaluar foto", "criticar foto")):
+        if any(w in lowered for w in ("analizar foto", "analizá foto", "analizá la foto", "analiza foto", "analiza la foto", "analizar imagen", "analizar la imagen", "evaluar foto", "evaluar la foto", "criticar foto", "criticá la foto")):
             return {"action": "analyze_photo", "path": path, "complexity": 5}
         if any(w in lowered for w in ("listar fotos", "lista de fotos", "listá mis fotos", "listar mis fotos", "liste mis fotos", "listes mis fotos", "fotos")) and any(w in lowered for w in ("listar", "lista", "liste", "listes", "mostrar", "mostrá", "ver", "encontrar")):
             return {"action": "list_photos", "path": path, "complexity": 2}

@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw
 
 from skills import load_skills
 from skills.photos.analyze_photo import run, technical_analysis
+from agents import MultiAgentCoordinator
 
 
 class PhotoAnalysisTests(unittest.TestCase):
@@ -41,6 +42,14 @@ class PhotoAnalysisTests(unittest.TestCase):
     def test_all_skills_are_loaded_recursively(self):
         skills = load_skills()
         self.assertIn('analyze_photo', skills)
+
+    def test_multi_agent_photo_workflow(self):
+        coordinator = MultiAgentCoordinator({'agent_max_workers': 2})
+        result = coordinator.analyze_photo({'path': str(self.path), 'vision': False})
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['workflow'], 'photo_review')
+        self.assertEqual(set(result['agents']), {'technical_photo', 'context_photo', 'photo_reviewer'})
+        self.assertIn('review', result)
 
 
 if __name__ == '__main__':
