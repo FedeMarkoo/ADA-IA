@@ -1,0 +1,95 @@
+# ADA
+
+ADA es un asistente local, multiagente y orientado a la autonomía controlada.
+Combina conversación, memoria persistente, skills ejecutables y motores locales
+para ayudar con archivos, fotografías, organización, compras y futuras tareas
+basadas en eventos.
+
+## Objetivo
+
+ADA no debe depender únicamente de prompts manuales. La dirección del proyecto
+es evolucionar hacia un asistente que pueda recibir eventos autorizados,
+interpretarlos, crear tareas, usar el agente o motor adecuado, pedir
+confirmación cuando corresponda y registrar qué hizo y por qué.
+
+Los principios son local-first, privacidad, modularidad, trazabilidad,
+reversibilidad y uso responsable de CPU, memoria, batería y red.
+
+## Capacidades actuales
+
+- chat local por web y CLI;
+- memoria persistente SQLite;
+- routing de skills y arquitectura multiagente;
+- motores locales mediante Ollama;
+- análisis fotográfico RAW/JPG con feedback de fotógrafo;
+- selección de lotes y generación de XMP para Lightroom;
+- detección conservadora de ráfagas;
+- herramientas para archivos, ejecución controlada, SQLite y MCP;
+- límites de concurrencia y CPU para no saturar el equipo.
+
+## Estructura del repositorio
+
+```text
+ADA/
+├── agents/       especialistas y coordinador multiagente
+├── docs/         documentación separada por responsabilidad
+│   ├── project/  producto, arquitectura, funcionalidades y roadmap
+│   ├── skills/   contratos y uso de skills individuales
+│   └── memory/   resúmenes y auditoría de memoria
+├── models/       modelos o adaptadores locales opcionales
+├── scripts/      utilidades y pruebas manuales
+├── skills/       capacidades ejecutables agrupadas por categoría
+├── tests/        pruebas automatizadas
+└── ui/           interfaz web
+```
+
+## Índices de documentación
+
+- [Documentación general](docs/README.md)
+- [Objetivo y roadmap](docs/project/roadmap.md)
+- [Arquitectura](docs/project/architecture/overview.md)
+- [Análisis de fotos](docs/project/features/photo-analysis.md)
+- [XMP y ráfagas](docs/project/features/xmp-and-bursts.md)
+- [Compras y recetas](docs/project/features/shopping-and-recipes.md)
+- [Telegram y Ollama](docs/project/integrations/telegram-and-ollama.md)
+- [Operación y recursos](docs/project/operations.md)
+- [Documentación de skills](docs/skills/README.md)
+- [Memoria y auditoría](docs/memory/README.md)
+
+## Instalación y ejecución
+
+```bash
+cd /Users/home/Desktop/ADA
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python ui_server.py
+```
+
+La interfaz queda disponible en `http://127.0.0.1:5005/`.
+
+Ollama es el backend local actual. Los modelos configurados son:
+
+```bash
+ollama pull llama3.2:3b
+ollama pull qwen2.5vl:3b
+```
+
+El análisis técnico puede ejecutarse sin modelo visual; el análisis semántico de
+fotos necesita un modelo con visión.
+
+## Pruebas
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+## Seguridad y datos
+
+Las acciones que mueven, copian, crean o eliminan archivos requieren
+confirmación. Los tokens de servicios externos deben configurarse mediante
+variables de entorno y nunca guardarse en Git. Ollama y la API local no deben
+exponerse directamente a internet.
+
+Las bases SQLite, modelos descargados, entornos virtuales y archivos de prueba
+locales están excluidos del repositorio mediante `.gitignore` cuando
+corresponde.
