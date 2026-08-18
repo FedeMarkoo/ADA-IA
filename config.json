@@ -12,6 +12,7 @@
   },
   "engine_priority": ["ollama"],
   "ollama_model": "llama3.2:3b",
+  "router_model": "llama3.2:3b",
   "vision_model": "qwen2.5vl:3b",
   "local_max_complexity": 5,
   "agent_max_workers": 1,
