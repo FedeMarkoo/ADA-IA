@@ -111,11 +111,20 @@ def _resolve_photo_reference(text, previous, parsed):
         except OSError:
             continue
     # RAW wins over a rendered JPG, and files in Originales win over exports.
-    candidates.sort(key=lambda item: (item.suffix.lower() not in {'.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}, 'originales' not in str(item).lower(), str(item)))
-    if len(candidates) == 1:
-        return {'path': str(candidates[0])}
-    if candidates:
-        return {'ambiguous': [str(item) for item in candidates], 'photo_name': name}
+    unique = []
+    for candidate in candidates:
+        if any(candidate.samefile(existing) for existing in unique):
+            continue
+        unique.append(candidate)
+    raw_candidates = [item for item in unique if item.suffix.lower() in {'.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}]
+    raw_candidates.sort(key=lambda item: ('originales' not in str(item).lower(), str(item)))
+    if len(raw_candidates) == 1:
+        return {'path': str(raw_candidates[0])}
+    if len(unique) == 1:
+        return {'path': str(unique[0])}
+    if unique:
+        unique.sort(key=lambda item: (item.suffix.lower() not in {'.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}, 'originales' not in str(item).lower(), str(item)))
+        return {'ambiguous': [str(item) for item in unique], 'photo_name': name}
     return {'not_found': name}
 
 
