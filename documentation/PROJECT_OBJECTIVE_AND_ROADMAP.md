@@ -23,6 +23,82 @@ Construir una asistente personal autónoma y privada que:
 - priorice privacidad: sensores, ubicación, archivos y mensajes deben ser
   opt-in, visibles y revocables.
 
+## Asistente personal para compras y recetas
+
+Este es un objetivo funcional explícito del proyecto, además del análisis de
+fotos. ADA debería poder ayudar a planificar y resolver compras cotidianas sin
+convertirse en una aplicación de supermercado específica.
+
+### Objetivo
+
+ADA debe poder mantener una lista de compras, entender qué hace falta en la
+casa, sugerir recetas y aprovechar señales de contexto para recordar una compra
+en el momento adecuado. Por ejemplo, si el usuario entra a una zona autorizada
+del supermercado, ADA podría avisar que hay una lista pendiente o mostrar una
+receta compatible con los ingredientes disponibles.
+
+### Lo que existe hoy
+
+- La arquitectura conversacional puede recibir una lista o una solicitud de
+  receta como texto.
+- La memoria persistente puede servir como base para guardar preferencias y
+  procedimientos.
+- El diseño previsto de eventos permite incorporar ubicación, horarios y
+  notificaciones.
+
+No existe todavía un módulo de compras, inventario, recetas ni integración con
+un supermercado. ADA tampoco detecta actualmente que el usuario está en el
+supermercado.
+
+### Lo que falta construir
+
+- Lista de compras persistente con cantidades, unidades, categorías y prioridad.
+- Estados de producto: pendiente, comprado, reemplazado, pospuesto o cancelado.
+- Inventario doméstico opcional con fecha de vencimiento y nivel estimado.
+- Recetario con ingredientes, porciones, tiempo, dificultad y restricciones.
+- Generación de recetas según lo que hay disponible y lo que se desea comprar.
+- Plan semanal de comidas y consolidación automática de ingredientes repetidos.
+- Conversión de una receta en lista de supermercado.
+- Registro de precios o presupuesto, si el usuario decide incorporarlos.
+- Notificaciones por horario, evento o entrada a una zona.
+- Integración móvil mediante Tasker como primer prototipo de geofencing.
+- Confirmación antes de agregar compras, compartir datos o ejecutar acciones.
+
+### Flujo esperado de compras
+
+```text
+Preferencia, receta o necesidad
+        ↓
+Lista de compras persistente
+        ↓
+Planificación y agrupación por categoría
+        ↓
+Evento: horario, ubicación o mensaje
+        ↓
+Recordatorio contextual
+        ↓
+Confirmación y actualización de la lista
+```
+
+Ejemplos de mensajes que ADA debería entender:
+
+```text
+Agregá leche, tomates y arroz a la lista.
+¿Qué puedo cocinar con pollo, papas y cebolla?
+Armame una lista para hacer tacos para cuatro personas.
+Planificá cinco cenas económicas para esta semana.
+Avisame cuando esté cerca del supermercado si todavía falta comprar leche.
+Ya compré los tomates; marcálos como comprados.
+```
+
+### Privacidad y límites
+
+La ubicación debe ser opcional y preferentemente procesada en el teléfono. El
+evento mínimo debería ser `entered_zone(supermercado)`, sin enviar el recorrido
+completo. ADA debe permitir definir zonas, horarios, frecuencia, retención y
+desactivación de notificaciones. Las compras, pagos o pedidos online quedan
+fuera del alcance inicial y siempre requerirían confirmación explícita.
+
 La autonomía debe significar iniciativa controlada, no actividad permanente sin
 límites. ADA tiene que saber cuándo observar, cuándo esperar, cuándo preguntar
 y cuándo actuar.
@@ -179,7 +255,18 @@ que un único proceso monolítico sea responsable de todo.
 3. Definir permisos, zonas, frecuencia y retención de datos.
 4. Recién después evaluar una app propia con Capacitor o React Native.
 
-### Prioridad 4: nodo Linux permanente
+### Prioridad 4: compras y recetas
+
+1. Crear skills `shopping_list`, `inventory` y `recipes` con almacenamiento
+   estructurado.
+2. Implementar comandos de alta, baja, edición y marcado de compras.
+3. Permitir generar recetas y listas a partir de ingredientes disponibles.
+4. Agregar preferencias alimentarias, presupuesto y cantidad de comensales.
+5. Integrar recordatorios locales por horario.
+6. Probar geofencing con Tasker sin enviar ubicación continua.
+7. Recién después evaluar precios, supermercados y pedidos externos.
+
+### Prioridad 5: nodo Linux permanente
 
 1. Preparar instalación reproducible.
 2. Separar servicios y configurar reinicio automático.
