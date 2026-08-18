@@ -5,7 +5,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from skills import load_skills
-from skills.photos.analyze_photo import run, technical_analysis
+from skills.photos.analyze_photo import _noise_score, run, technical_analysis
 from agents import MultiAgentCoordinator
 from agents.photo_agents import PhotoReviewAgent
 
@@ -66,6 +66,12 @@ class PhotoAnalysisTests(unittest.TestCase):
         image.save(self.path, quality=95)
         result = technical_analysis(self.path)
         self.assertGreaterEqual(result['exposure']['score'], 4)
+
+    def test_noise_prior_is_more_tolerant_for_sony_than_nikon_at_same_iso(self):
+        sony, _, _ = _noise_score({'ISO': '6400', 'Make': 'SONY', 'Model': 'ILCE-7M3'})
+        nikon, _, _ = _noise_score({'ISO': '6400', 'Make': 'Nikon', 'Model': 'D750'})
+        self.assertGreater(sony, nikon)
+        self.assertLess(sony, 8)
 
 
 if __name__ == '__main__':
