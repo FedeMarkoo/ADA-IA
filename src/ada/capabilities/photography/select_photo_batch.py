@@ -4,7 +4,7 @@ from pathlib import Path
 
 from src.ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS
 from src.ada.capabilities.photography.burst_detection import detect_burst_groups
-from src.ada.capabilities.photography.xmp import mark_xmp_label, repair_photo_xmp
+from src.ada.capabilities.photography.xmp import mark_xmp_label, repair_photo_xmp, write_photo_xmp
 from src.ada.infrastructure.runtime.resources import wait_for_cpu_budget
 
 
@@ -61,10 +61,30 @@ def run(args):
                     xmp_written.append(result['xmp'])
             except Exception as exc:
                 failures.append({'path': str(path), 'error': str(exc)})
-    selected = [item for item in records if int((item.get('review') or {}).get('selection_rating', 0) or 0) >= 3]
-    rejected = [item for item in records if item not in selected]
     burst_groups, burst_detection = detect_burst_groups(files)
     burst_paths = {str(path) for group in burst_groups for path in group}
+    burst_duplicates = []
+    for group in burst_groups:
+        group_records = [item for item in records if item.get('path') in {str(path) for path in group}]
+        accepted = [item for item in group_records if int((item.get('review') or {}).get('selection_rating', 0) or 0) >= 3]
+        if len(accepted) <= 1:
+            continue
+        winner = max(accepted, key=lambda item: float((item.get('review') or {}).get('selection_score', 0) or 0))
+        for item in accepted:
+            if item is winner:
+                continue
+            review = item.setdefault('review', {})
+            review['selection_rating'] = 2
+            review['selection_label'] = 'dudosa'
+            review['recommendation'] = 'revisar; duplicado de ráfaga con otra toma mejor'
+            review.setdefault('issues', []).append('duplicado de ráfaga; se conserva otra toma mejor')
+            burst_duplicates.append(item.get('path'))
+            if args.get('write_xmp'):
+                score = float(review.get('selection_score', 0) or 0)
+                write_photo_xmp(item['path'], 'Rechazada', 0, score,
+                                'Duplicado de ráfaga; se conserva otra toma mejor', label='Amarillo')
+    selected = [item for item in records if int((item.get('review') or {}).get('selection_rating', 0) or 0) >= 3]
+    rejected = [item for item in records if item not in selected]
     burst_xmp = []
     if args.get('write_xmp'):
         burst_xmp = [mark_xmp_label(path, 'Amarillo') for path in files if str(path) in burst_paths]
@@ -81,6 +101,7 @@ def run(args):
         'rejected': rejected,
         'xmp_written': xmp_written,
         'burst_count': len(burst_paths),
+        'burst_duplicates_rejected': burst_duplicates,
         'burst_detection': burst_detection,
         'burst_xmp_written': burst_xmp,
         'decision_mode': 'same_multi_agent_photo_review_per_file',
