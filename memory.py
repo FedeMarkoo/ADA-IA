@@ -39,6 +39,11 @@ class Memory:
                 instructions TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP, meta TEXT
             );
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                session TEXT NOT NULL DEFAULT 'main', role TEXT NOT NULL,
+                text TEXT NOT NULL, model TEXT
+            );
         """)
         self.conn.commit()
 
@@ -130,3 +135,27 @@ class Memory:
         return [dict(row) for row in self.conn.execute(
             "SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()]
+
+    def append_conversation(self, messages, session="main"):
+        rows = [(session, item.get("role", "assistant"), str(item.get("text", "")), item.get("model"))
+                for item in messages if item.get("text") is not None]
+        if not rows:
+            return
+        with self._lock:
+            self.conn.executemany(
+                "INSERT INTO conversation_messages(session, role, text, model) VALUES (?, ?, ?, ?)",
+                rows,
+            )
+            self.conn.commit()
+
+    def conversation(self, session="main", limit=1000):
+        rows = self.conn.execute(
+            "SELECT id, created_at, role, text, model FROM conversation_messages "
+            "WHERE session=? ORDER BY id DESC LIMIT ?", (session, limit)
+        ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    def clear_conversation(self, session="main"):
+        with self._lock:
+            self.conn.execute("DELETE FROM conversation_messages WHERE session=?", (session,))
+            self.conn.commit()
