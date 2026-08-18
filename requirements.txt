@@ -1,0 +1,14 @@
+sentence-transformers>=2.2.2
+transformers>=4.30.0
+torch>=2.0.0
+faiss-cpu>=1.7.3
+annoy>=1.17.0
+Pillow>=9.0.0
+duckduckgo_search>=2.6.0
+beautifulsoup4>=4.12.2
+playwright>=1.40.0
+Flask>=2.0.0
+
+# Optional remote LLM backends. Ollama itself is installed separately as a system app.
+openai>=1.0.0
+anthropic>=0.30.0
