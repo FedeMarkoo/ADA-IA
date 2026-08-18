@@ -150,7 +150,11 @@ class Agent:
         path = os.path.expanduser(candidate_path.strip().rstrip(".,;:!?\"'")) if candidate_path else None
         if path and Path(path).suffix.lower() in {'.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}:
             return {"action": "analyze_photo", "path": path, "photo_name": Path(path).name, "complexity": 5}
-        if ((any(w in lowered for w in ('seleccionar fotos', 'seleccioná fotos', 'selecciona fotos', 'seleccioná las fotos', 'selecciona las fotos', 'selección de fotos', 'seleccion de fotos', 'curar fotos', 'culling')))
+        batch_words = ('seleccionar fotos', 'seleccioná fotos', 'selecciona fotos',
+                       'seleccioná las fotos', 'selecciona las fotos',
+                       'selección de fotos', 'seleccion de fotos', 'curar fotos', 'culling')
+        xmp_batch = path and 'xmp' in lowered and any(w in lowered for w in ('proces', 'actualiz', 'regener', 'analiz', 'marc'))
+        if (any(w in lowered for w in batch_words) or xmp_batch
                 or ('shortlist' in lowered and ('fotos' in lowered or path))):
             target_match = (re.search(r'shortlist\s+(?:de|con|a)?\s*(\d{2,5})', lowered)
                             or re.search(r'\b(\d{2,5})\s*(?:fotos|imágenes|imagenes)\b', lowered))
