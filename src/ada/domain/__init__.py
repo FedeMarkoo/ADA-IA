@@ -1,1 +1,0 @@
-"""ADA business domains."""
