@@ -147,7 +147,11 @@ class Agent:
     def _parse_prompt_rules(self, text):
         lowered = text.lower()
         quoted_path = re.search(r'["“]([^"”]+)["”]', text)
-        path_match = re.search(r"(?:^|\s)(/(?:[^\n]+)|~/(?:[^\n]+)|\./(?:[^\n]+))", text)
+        path_match = re.search(
+            r"(?<!\S)(/(?:[^\s]+?\.(?:jpg|jpeg|png|webp|tif|tiff|nef|arw|cr2|dng|raf|orf))|~/(?:[^\s]+?\.(?:jpg|jpeg|png|webp|tif|tiff|nef|arw|cr2|dng|raf|orf))|\./(?:[^\s]+?\.(?:jpg|jpeg|png|webp|tif|tiff|nef|arw|cr2|dng|raf|orf)))(?=\s|$|[.,;:!?])",
+            text,
+            re.I,
+        )
         candidate_path = quoted_path.group(1) if quoted_path and ("/" in quoted_path.group(1) or quoted_path.group(1).startswith("~")) else (path_match.group(1) if path_match else None)
         path = os.path.expanduser(candidate_path.strip().rstrip(".,;:!?\"'")) if candidate_path else None
         if path and Path(path).suffix.lower() in {'.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}:
