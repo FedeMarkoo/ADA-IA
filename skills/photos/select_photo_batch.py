@@ -33,11 +33,15 @@ def run(args):
     root = Path(args.get('path') or args.get('folder') or '').expanduser()
     if not root.is_dir():
         return {'error': 'folder not found', 'path': str(root)}
-    if args.get('repair_xmp'):
+    if args.get('repair_xmp') or args.get('mark_bursts'):
         sidecars = sorted(root.rglob('*.xmp'))
-        repaired = [repair_photo_xmp(path) for path in sidecars]
+        repaired = [repair_photo_xmp(path) for path in sidecars] if args.get('repair_xmp') else []
+        raw_files = [path for path in root.rglob('*') if path.is_file() and path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}]
+        burst_paths = {str(path) for group in _burst_groups(raw_files) for path in group}
+        burst_xmp = [mark_xmp_label(path, 'Amarillo') for path in raw_files if str(path) in burst_paths]
         return {'ok': True, 'workflow': 'photo_xmp_repair', 'path': str(root),
-                'repaired_count': len(repaired), 'xmp_written': repaired}
+                'repaired_count': len(repaired), 'burst_count': len(burst_paths),
+                'burst_xmp_written': burst_xmp, 'xmp_written': repaired + burst_xmp}
     files = sorted(p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS)
     if not files:
         return {'error': 'no images found', 'path': str(root)}
