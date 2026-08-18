@@ -150,6 +150,8 @@ class Agent:
         path = os.path.expanduser(candidate_path.strip().rstrip(".,;:!?\"'")) if candidate_path else None
         if path and Path(path).suffix.lower() in {'.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}:
             return {"action": "analyze_photo", "path": path, "photo_name": Path(path).name, "complexity": 5}
+        if any(w in lowered for w in ('seleccionar fotos', 'seleccioná fotos', 'selecciona fotos', 'selección de fotos', 'seleccion de fotos', 'curar fotos', 'culling')):
+            return {"action": "select_photo_batch", "path": path, "complexity": 6}
         if any(w in lowered for w in ('reporte de mis fotos', 'reporte de fotos', 'informe de mis fotos', 'informe de fotos')):
             return {'action': 'lightroom', 'lightroom_action': 'report', 'path': path, 'complexity': 3}
         if lowered.startswith("run:") or lowered.startswith(("ejecuta", "execute", "corré", "corre")):

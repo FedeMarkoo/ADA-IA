@@ -8,6 +8,7 @@ from skills import load_skills
 from skills.photos.analyze_photo import _noise_score, run, technical_analysis
 from agents import MultiAgentCoordinator
 from agents.photo_agents import PhotoReviewAgent
+from skills.photos.select_photo_batch import run as select_photo_batch
 
 
 class PhotoAnalysisTests(unittest.TestCase):
@@ -85,6 +86,17 @@ class PhotoAnalysisTests(unittest.TestCase):
         }).data
         self.assertEqual(review['selection_rating'], 2)
         self.assertIn('ruido', ' '.join(review['issues']))
+
+    def test_batch_selection_scans_and_returns_shortlist_without_deleting(self):
+        folder = Path(self.tempdir.name) / 'batch'
+        folder.mkdir()
+        for index in range(3):
+            (folder / f'frame_{index}.jpg').write_bytes(self.path.read_bytes())
+        result = select_photo_batch({'path': str(folder), 'target': 2, 'workers': 1})
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['scanned'], 3)
+        self.assertLessEqual(len(result['selected']), 2)
+        self.assertTrue(all((folder / f'frame_{index}.jpg').exists() for index in range(3)))
 
 
 if __name__ == '__main__':

@@ -129,6 +129,19 @@ Uso desde ADA:
 Analizá la foto /ruta/a/imagen.jpg
 ```
 
+Para lotes grandes, la skill `photos/select_photo_batch.py` hace una primera
+selección local sin enviar miles de imágenes al modelo visual:
+
+```text
+Seleccioná las fotos de /ruta/al/evento y prepará una shortlist de 300
+```
+
+El primer paso calcula métricas técnicas en paralelo, agrupa ráfagas o frames
+casi idénticos consecutivos y conserva el mejor representante de cada grupo.
+Devuelve una shortlist preliminar; la etapa siguiente debe pasar esos
+representantes por visión para validar momentos, sujetos y cobertura del evento.
+No mueve ni elimina archivos.
+
 Con `vision=False` se obtiene únicamente el análisis técnico. Esto permite
 probar la skill y procesar grandes carpetas aun cuando Ollama no esté activo.
 
