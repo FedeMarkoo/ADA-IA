@@ -131,6 +131,25 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertEqual(result['burst_count'], 2)
         self.assertIn('xmp:Label="Amarillo"', (folder / '_DSC4740.xmp').read_text(encoding='utf-8'))
 
+    def test_repair_keeps_user_labeled_winner_in_burst(self):
+        from src.ada.capabilities.photography.xmp import write_photo_xmp
+        folder = Path(self.tempdir.name) / 'burst_repair'
+        folder.mkdir()
+        rejected = folder / 'RECH__DSC5258.ARW'
+        selected = folder / 'OK__DSC5259.ARW'
+        rejected.write_bytes(self.path.read_bytes())
+        selected.write_bytes(self.path.read_bytes())
+        write_photo_xmp(rejected, 'Seleccionada', 3, 6.9, 'previous')
+        write_photo_xmp(selected, 'Seleccionada', 3, 6.8, 'previous')
+        result = select_photo_batch({'path': str(folder), 'repair_xmp': True, 'mark_bursts': True})
+        self.assertEqual(len(result['burst_duplicates_rejected']), 1)
+        rejected_xmp = (folder / 'RECH__DSC5258.xmp').read_text(encoding='utf-8')
+        selected_xmp = (folder / 'OK__DSC5259.xmp').read_text(encoding='utf-8')
+        self.assertIn('ada:Status="Rechazada"', rejected_xmp)
+        self.assertIn('xmp:Label="Amarillo"', rejected_xmp)
+        self.assertIn('ada:Status="Seleccionada"', selected_xmp)
+        self.assertIn('xmp:Label="Amarillo"', selected_xmp)
+
 
 if __name__ == '__main__':
     unittest.main()
