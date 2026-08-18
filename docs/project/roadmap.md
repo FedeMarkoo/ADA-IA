@@ -41,7 +41,7 @@ revocar tareas.
 ### Móvil e integraciones
 
 - prototipo de geofencing y notificaciones con Tasker;
-- adaptador de Telegram para texto e imágenes;
+- endurecer el adapter de Telegram con comandos, reintentos y auditoría detallada;
 - evaluación posterior de una app propia con Capacitor o React Native;
 - despliegue permanente en Linux con servicios separados y backups.
 

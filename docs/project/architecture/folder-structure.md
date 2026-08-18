@@ -31,7 +31,7 @@ ADA/
 │   │   ├── integrations/
 │   │   ├── persistence/
 │   │   └── runtime/
-│   └── interfaces/                entradas web y CLI
+│   └── interfaces/                entradas web, CLI y Telegram
 ├── tests/                         pruebas automatizadas
 └── ui/                            frontend web
 ```
