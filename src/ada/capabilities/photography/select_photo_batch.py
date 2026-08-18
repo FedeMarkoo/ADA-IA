@@ -5,7 +5,7 @@ from pathlib import Path
 from src.ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS
 from src.ada.capabilities.photography.burst_detection import detect_burst_groups
 from src.ada.capabilities.photography.xmp import mark_xmp_label, repair_photo_xmp
-from resource_policy import wait_for_cpu_budget
+from src.ada.infrastructure.runtime.resources import wait_for_cpu_budget
 
 
 def _burst_groups(files):
@@ -32,7 +32,7 @@ def run(args):
     if not files:
         return {'error': 'no images found', 'path': str(root)}
     # Import lazily so skill discovery remains independent from agent startup.
-    from agents import MultiAgentCoordinator
+    from src.ada.agents import MultiAgentCoordinator
     config = dict(args.get('config') or {})
     config.setdefault('agent_max_workers', int(args.get('workers', config.get('photo_workers', 1))))
     coordinator = MultiAgentCoordinator(config)

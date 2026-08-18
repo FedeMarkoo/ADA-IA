@@ -5,11 +5,11 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from skills import load_skills
-from skills.photos.analyze_photo import _noise_score, run, technical_analysis
-from agents import MultiAgentCoordinator
-from agents.photo_agents import PhotoReviewAgent
-from skills.photos.select_photo_batch import run as select_photo_batch
+from src.ada.capabilities.registry import load_capabilities
+from src.ada.capabilities.photography.analyze_photo import _noise_score, run, technical_analysis
+from src.ada.agents import MultiAgentCoordinator
+from src.ada.agents.photo_agents import PhotoReviewAgent
+from src.ada.capabilities.photography.select_photo_batch import run as select_photo_batch
 
 
 class PhotoAnalysisTests(unittest.TestCase):
@@ -43,8 +43,8 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertEqual(result['error'], 'image not found')
 
     def test_all_skills_are_loaded_recursively(self):
-        skills = load_skills()
-        self.assertIn('analyze_photo', skills)
+        capabilities = load_capabilities()
+        self.assertIn('analyze_photo', capabilities)
 
     def test_multi_agent_photo_workflow(self):
         coordinator = MultiAgentCoordinator({'agent_max_workers': 2})

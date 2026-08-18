@@ -1,7 +1,7 @@
 import unittest
 
-from models import ModelManager
-from runtime import LocalModelRuntime
+from src.ada.infrastructure.engines.model_manager import ModelManager
+from src.ada.infrastructure.runtime.ollama import LocalModelRuntime
 
 
 class RuntimeTests(unittest.TestCase):

@@ -1,5 +1,5 @@
 """MCP tool bridge. Disabled until servers are explicitly configured."""
-from mcp_client import MCPClient
+from src.ada.infrastructure.integrations.mcp import MCPClient
 
 
 def run(args):
