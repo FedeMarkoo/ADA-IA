@@ -2,7 +2,7 @@
 
 Esta carpeta describe ADA como sistema: su objetivo, arquitectura, funciones,
 integraciones y operación. No contiene la documentación específica de cada
-skill; esa información está en [`../skills/README.md`](../skills/README.md).
+capability; esa información está en [`../skills/README.md`](../skills/README.md).
 
 ## Índice
 
@@ -20,4 +20,4 @@ skill; esa información está en [`../skills/README.md`](../skills/README.md).
 Si un documento explica una capacidad del producto, una decisión de
 arquitectura, una integración, una prioridad o cómo ejecutar ADA, pertenece a
 `project/`. Si explica los parámetros, entradas, salidas y permisos de una
-función ejecutable concreta, pertenece a `skills/`.
+función ejecutable concreta, pertenece a `src/ada/capabilities/`.

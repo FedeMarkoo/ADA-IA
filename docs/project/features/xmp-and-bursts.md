@@ -13,7 +13,7 @@ para que Lightroom los detecte.
 
 ## Detección de ráfagas
 
-`skills/photos/burst_detection.py` no considera suficiente la numeración
+`src/ada/capabilities/photography/burst_detection.py` no considera suficiente la numeración
 `_DSC####`. Busca evidencia combinando:
 
 1. MakerNotes y modo continuo de la cámara, si ExifTool está instalado;

@@ -21,12 +21,12 @@ memoria y auditoría
 
 ## Componentes
 
-- `agent_loop.py`: interpreta solicitudes y selecciona acciones.
-- `models.py`: abstrae Ollama y motores opcionales.
-- `runtime.py`: administra el runtime local de Ollama.
-- `memory.py`: memoria persistente SQLite.
-- `agents/`: registro, coordinador y especialistas.
-- `skills/`: capacidades ejecutables agrupadas por categoría.
+- `src/ada/application/agent.py`: interpreta solicitudes y selecciona acciones.
+- `src/ada/infrastructure/engines/`: abstrae Ollama y motores opcionales.
+- `src/ada/infrastructure/runtime/`: administra procesos, salud y recursos.
+- `src/ada/infrastructure/persistence/sqlite.py`: memoria persistente SQLite.
+- `src/ada/agents/`: registro, coordinador y especialistas.
+- `src/ada/capabilities/`: capacidades ejecutables agrupadas por categoría.
 - `ui_server.py` y `ui/`: conversación web e historial.
 - `resource_policy.py`: presupuesto de CPU, concurrencia y throttling.
 

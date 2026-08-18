@@ -31,14 +31,13 @@ reversibilidad y uso responsable de CPU, memoria, batería y red.
 
 ```text
 ADA/
-├── agents/       especialistas y coordinador multiagente
 ├── docs/         documentación separada por responsabilidad
 │   ├── project/  producto, arquitectura, funcionalidades y roadmap
 │   ├── skills/   contratos y uso de skills individuales
 │   └── memory/   resúmenes y auditoría de memoria
 ├── models/       modelos o adaptadores locales opcionales
 ├── scripts/      utilidades y pruebas manuales
-├── skills/       capacidades ejecutables agrupadas por categoría
+├── src/ada/      código de aplicación, agentes, capabilities e infraestructura
 ├── tests/        pruebas automatizadas
 └── ui/           interfaz web
 ```

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from src.ada.infrastructure.engines.model_manager import ModelManager
 from src.ada.infrastructure.persistence.sqlite import Memory
-from skills import load_skills
+from src.ada.capabilities.registry import load_capabilities
 from src.ada.agents import MultiAgentCoordinator
 
 
@@ -17,7 +17,7 @@ class Agent:
         self.model_manager = ModelManager(self.cfg)
         db_path = self.cfg.get("db_path", str(Path(__file__).parent / "memory.db"))
         self.mem = Memory(db_path)
-        self.skills = load_skills()
+        self.skills = load_capabilities()
         self.coordinator = MultiAgentCoordinator(self.cfg)
         self._load_knowledge()
         self.history = []
