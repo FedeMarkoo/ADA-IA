@@ -464,10 +464,12 @@ def chat():
             reply = '¿En qué carpeta querés hacer la selección? Indicame la ruta del evento.'
             model = 'ADA · agente'
         else:
-            result = agent.decide_and_run({'type': 'select_photo_batch', 'payload': {'path': folder, 'write_xmp': parsed.get('write_xmp', False)}, 'complexity': 6})
+            result = agent.decide_and_run({'type': 'select_photo_batch', 'payload': {'path': folder, 'write_xmp': parsed.get('write_xmp', False), 'repair_xmp': parsed.get('repair_xmp', False)}, 'complexity': 6})
             out = result.get('result', {})
             model = result.get('model', 'tool: select_photo_batch')
-            if out.get('ok'):
+            if out.get('ok') and out.get('workflow') == 'photo_xmp_repair':
+                reply = f"Reparé {out['repaired_count']} XMP sin volver a analizar las fotos."
+            elif out.get('ok'):
                 reply = (f"Selección preliminar terminada sobre {out['scanned']} fotos.\n\n"
                          f"- Seleccionadas: {out.get('selected_count', 0)}\n"
                          f"- Rechazadas: {out.get('rejected_count', 0)}\n"

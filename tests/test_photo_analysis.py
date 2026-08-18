@@ -112,6 +112,16 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertIn('xmpDM:good=', xmp)
         ET.parse(folder / 'frame_0.xmp')
 
+    def test_batch_can_repair_existing_xmp_without_photo_analysis(self):
+        folder = Path(self.tempdir.name) / 'repair_batch'
+        folder.mkdir()
+        (folder / 'frame_0.xmp').write_text(
+            '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:ada="https://ada.local/ns/1.0/" ada:Status="Rechazada" ada:Score="2.5" xmp:Rating="0"/></rdf:RDF></x:xmpmeta>',
+            encoding='utf-8')
+        result = select_photo_batch({'path': str(folder), 'repair_xmp': True})
+        self.assertEqual(result['repaired_count'], 1)
+        self.assertIn('xmpDM:good="False"', (folder / 'frame_0.xmp').read_text(encoding='utf-8'))
+
 
 if __name__ == '__main__':
     unittest.main()
