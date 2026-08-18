@@ -3,12 +3,18 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from skills.photos.analyze_photo import IMAGE_EXTENSIONS
+from skills.photos.xmp import repair_photo_xmp
 
 
 def run(args):
     root = Path(args.get('path') or args.get('folder') or '').expanduser()
     if not root.is_dir():
         return {'error': 'folder not found', 'path': str(root)}
+    if args.get('repair_xmp'):
+        sidecars = sorted(root.rglob('*.xmp'))
+        repaired = [repair_photo_xmp(path) for path in sidecars]
+        return {'ok': True, 'workflow': 'photo_xmp_repair', 'path': str(root),
+                'repaired_count': len(repaired), 'xmp_written': repaired}
     files = sorted(p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS)
     if not files:
         return {'error': 'no images found', 'path': str(root)}

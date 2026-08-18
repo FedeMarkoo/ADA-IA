@@ -153,13 +153,14 @@ class Agent:
         batch_words = ('seleccionar fotos', 'seleccioná fotos', 'selecciona fotos',
                        'seleccioná las fotos', 'selecciona las fotos',
                        'selección de fotos', 'seleccion de fotos', 'curar fotos', 'culling')
-        xmp_batch = path and 'xmp' in lowered and any(w in lowered for w in ('proces', 'actualiz', 'regener', 'analiz', 'marc'))
+        xmp_batch = path and 'xmp' in lowered and any(w in lowered for w in ('proces', 'actualiz', 'regener', 'analiz', 'marc', 'repar', 'correg'))
         if (any(w in lowered for w in batch_words) or xmp_batch
                 or ('shortlist' in lowered and ('fotos' in lowered or path))):
             target_match = (re.search(r'shortlist\s+(?:de|con|a)?\s*(\d{2,5})', lowered)
                             or re.search(r'\b(\d{2,5})\s*(?:fotos|imágenes|imagenes)\b', lowered))
             return {"action": "select_photo_batch", "path": path, "target": int(target_match.group(1)) if target_match else 300,
-                    "write_xmp": any(w in lowered for w in ('xmp', 'lightroom', 'marcar', 'etiquetar')), "complexity": 6}
+                    "write_xmp": any(w in lowered for w in ('xmp', 'lightroom', 'marcar', 'etiquetar')),
+                    "repair_xmp": any(w in lowered for w in ('repar', 'correg')), "complexity": 6}
         if any(w in lowered for w in ('reporte de mis fotos', 'reporte de fotos', 'informe de mis fotos', 'informe de fotos')):
             return {'action': 'lightroom', 'lightroom_action': 'report', 'path': path, 'complexity': 3}
         if lowered.startswith("run:") or lowered.startswith(("ejecuta", "execute", "corré", "corre")):

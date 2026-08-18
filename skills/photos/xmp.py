@@ -38,3 +38,16 @@ def write_photo_xmp(path, status, rating, score, reason):
             content = content.replace('<rdf:Description ', f'<rdf:Description {replacement} ', 1)
     sidecar.write_text(content, encoding='utf-8')
     return str(sidecar)
+
+
+def repair_photo_xmp(path):
+    """Repair Lightroom's pick/reject flag without re-running analysis."""
+    sidecar = Path(path).with_suffix('.xmp')
+    content = sidecar.read_text(encoding='utf-8', errors='ignore')
+    status_match = re.search(r'ada:Status="([^"]+)"', content)
+    score_match = re.search(r'ada:Score="([^"]+)"', content)
+    rating_match = re.search(r'xmp:Rating="([^"]+)"', content)
+    status = status_match.group(1) if status_match else ('Seleccionada' if rating_match and rating_match.group(1) != '0' else 'Rechazada')
+    score = float(score_match.group(1)) if score_match else 0.0
+    rating = int(rating_match.group(1)) if rating_match else 0
+    return write_photo_xmp(path, status, rating, score, 'Flag Lightroom reparado por ADA')
