@@ -149,7 +149,8 @@ def _resolve_contextual_photo(text, previous):
     reviewed = {item.lower() for item in re.findall(r"(/[^\n\"]+?\.(?:nef|arw|cr2|dng|raf|orf))", previous, re.I)}
     candidates = [item for item in sorted(last.parent.iterdir())
                   if item.is_file() and item.suffix.lower() in extensions and str(item).lower() not in reviewed]
-    return candidates[0] if candidates else None
+    following = [item for item in candidates if item.name.lower() > last.name.lower()]
+    return (following or candidates)[0] if (following or candidates) else None
 
 
 def _reply(text, model='ADA · agente'):
