@@ -7,6 +7,7 @@
 - [XMP y detección de ráfagas](XMP_AND_BURST_DETECTION.md)
 - [Operación y pruebas](OPERATIONS.md)
 - [Integración con Telegram y Ollama](TELEGRAM_LOCAL.md)
+- [Objetivo y roadmap del proyecto](PROJECT_OBJECTIVE_AND_ROADMAP.md)
 
 ADA es un agente local orientado a automatizar tareas sobre archivos, fotos y
 datos. Puede conversar, ejecutar skills, consultar memoria y pedir confirmación
