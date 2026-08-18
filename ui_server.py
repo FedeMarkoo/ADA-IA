@@ -58,15 +58,19 @@ def _desktop_path():
     return os.path.expanduser('~/Desktop')
 
 
+def _mentions_desktop(text):
+    return bool(re.search(r'(?<![/\\\w])(?:escritorio|desktop)(?![/\\\w])', text.lower()))
+
+
 def _resolve_folder(text, previous):
     value = text.lower() + ' ' + previous.lower()
-    if 'escritorio' in text.lower() or 'desktop' in text.lower():
+    if _mentions_desktop(text):
         return _desktop_path()
     if 'organized' in value and ('archivo' in value or 'carpeta' in value or 'agrupar' in value):
         return os.path.expanduser('~/Desktop/ADA/test_photos/organized')
     if 'test' in value:
         return os.path.expanduser('~/Desktop/ADA/test_photos')
-    if 'escritorio' in value or 'desktop' in value:
+    if _mentions_desktop(text):
         return _desktop_path()
     return None
 
@@ -388,12 +392,12 @@ def chat():
             reply += '\n\nErrores/avisos:\n' + out['stderr']
         conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
         return jsonify({'reply': reply or json.dumps(out, ensure_ascii=False, indent=2), 'model': result.get('model', 'tool')})
-    if pending_action and pending_action.get('type') == 'filesystem' and pending_action.get('payload', {}).get('action') in {'list_dirs', 'list_files'} and ('escritorio' in text.lower() or 'desktop' in text.lower() or 'test' in text.lower()):
+    if pending_action and pending_action.get('type') == 'filesystem' and pending_action.get('payload', {}).get('action') in {'list_dirs', 'list_files'} and (_mentions_desktop(text) or 'test' in text.lower()):
         parsed = {'action': pending_action['payload']['action'], 'complexity': 2}
         pending_action = None
-    if 'escritorio' in text.lower() and 'fotos' in previous:
+    if _mentions_desktop(text) and 'fotos' in previous:
         parsed = {'action': 'list_photos', 'complexity': 2}
-    elif ('escritorio' in text.lower() or 'desktop' in text.lower()) and ('carpet' in previous or 'directori' in previous) and any(w in previous for w in ('list', 'mostrar', 'ver')):
+    elif _mentions_desktop(text) and ('carpet' in previous or 'directori' in previous) and any(w in previous for w in ('list', 'mostrar', 'ver')):
         parsed = {'action': 'list_dirs', 'complexity': 2}
     if parsed.get('action') == 'analyze_photo':
         resolved = _resolve_photo_reference(text, previous_text, parsed)
@@ -475,7 +479,7 @@ def chat():
         return jsonify({'reply': reply, 'model': model})
     if parsed.get('action') == 'list_photos':
         folder = parsed.get('path')
-        if not folder and ('escritorio' in text.lower() or ('fotos' in previous and 'carpeta' in previous)):
+        if not folder and (_mentions_desktop(text) or ('fotos' in previous and 'carpeta' in previous)):
             folder = _desktop_path()
         if not folder:
             reply = '¿En qué carpeta querés que liste las fotos? Podés decirme, por ejemplo, “escritorio”.'
