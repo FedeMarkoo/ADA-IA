@@ -82,6 +82,47 @@ def _reply(text, model='ADA · agente'):
     return jsonify({'reply': text, 'model': model})
 
 
+def _photo_reply(result):
+    """Turn the internal multi-agent contract into a readable photographer report."""
+    technical = result.get('technical') or {}
+    semantic = result.get('semantic') or {}
+    review = result.get('review') or {}
+    focus = technical.get('focus', {})
+    exposure = technical.get('exposure', {})
+    composition = technical.get('composition', {})
+    match = semantic.get('session_match') or {}
+    lines = [
+        '# Análisis fotográfico',
+        '',
+        f"**Archivo:** `{result.get('path', 'sin identificar')}`",
+        '',
+        f"## Veredicto: {review.get('recommendation', 'revisar')} · {technical.get('overall_score', '—')}/10",
+        '',
+        '| Área | Puntuación | Lectura |',
+        '|---|---:|---|',
+        f"| Enfoque | {focus.get('score', '—')}/10 | {'Nitidez limitada; revisar foco o trepidación' if focus.get('score', 0) < 5 else 'Nitidez aceptable'} |",
+        f"| Exposición | {exposure.get('score', '—')}/10 | {'Subexpuesta o con sombras densas' if exposure.get('score', 0) < 5 else 'Equilibrada'} |",
+        f"| Composición técnica | {composition.get('score', '—')}/10 | {composition.get('note', 'Evaluación técnica')} |",
+        '',
+    ]
+    if semantic.get('subject'):
+        lines += ['## Lectura de la escena', '', f"**Sujeto y contexto:** {semantic['subject']}", '']
+    if semantic.get('style'):
+        lines += [f"**Estilo:** {semantic['style']}", '']
+    if semantic.get('photographer_feedback'):
+        lines += ['## Devolución como fotógrafo', '', semantic['photographer_feedback'], '']
+    if match:
+        confidence = match.get('confidence')
+        confidence_text = f"{round(float(confidence) * 100)}%" if isinstance(confidence, (int, float)) else str(confidence or '—')
+        lines += [f"**Coincidencia con la sesión:** {confidence_text}", str(match.get('reason', '')), '']
+    if review.get('strengths'):
+        lines += ['**Puntos fuertes**', ''] + [f"- {item}" for item in review['strengths']] + ['']
+    if review.get('issues'):
+        lines += ['**A revisar**', ''] + [f"- {item}" for item in review['issues']] + ['']
+    lines += [f"_Analizado por ADA con el workflow multiagente y {semantic.get('model', 'modelo visual local')}._"]
+    return '\n'.join(lines)
+
+
 @app.route('/')
 def index():
     return send_from_directory('ui', 'index.html')
@@ -259,7 +300,7 @@ def chat():
             return jsonify({'reply': reply, 'model': 'ADA · agente'})
         result = agent.decide_and_run({'type': 'analyze_photo', 'payload': {'path': path}, 'complexity': 5})
         out = result.get('result', {})
-        reply = json.dumps(out, ensure_ascii=False, indent=2)
+        reply = _photo_reply(out)
         conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
         return jsonify({'reply': reply, 'model': result.get('model', 'tool: analyze_photo')})
     if parsed.get('action') in {'list_dirs', 'list_files'}:
