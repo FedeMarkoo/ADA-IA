@@ -18,7 +18,32 @@ from src.ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS, _lo
 
 RAW_EXTENSIONS = {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}
 SEQUENCE_KEYS = ('SequenceNumber', 'SequenceFileNumber', 'ContinuousNumber', 'ShotOrder')
-BURST_KEYS = ('ReleaseMode', 'DriveMode', 'BurstMode', 'ContinuousShooting')
+BURST_KEYS = ('ReleaseMode', 'DriveMode', 'BurstMode', 'ContinuousShooting', 'ShootingMode')
+
+
+def _tag(row, name):
+    """Read ExifTool tags with or without their group prefix."""
+    if name in row:
+        return row[name]
+    suffix = ':' + name
+    for key, value in row.items():
+        if str(key).endswith(suffix):
+            return value
+    return None
+
+
+def _number_value(value):
+    try:
+        return int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def _continuous(value):
+    if value in (None, ''):
+        return False
+    text = str(value).lower()
+    return text not in {'0', 'single', 'normal', 'one shot', 'mechanical'}
 
 
 def _number(path):
@@ -107,7 +132,7 @@ def detect_burst_groups(files):
     numbered.sort(key=lambda item: (str(item[0].parent), item[1]))
     for index, (left, left_number) in enumerate(numbered):
         for right, right_number in numbered[index + 1:]:
-            if right.parent != left.parent or right_number - left_number > 2:
+            if right.parent != left.parent or right_number - left_number > 4:
                 break
             candidates.append((left, right))
 
@@ -116,21 +141,28 @@ def detect_burst_groups(files):
     for left, right in candidates:
         left_meta, right_meta = metadata[left], metadata[right]
         left_tags, right_tags = left_meta['maker'], right_meta['maker']
-        maker_signal = any(str(left_tags.get(key, '')).lower() == str(right_tags.get(key, '')).lower()
-                           and left_tags.get(key) not in (None, '') for key in SEQUENCE_KEYS)
-        mode_signal = any(key in left_tags and str(left_tags[key]).lower() not in {'0', 'single', 'normal'}
-                          for key in BURST_KEYS)
+        sequence_signal = False
+        for key in SEQUENCE_KEYS:
+            left_value = _number_value(_tag(left_tags, key))
+            right_value = _number_value(_tag(right_tags, key))
+            if left_value is not None and right_value is not None and abs(right_value - left_value) == 1:
+                sequence_signal = True
+                break
+        mode_signal = any(
+            _continuous(_tag(left_tags, key)) and _continuous(_tag(right_tags, key))
+            for key in BURST_KEYS
+        )
         times = []
         for item in (left_meta['raw'], right_meta['raw']):
             times.append(_parse_datetime(item.get('timestamp')))
-        time_signal = bool(times[0] and times[1] and abs((times[1] - times[0]).total_seconds()) <= 1.5)
+        time_signal = bool(times[0] and times[1] and abs((times[1] - times[0]).total_seconds()) <= 1.0)
         similarity = _visual_similarity(left, right)
         visual_signal = similarity is not None and similarity >= 0.985
-        if maker_signal or mode_signal or time_signal or visual_signal:
+        if sequence_signal or mode_signal or time_signal or visual_signal:
             groups.append({left, right})
             evidence.append({'files': [str(left), str(right)],
                              'signals': [name for name, value in (
-                                 ('maker_sequence', maker_signal), ('maker_mode', mode_signal),
+                                 ('maker_sequence', sequence_signal), ('maker_mode', mode_signal),
                                  ('capture_time', time_signal), ('visual_similarity', visual_signal)) if value],
                              'similarity': round(similarity, 4) if similarity is not None else None})
 

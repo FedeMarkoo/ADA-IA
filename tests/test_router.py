@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+import tempfile
 
 from src.ada.application.router import IntentRouter
 
@@ -36,10 +37,11 @@ class IntentRouterTests(unittest.TestCase):
 
     def test_photo_path_can_be_followed_by_more_text(self):
         from src.ada.application.agent import Agent
-        agent = Agent({"engine_provider": "unknown", "db_path": ":memory:"})
-        result = agent.parse_prompt(
-            "Analizá /Users/home/Desktop/Sofia_Batch_200/OK__DSC7939.ARW y decime si está bien"
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            agent = Agent({"engine_provider": "unknown", "db_path": str(Path(directory) / "test.db")})
+            result = agent.parse_prompt(
+                "Analizá /Users/home/Desktop/Sofia_Batch_200/OK__DSC7939.ARW y decime si está bien"
+            )
         self.assertEqual(result["action"], "analyze_photo")
         self.assertEqual(Path(result["path"]).suffix.lower(), ".arw")
 

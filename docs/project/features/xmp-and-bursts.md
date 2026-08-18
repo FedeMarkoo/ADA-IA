@@ -21,7 +21,9 @@ para que Lightroom los detecte.
 3. similitud visual entre cuadros adyacentes;
 4. cercanía de números como condición de vecindad.
 
-Los grupos confirmados reciben etiqueta `Amarillo` en Lightroom. Si no hay
+Los grupos confirmados reciben etiqueta `Amarillo` en Lightroom. Si más de una
+foto de una misma ráfaga sería seleccionada, ADA conserva como seleccionada la
+de mayor puntaje y baja las demás a revisión como duplicados. Si no hay
 evidencia suficiente, ADA debe preferir no marcar antes que pintar cientos de
 fotos por una falsa ráfaga.
 
