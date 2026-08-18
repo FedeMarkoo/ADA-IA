@@ -179,7 +179,9 @@ def _photo_reply(result):
 
 @app.route('/')
 def index():
-    return send_from_directory('ui', 'index.html')
+    response = send_from_directory('ui', 'index.html')
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return response
 
 
 @app.route('/api/status')
