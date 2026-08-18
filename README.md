@@ -1,7 +1,7 @@
 # ADA
 
 ADA es un asistente local, multiagente y orientado a la autonomía controlada.
-Combina conversación, memoria persistente, skills ejecutables y motores locales
+Combina conversación, memoria persistente, capabilities ejecutables y motores locales
 para ayudar con archivos, fotografías, organización, compras y futuras tareas
 basadas en eventos.
 
@@ -19,7 +19,7 @@ reversibilidad y uso responsable de CPU, memoria, batería y red.
 
 - chat local por web y CLI;
 - memoria persistente SQLite;
-- routing de skills y arquitectura multiagente;
+- routing de capabilities y arquitectura multiagente;
 - motores locales mediante Ollama;
 - análisis fotográfico RAW/JPG con feedback de fotógrafo;
 - selección de lotes y generación de XMP para Lightroom;
@@ -33,10 +33,7 @@ reversibilidad y uso responsable de CPU, memoria, batería y red.
 ADA/
 ├── docs/         documentación separada por responsabilidad
 │   ├── project/  producto, arquitectura, funcionalidades y roadmap
-│   ├── skills/   contratos y uso de skills individuales
-│   └── memory/   resúmenes y auditoría de memoria
-├── models/       modelos o adaptadores locales opcionales
-├── scripts/      utilidades y pruebas manuales
+│   └── capabilities/ contratos y uso de capacidades individuales
 ├── src/ada/      código de aplicación, agentes, capabilities e infraestructura
 ├── tests/        pruebas automatizadas
 └── ui/           interfaz web
@@ -53,8 +50,7 @@ ADA/
 - [Compras y recetas](docs/project/features/shopping-and-recipes.md)
 - [Telegram y Ollama](docs/project/integrations/telegram-and-ollama.md)
 - [Operación y recursos](docs/project/operations.md)
-- [Documentación de skills](docs/skills/README.md)
-- [Memoria y auditoría](docs/memory/README.md)
+- [Documentación de capabilities](docs/capabilities/README.md)
 
 ## Instalación y ejecución
 

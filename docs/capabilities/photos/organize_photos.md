@@ -6,7 +6,7 @@ params:
 risk: low
 permissions: filesystem
 examples:
-  - run: python -c "from ADA.skills.photos.organize_photos import run; print(run({'dir':'ADA/test_photos'})))"
+  - run: .venv/bin/python -c "from src.ada.capabilities.photography.organize_photos import run; print(run({'dir':'/ruta/a/fotos'}))"
 ---
 
 Esta skill mueve las imágenes a `organized/<category>/` según coincidencias simples en el nombre del archivo.

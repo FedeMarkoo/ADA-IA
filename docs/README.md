@@ -1,27 +1,25 @@
 # ADA
 
 Índice general de documentación de ADA. El contenido está separado por
-responsabilidad: proyecto, skills y memoria.
+ responsabilidad: proyecto y capabilities.
 
 ## Por dónde empezar
 
 - [Documentación del proyecto](project/README.md)
-- [Skills](skills/README.md)
-- [Memoria](memory/README.md)
+- [Capabilities](capabilities/README.md)
 
 ## Separación de contenidos
 
 - `docs/project/`: objetivos, arquitectura, funcionalidades e integración de
   ADA como producto.
-- `docs/skills/`: contratos y uso de capacidades ejecutables individuales.
-- `docs/memory/`: resúmenes generados para memoria y auditoría.
+- `docs/capabilities/`: contratos y uso de capacidades ejecutables individuales.
 
 ## Instalación rápida
 
 ```bash
 cd /Users/home/Desktop/ADA
 .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python ui_server.py
+.venv/bin/python ada.py serve
 ```
 
 La interfaz web queda disponible en `http://127.0.0.1:5005/`.

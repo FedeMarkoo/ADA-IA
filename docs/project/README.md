@@ -2,7 +2,7 @@
 
 Esta carpeta describe ADA como sistema: su objetivo, arquitectura, funciones,
 integraciones y operación. No contiene la documentación específica de cada
-capability; esa información está en [`../skills/README.md`](../skills/README.md).
+capability; esa información está en [`../capabilities/README.md`](../capabilities/README.md).
 
 ## Índice
 

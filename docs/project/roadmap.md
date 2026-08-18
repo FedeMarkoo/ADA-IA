@@ -14,7 +14,7 @@ revocar tareas.
 
 - conversación web y CLI;
 - memoria SQLite;
-- routing de skills y motores locales;
+- routing de capabilities y motores locales;
 - análisis multiagente de fotos RAW/JPG;
 - selección por archivo y generación de XMP;
 - detección conservadora de ráfagas;
