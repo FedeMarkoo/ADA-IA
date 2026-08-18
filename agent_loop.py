@@ -155,8 +155,13 @@ class Agent:
             return {"action": "run", "command": command, "complexity": 2}
         if any(w in lowered for w in ("index", "indexar", "scan", "escanear")):
             return {"action": "index", "path": path, "complexity": 2}
-        if any(w in lowered for w in ("analizar foto", "analizá foto", "analizá la foto", "analiza foto", "analiza la foto", "analizar imagen", "analizar la imagen", "evaluar foto", "evaluar la foto", "criticar foto", "criticá la foto")):
-            return {"action": "analyze_photo", "path": path, "complexity": 5}
+        if (any(w in lowered for w in ("analizar foto", "analizá foto", "analizá la foto", "analiza foto", "analiza la foto", "analizar imagen", "analizar la imagen", "evaluar foto", "evaluar la foto", "criticar foto", "criticá la foto"))
+                or re.search(r"\b(?:analizá|analiza|analizar|evaluá|evalua|evaluar|criticá|critica|criticar)\s+_?dsc\d+", lowered)):
+            photo_name = None
+            name_match = re.search(r"(?<!\w)_?dsc\d+(?:\.(?:nef|arw|cr2|dng|raf|orf|jpg|jpeg|png))?", text, re.I)
+            if name_match and not path:
+                photo_name = name_match.group(0)
+            return {"action": "analyze_photo", "path": path, "photo_name": photo_name, "complexity": 5}
         if any(w in lowered for w in ("listar fotos", "lista de fotos", "listá mis fotos", "listar mis fotos", "liste mis fotos", "listes mis fotos", "fotos")) and any(w in lowered for w in ("listar", "lista", "liste", "listes", "mostrar", "mostrá", "ver", "encontrar")):
             return {"action": "list_photos", "path": path, "complexity": 2}
         if (re.search(r"list\w*.*carpet", lowered) or re.search(r"carpet.*list\w*", lowered) or any(w in lowered for w in ("listar directorios", "ver directorios"))):

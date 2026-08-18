@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 import json
 import os
+from pathlib import Path
 
 from agent_loop import Agent
 from skills.operations.files.filesystem import IMAGE_EXTENSIONS
@@ -77,6 +78,56 @@ def _last_known_folder(previous):
     return _resolve_folder('', previous)
 
 
+def _resolve_photo_reference(text, previous, parsed):
+    """Resolve a camera filename without ever falling back to another photo."""
+    path = parsed.get('path')
+    if path and Path(path).is_file():
+        return {'path': path}
+    name = parsed.get('photo_name')
+    if not name:
+        match = re.search(r"(?<!\w)_?dsc\d+(?:\.(?:nef|arw|cr2|dng|raf|orf|jpg|jpeg|png))?", text, re.I)
+        name = match.group(0) if match else None
+    if not name:
+        return {'path': path}
+    stem = Path(name).stem.lower()
+    extensions = {'.nef', '.arw', '.cr2', '.dng', '.raf', '.orf', '.jpg', '.jpeg', '.png'}
+    roots = []
+    # Reuse the folder of a previously explicit image path in this conversation.
+    for match in re.finditer(r"(/[^\n\"]+?\.(?:nef|arw|cr2|dng|raf|orf|jpg|jpeg|png))", previous, re.I):
+        candidate = Path(match.group(1).rstrip('.,;:!?'))
+        if candidate.is_file():
+            roots.append(candidate.parent)
+    roots.extend([Path(cfg.get('photo_root', ''))] if cfg.get('photo_root') else [])
+    candidates = []
+    seen = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        try:
+            for candidate in root.rglob('*'):
+                if candidate.is_file() and candidate.suffix.lower() in extensions and candidate.stem.lower() == stem and str(candidate) not in seen:
+                    seen.add(str(candidate))
+                    candidates.append(candidate)
+        except OSError:
+            continue
+    # RAW wins over a rendered JPG, and files in Originales win over exports.
+    unique = []
+    for candidate in candidates:
+        if any(candidate.samefile(existing) for existing in unique):
+            continue
+        unique.append(candidate)
+    raw_candidates = [item for item in unique if item.suffix.lower() in {'.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}]
+    raw_candidates.sort(key=lambda item: ('originales' not in str(item).lower(), str(item)))
+    if len(raw_candidates) == 1:
+        return {'path': str(raw_candidates[0])}
+    if len(unique) == 1:
+        return {'path': str(unique[0])}
+    if unique:
+        unique.sort(key=lambda item: (item.suffix.lower() not in {'.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}, 'originales' not in str(item).lower(), str(item)))
+        return {'ambiguous': [str(item) for item in unique], 'photo_name': name}
+    return {'not_found': name}
+
+
 def _reply(text, model='ADA · agente'):
     conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': text}])
     return jsonify({'reply': text, 'model': model})
@@ -113,7 +164,10 @@ def _photo_reply(result):
         lines += ['## Devolución como fotógrafo', '', semantic['photographer_feedback'], '']
     if match:
         confidence = match.get('confidence')
-        confidence_text = f"{round(float(confidence) * 100)}%" if isinstance(confidence, (int, float)) else str(confidence or '—')
+        if isinstance(confidence, (int, float)):
+            confidence_text = f"{round(float(confidence) * 100 if confidence <= 1 else float(confidence))}%"
+        else:
+            confidence_text = str(confidence or '—')
         lines += [f"**Coincidencia con la sesión:** {confidence_text}", str(match.get('reason', '')), '']
     if review.get('strengths'):
         lines += ['**Puntos fuertes**', ''] + [f"- {item}" for item in review['strengths']] + ['']
@@ -178,7 +232,8 @@ def chat():
         return jsonify({'reply': reply, 'model': 'ADA · agente'})
 
     parsed = agent.parse_prompt(text)
-    previous = ' '.join(item['text'].lower() for item in conversation[-4:])
+    previous_text = ' '.join(item['text'] for item in conversation[-4:])
+    previous = previous_text.lower()
     affirmative = text.strip().lower() in {'si', 'sí', 's', 'dale', 'hacelo', 'hazlo', 'confirmo', 'confirmar'}
     if pending_action and affirmative:
         action = pending_action
@@ -293,7 +348,16 @@ def chat():
     elif ('escritorio' in text.lower() or 'desktop' in text.lower()) and ('carpet' in previous or 'directori' in previous) and any(w in previous for w in ('list', 'mostrar', 'ver')):
         parsed = {'action': 'list_dirs', 'complexity': 2}
     if parsed.get('action') == 'analyze_photo':
-        path = parsed.get('path')
+        resolved = _resolve_photo_reference(text, previous_text, parsed)
+        if resolved.get('ambiguous'):
+            reply = 'Encontré varias versiones de ' + resolved['photo_name'] + ':\n\n' + '\n'.join(f'- {item}' for item in resolved['ambiguous']) + '\n\nIndicame cuál querés analizar.'
+            conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+            return jsonify({'reply': reply, 'model': 'ADA · agente'})
+        if resolved.get('not_found'):
+            reply = f"No encontré una foto llamada {resolved['not_found']} en la carpeta de la sesión. No analicé ninguna otra foto."
+            conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+            return jsonify({'reply': reply, 'model': 'ADA · agente'})
+        path = resolved.get('path')
         if not path:
             reply = 'Necesito la ruta de la imagen. Por ejemplo: “analizá la foto /ruta/imagen.jpg”.'
             conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
