@@ -71,6 +71,16 @@ def index():
     return send_from_directory('ui', 'index.html')
 
 
+@app.route('/api/status')
+def status():
+    """Return active engines, local runtime health, and agent registry."""
+    return jsonify({
+        'engines': agent.model_manager.available(),
+        'runtime': agent.model_manager.runtime_status(),
+        'agents': list(agent.coordinator.available_agents()),
+    })
+
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     global pending_action
