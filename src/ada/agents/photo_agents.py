@@ -5,7 +5,7 @@ duplicating RAW decoding, model access, or scoring logic.
 """
 from pathlib import Path
 
-from skills.photos.analyze_photo import (
+from src.ada.capabilities.photography.analyze_photo import (
     _folder_context,
     technical_analysis,
     vision_analysis,

@@ -4,7 +4,7 @@ import importlib.util
 
 def load_skills():
     skills = {}
-    base = Path(__file__).parent
+    base = Path(__file__).resolve().parents[1] / 'src' / 'ada' / 'capabilities'
     for p in sorted(base.rglob('*.py')):
         if p.name == '__init__.py':
             continue
