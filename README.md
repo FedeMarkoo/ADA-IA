@@ -62,7 +62,7 @@ ADA/
 cd /Users/home/Desktop/ADA
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python ui_server.py
+.venv/bin/python ada.py serve
 ```
 
 La interfaz queda disponible en `http://127.0.0.1:5005/`.

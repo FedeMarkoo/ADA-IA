@@ -31,12 +31,17 @@ def main():
     p_suggest = sub.add_parser('suggest')
     p_suggest.add_argument('--dir', required=True)
     p_run = sub.add_parser('run')
+    sub.add_parser('serve', help='Start the web UI and ADA agent in one process')
     p_prompt = sub.add_parser('prompt')
     p_prompt.add_argument('text', help='Natural language prompt for ADA')
 
     args = parser.parse_args()
     cfg = load_config()
     print(f"Starting {cfg.get('name', 'ADA')}")
+    if args.cmd == 'serve':
+        from src.ada.interfaces.web.server import main as serve_web
+        serve_web()
+        return
     mem = Memory(cfg.get('db_path', str(Path(__file__).parent / 'memory.db')))
     if args.cmd == 'index':
         index_folder(args.dir, mem)
