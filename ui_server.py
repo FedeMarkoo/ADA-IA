@@ -460,17 +460,15 @@ def chat():
             reply = '¿En qué carpeta querés hacer la selección? Indicame la ruta del evento.'
             model = 'ADA · agente'
         else:
-            result = agent.decide_and_run({'type': 'select_photo_batch', 'payload': {'path': folder, 'target': parsed.get('target', 300), 'write_xmp': parsed.get('write_xmp', False)}, 'complexity': 6})
+            result = agent.decide_and_run({'type': 'select_photo_batch', 'payload': {'path': folder, 'write_xmp': parsed.get('write_xmp', False)}, 'complexity': 6})
             out = result.get('result', {})
             model = result.get('model', 'tool: select_photo_batch')
             if out.get('ok'):
                 reply = (f"Selección preliminar terminada sobre {out['scanned']} fotos.\n\n"
-                         f"- Grupos de ráfaga/duplicados: {out['burst_groups']}\n"
-                         f"- Candidatas redundantes: {out['duplicate_candidates']}\n"
-                         f"- Representantes únicos: {out['representatives']}\n"
-                         f"- Shortlist técnica: {len(out['selected'])} fotos\n"
+                         f"- Seleccionadas: {out.get('selected_count', 0)}\n"
+                         f"- Rechazadas: {out.get('rejected_count', 0)}\n"
                          f"- XMP escritos: {len(out.get('xmp_written', []))}\n\n"
-                         "La siguiente etapa debe validar con visión el contexto y la cobertura del evento antes de entregar la selección final.")
+                         "Cada foto fue evaluada con el mismo workflow multiagente que un análisis individual.")
             else:
                 reply = json.dumps(out, ensure_ascii=False, indent=2)
         conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])

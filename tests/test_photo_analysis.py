@@ -93,10 +93,10 @@ class PhotoAnalysisTests(unittest.TestCase):
         folder.mkdir()
         for index in range(3):
             (folder / f'frame_{index}.jpg').write_bytes(self.path.read_bytes())
-        result = select_photo_batch({'path': str(folder), 'target': 2, 'workers': 1})
+        result = select_photo_batch({'path': str(folder), 'workers': 1, 'vision': False})
         self.assertTrue(result['ok'])
         self.assertEqual(result['scanned'], 3)
-        self.assertLessEqual(len(result['selected']), 2)
+        self.assertEqual(result['completed'], 3)
         self.assertTrue(all((folder / f'frame_{index}.jpg').exists() for index in range(3)))
 
     def test_batch_selection_can_write_lightroom_xmp_status_and_rating(self):
@@ -104,7 +104,7 @@ class PhotoAnalysisTests(unittest.TestCase):
         folder.mkdir()
         for index in range(2):
             (folder / f'frame_{index}.jpg').write_bytes(self.path.read_bytes())
-        result = select_photo_batch({'path': str(folder), 'target': 1, 'workers': 1, 'write_xmp': True})
+        result = select_photo_batch({'path': str(folder), 'workers': 1, 'vision': False, 'write_xmp': True})
         self.assertEqual(len(result['xmp_written']), 2)
         xmp = (folder / 'frame_0.xmp').read_text(encoding='utf-8')
         self.assertIn('ada:Status=', xmp)

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .base import AgentRegistry
 from .photo_agents import ContextPhotoAgent, PhotoReviewAgent, TechnicalPhotoAgent
+from skills.photos.xmp import write_photo_xmp
 
 
 class MultiAgentCoordinator:
@@ -52,7 +53,7 @@ class MultiAgentCoordinator:
             'folder': str(task.get('folder') or path.parent),
             'siblings': [],
         }
-        return {
+        output = {
             'ok': not failures,
             'workflow': 'photo_review',
             'agents': results,
@@ -64,6 +65,18 @@ class MultiAgentCoordinator:
             'session_context': context,
             'review': results['photo_reviewer'],
         }
+        if task.get('write_xmp'):
+            review_data = output['review']
+            score = float(review_data.get('selection_score', technical.get('overall_score', 0)) or 0)
+            selected = int(review_data.get('selection_rating', 0) or 0) >= 3
+            output['xmp'] = write_photo_xmp(
+                path,
+                'Seleccionada' if selected else 'Rechazada',
+                max(1, min(5, round(score / 2))) if selected else 0,
+                score,
+                review_data.get('recommendation', 'evaluación individual'),
+            )
+        return output
 
     def run(self, task):
         workflow = task.get('workflow') or task.get('type')
