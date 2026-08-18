@@ -9,6 +9,21 @@ cd /Users/home/Desktop/ADA
 
 La interfaz queda disponible en `http://127.0.0.1:5005/`.
 
+## Límite de recursos
+
+El perfil predeterminado prioriza no saturar el equipo durante lotes RAW:
+
+- un archivo fotográfico a la vez (`photo_workers: 1`);
+- un hilo de coordinación (`agent_max_workers: 1`);
+- hasta dos hilos de inferencia en Ollama (`ollama_num_thread: 2`);
+- admisión pausada cuando la carga del sistema supera el presupuesto de
+  `cpu_limit_percent: 50`.
+
+Estos valores se pueden cambiar en `config.json`, pero aumentar workers y
+threads puede volver a elevar el consumo. El límite controla la concurrencia y
+la cantidad de hilos solicitada a Ollama; el sistema operativo puede mostrar
+picos breves durante la decodificación de un RAW.
+
 El estado del runtime se consulta en `GET /api/status`. El análisis local puede
 funcionar sin Ollama; las respuestas visuales necesitan que el modelo de visión
 esté instalado y que el runtime esté disponible.

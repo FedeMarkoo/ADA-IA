@@ -5,6 +5,7 @@ from pathlib import Path
 from .base import AgentRegistry
 from .photo_agents import ContextPhotoAgent, PhotoReviewAgent, TechnicalPhotoAgent
 from skills.photos.xmp import write_photo_xmp
+from resource_policy import wait_for_cpu_budget
 
 
 class MultiAgentCoordinator:
@@ -17,12 +18,13 @@ class MultiAgentCoordinator:
             ContextPhotoAgent(),
             PhotoReviewAgent(),
         ])
-        self.max_workers = max(1, int(self.config.get('agent_max_workers', 2)))
+        self.max_workers = max(1, int(self.config.get('agent_max_workers', 1)))
 
     def available_agents(self):
         return self.registry.names()
 
     def analyze_photo(self, task):
+        wait_for_cpu_budget(self.config)
         path = Path(task.get('path', '')).expanduser().resolve()
         if not path.is_file():
             return {'error': 'image not found', 'path': str(path), 'workflow': 'photo_review'}

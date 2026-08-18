@@ -8,6 +8,8 @@ import os
 import urllib.error
 import urllib.request
 
+from resource_policy import recommended_threads
+
 from runtime import LocalModelRuntime
 
 try:
@@ -101,7 +103,10 @@ class ModelManager:
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
-            "options": {"temperature": kwargs.get("temperature", 0.2)},
+            "options": {
+                "temperature": kwargs.get("temperature", 0.2),
+                "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
+            },
         }).encode("utf-8")
         request = urllib.request.Request(
             self.ollama_url + "/api/chat", data=payload,
@@ -122,7 +127,10 @@ class ModelManager:
             "messages": [{"role": "user", "content": prompt, "images": [image_base64]}],
             "stream": False,
             "format": "json",
-            "options": {"temperature": kwargs.get("temperature", 0.1)},
+            "options": {
+                "temperature": kwargs.get("temperature", 0.1),
+                "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
+            },
         }).encode("utf-8")
         request = urllib.request.Request(self.ollama_url + "/api/chat", data=payload,
                                          headers={"Content-Type": "application/json"}, method="POST")
