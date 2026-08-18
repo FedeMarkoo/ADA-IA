@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 
-def write_photo_xmp(path, status, rating, score, reason):
+def write_photo_xmp(path, status, rating, score, reason, label=None):
     """Create/update ADA fields while preserving all unrelated XMP metadata."""
     sidecar = Path(path).with_suffix('.xmp')
     content = sidecar.read_text(encoding='utf-8', errors='ignore') if sidecar.is_file() else (
@@ -22,7 +22,7 @@ def write_photo_xmp(path, status, rating, score, reason):
         content = content.replace('<rdf:Description', '<rdf:Description xmlns:xmpDM="http://ns.adobe.com/xmp/1.0/DynamicMedia/"', 1)
     values = {
         'xmp:Rating': str(int(rating if status == 'Seleccionada' else 0)),
-        'xmp:Label': status,
+        'xmp:Label': label or status,
         'xmpDM:good': 'True' if status == 'Seleccionada' else 'False',
         'ada:Status': status,
         'ada:Score': f'{float(score):.2f}',
@@ -50,4 +50,18 @@ def repair_photo_xmp(path):
     status = status_match.group(1) if status_match else ('Seleccionada' if rating_match and rating_match.group(1) != '0' else 'Rechazada')
     score = float(score_match.group(1)) if score_match else 0.0
     rating = int(rating_match.group(1)) if rating_match else 0
-    return write_photo_xmp(path, status, rating, score, 'Flag Lightroom reparado por ADA')
+    label_match = re.search(r'xmp:Label="([^"]+)"', content)
+    label = label_match.group(1) if label_match and label_match.group(1).lower() in {'amarillo', 'yellow'} else None
+    return write_photo_xmp(path, status, rating, score, 'Flag Lightroom reparado por ADA', label=label)
+
+
+def mark_xmp_label(path, label):
+    sidecar = Path(path).with_suffix('.xmp')
+    content = sidecar.read_text(encoding='utf-8', errors='ignore')
+    status_match = re.search(r'ada:Status="([^"]+)"', content)
+    score_match = re.search(r'ada:Score="([^"]+)"', content)
+    rating_match = re.search(r'xmp:Rating="([^"]+)"', content)
+    status = status_match.group(1) if status_match else 'Rechazada'
+    score = float(score_match.group(1)) if score_match else 0.0
+    rating = int(rating_match.group(1)) if rating_match else 0
+    return write_photo_xmp(path, status, rating, score, 'Ráfaga detectada por ADA', label=label)
