@@ -48,6 +48,7 @@ ADA/
 - [Documentación general](docs/README.md)
 - [Objetivo y roadmap](docs/project/roadmap.md)
 - [Arquitectura](docs/project/architecture/overview.md)
+- [Estructura de carpetas](docs/project/architecture/folder-structure.md)
 - [Análisis de fotos](docs/project/features/photo-analysis.md)
 - [XMP y ráfagas](docs/project/features/xmp-and-bursts.md)
 - [Compras y recetas](docs/project/features/shopping-and-recipes.md)

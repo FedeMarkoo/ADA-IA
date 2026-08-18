@@ -8,6 +8,7 @@ skill; esa información está en [`../skills/README.md`](../skills/README.md).
 
 - [Objetivo y roadmap](roadmap.md)
 - [Arquitectura](architecture/overview.md)
+- [Estructura de carpetas](architecture/folder-structure.md)
 - [Análisis de fotos](features/photo-analysis.md)
 - [Compras y recetas](features/shopping-and-recipes.md)
 - [XMP y ráfagas](features/xmp-and-bursts.md)

@@ -1,5 +1,8 @@
 # Arquitectura
 
+La propuesta detallada para dejar de tener módulos sueltos en la raíz está en
+[Estructura de carpetas](folder-structure.md).
+
 ## Flujo principal
 
 ```text
