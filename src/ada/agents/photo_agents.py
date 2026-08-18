@@ -10,6 +10,7 @@ from src.ada.capabilities.photography.analyze_photo import (
     technical_analysis,
     vision_analysis,
 )
+from src.ada.domain.photography.selection import evaluate_selection
 
 from .base import AgentResult, SpecialistAgent
 
@@ -37,34 +38,6 @@ class ContextPhotoAgent(SpecialistAgent):
 class PhotoReviewAgent(SpecialistAgent):
     name = 'photo_reviewer'
 
-    @staticmethod
-    def _selection_rating(technical, semantic):
-        """Blend photographic value with technical quality into a 1–5 selection rating."""
-        technical_score = float(technical.get('overall_score', 0) or 0)
-        artistic_score = semantic.get('artistic_score')
-        if isinstance(artistic_score, (int, float)):
-            blended_score = technical_score * 0.45 + float(artistic_score) * 0.55
-        else:
-            blended_score = technical_score
-        # Extreme ISO combined with only borderline detail is a real delivery
-        # risk. Artistic value can preserve a unique moment, but must not turn
-        # a noisy, soft frame into an unquestioned acceptance.
-        noise_score = float((technical.get('noise') or {}).get('score', 10) or 10)
-        focus_score = float((technical.get('focus') or {}).get('score', 10) or 10)
-        if noise_score < 4.5 and focus_score < 6:
-            blended_score = min(blended_score, 4.9)
-        if blended_score >= 8.5:
-            rating, label = 5, 'excelente'
-        elif blended_score >= 7.2:
-            rating, label = 4, 'muy buena'
-        elif blended_score >= 5.0:
-            rating, label = 3, 'aceptada'
-        elif blended_score >= 3.5:
-            rating, label = 2, 'dudosa'
-        else:
-            rating, label = 1, 'rechazo técnico'
-        return round(blended_score, 2), rating, label
-
     def run(self, task):
         technical = task.get('technical') or {}
         semantic = task.get('semantic') or {}
@@ -72,7 +45,7 @@ class PhotoReviewAgent(SpecialistAgent):
         strengths = []
         exposure = technical.get('exposure', {})
         focus = technical.get('focus', {})
-        selection_score, selection_rating, selection_label = self._selection_rating(technical, semantic)
+        selection_score, selection_rating, selection_label = evaluate_selection(technical, semantic)
         if focus.get('score', 0) >= 6:
             strengths.append('nitidez aceptable o buena')
         else:
