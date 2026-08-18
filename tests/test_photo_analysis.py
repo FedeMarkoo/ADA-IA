@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -108,6 +109,7 @@ class PhotoAnalysisTests(unittest.TestCase):
         xmp = (folder / 'frame_0.xmp').read_text(encoding='utf-8')
         self.assertIn('ada:Status=', xmp)
         self.assertIn('xmp:Rating=', xmp)
+        ET.parse(folder / 'frame_0.xmp')
 
 
 if __name__ == '__main__':
