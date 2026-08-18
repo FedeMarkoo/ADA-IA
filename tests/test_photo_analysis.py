@@ -73,6 +73,19 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertGreater(sony, nikon)
         self.assertLess(sony, 8)
 
+    def test_extreme_iso_and_borderline_focus_cannot_be_accepted_by_artistic_score_alone(self):
+        review = PhotoReviewAgent().run({
+            'technical': {
+                'overall_score': 5.45,
+                'focus': {'score': 5.52},
+                'exposure': {'score': 6.13},
+                'noise': {'score': 3.7, 'iso': 25600},
+            },
+            'semantic': {'artistic_score': 8.0, 'photographer_feedback': 'Momento válido.'},
+        }).data
+        self.assertEqual(review['selection_rating'], 2)
+        self.assertIn('ruido', ' '.join(review['issues']))
+
 
 if __name__ == '__main__':
     unittest.main()

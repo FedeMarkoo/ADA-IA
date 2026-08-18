@@ -46,6 +46,13 @@ class PhotoReviewAgent(SpecialistAgent):
             blended_score = technical_score * 0.45 + float(artistic_score) * 0.55
         else:
             blended_score = technical_score
+        # Extreme ISO combined with only borderline detail is a real delivery
+        # risk. Artistic value can preserve a unique moment, but must not turn
+        # a noisy, soft frame into an unquestioned acceptance.
+        noise_score = float((technical.get('noise') or {}).get('score', 10) or 10)
+        focus_score = float((technical.get('focus') or {}).get('score', 10) or 10)
+        if noise_score < 4.5 and focus_score < 6:
+            blended_score = min(blended_score, 4.9)
         if blended_score >= 8.5:
             rating, label = 5, 'excelente'
         elif blended_score >= 7.2:
@@ -76,6 +83,9 @@ class PhotoReviewAgent(SpecialistAgent):
             issues.append('exposición algo baja; probablemente recuperable al revelar')
         else:
             issues.append('exposición baja o irregular; revisar sombras y altas luces')
+        noise_score = float((technical.get('noise') or {}).get('score', 10) or 10)
+        if noise_score < 4.5:
+            issues.append('ISO extremo; revisar ruido, detalle fino y tamaño de entrega')
         if semantic.get('photographer_feedback'):
             strengths.append('el análisis visual encontró contexto fotográfico')
         return AgentResult(self.name, True, {
