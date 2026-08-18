@@ -20,10 +20,12 @@ def run(args):
         sidecars = sorted(root.rglob('*.xmp'))
         repaired = [repair_photo_xmp(path) for path in sidecars] if args.get('repair_xmp') else []
         raw_files = [path for path in root.rglob('*') if path.is_file() and path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}]
-        burst_paths = {str(path) for group in _burst_groups(raw_files) for path in group}
+        burst_groups, burst_detection = detect_burst_groups(raw_files)
+        burst_paths = {str(path) for group in burst_groups for path in group}
         burst_xmp = [mark_xmp_label(path, 'Amarillo') for path in raw_files if str(path) in burst_paths]
         return {'ok': True, 'workflow': 'photo_xmp_repair', 'path': str(root),
                 'repaired_count': len(repaired), 'burst_count': len(burst_paths),
+                'burst_detection': burst_detection,
                 'burst_xmp_written': burst_xmp, 'xmp_written': repaired + burst_xmp}
     files = sorted(p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS)
     if not files:
@@ -58,7 +60,8 @@ def run(args):
                 failures.append({'path': str(path), 'error': str(exc)})
     selected = [item for item in records if int((item.get('review') or {}).get('selection_rating', 0) or 0) >= 3]
     rejected = [item for item in records if item not in selected]
-    burst_paths = {str(path) for group in _burst_groups(files) for path in group}
+    burst_groups, burst_detection = detect_burst_groups(files)
+    burst_paths = {str(path) for group in burst_groups for path in group}
     burst_xmp = []
     if args.get('write_xmp'):
         burst_xmp = [mark_xmp_label(path, 'Amarillo') for path in files if str(path) in burst_paths]
@@ -75,6 +78,7 @@ def run(args):
         'rejected': rejected,
         'xmp_written': xmp_written,
         'burst_count': len(burst_paths),
+        'burst_detection': burst_detection,
         'burst_xmp_written': burst_xmp,
         'decision_mode': 'same_multi_agent_photo_review_per_file',
     }
