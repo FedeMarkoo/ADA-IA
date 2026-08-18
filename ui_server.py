@@ -142,12 +142,17 @@ def _photo_reply(result):
     exposure = technical.get('exposure', {})
     composition = technical.get('composition', {})
     match = semantic.get('session_match') or {}
+    selection_rating = review.get('selection_rating', '—')
+    selection_score = review.get('selection_score', '—')
+    selection_label = review.get('selection_label', '—')
     lines = [
         '# Análisis fotográfico',
         '',
         f"**Archivo:** `{result.get('path', 'sin identificar')}`",
         '',
-        f"## Veredicto: {review.get('recommendation', 'revisar')} · {technical.get('overall_score', '—')}/10",
+        f"## Selección: {selection_rating}/5 · {selection_label} · {review.get('recommendation', 'revisar')}",
+        '',
+        f"**Puntaje de selección:** {selection_score}/10  ·  **Puntaje técnico:** {technical.get('overall_score', '—')}/10",
         '',
         '| Área | Puntuación | Lectura |',
         '|---|---:|---|',

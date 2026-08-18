@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw
 from skills import load_skills
 from skills.photos.analyze_photo import run, technical_analysis
 from agents import MultiAgentCoordinator
+from agents.photo_agents import PhotoReviewAgent
 
 
 class PhotoAnalysisTests(unittest.TestCase):
@@ -50,6 +51,15 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertEqual(result['workflow'], 'photo_review')
         self.assertEqual(set(result['agents']), {'technical_photo', 'context_photo', 'photo_reviewer'})
         self.assertIn('review', result)
+
+    def test_selection_rating_can_accept_artistic_photo_with_technical_issues(self):
+        review = PhotoReviewAgent().run({
+            'technical': {'overall_score': 4.99, 'focus': {'score': 4.48}, 'exposure': {'score': 3.19}},
+            'semantic': {'artistic_score': 7, 'photographer_feedback': 'Buen momento.'},
+        }).data
+        self.assertEqual(review['selection_rating'], 3)
+        self.assertEqual(review['selection_label'], 'aceptada')
+        self.assertIn('aceptar', review['recommendation'])
 
 
 if __name__ == '__main__':
