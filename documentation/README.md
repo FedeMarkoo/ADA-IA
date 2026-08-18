@@ -1,5 +1,12 @@
 # ADA Documentation
 
+## Índice
+
+- [Arquitectura multiagente](MULTI_AGENT_ARCHITECTURE.md)
+- [Análisis fotográfico](PHOTO_ANALYSIS.md)
+- [XMP y detección de ráfagas](XMP_AND_BURST_DETECTION.md)
+- [Operación y pruebas](OPERATIONS.md)
+
 ADA es un agente local orientado a automatizar tareas sobre archivos, fotos y
 datos. Puede conversar, ejecutar skills, consultar memoria y pedir confirmación
 antes de realizar operaciones que modifican información.
@@ -129,8 +136,8 @@ Uso desde ADA:
 Analizá la foto /ruta/a/imagen.jpg
 ```
 
-Para lotes grandes, la skill `photos/select_photo_batch.py` hace una primera
-selección local sin enviar miles de imágenes al modelo visual:
+Para lotes grandes, la skill `photos/select_photo_batch.py` procesa cada archivo
+con el mismo workflow que una foto individual:
 
 ```text
 Seleccioná las fotos de /ruta/al/evento y prepará una shortlist de 300
@@ -140,7 +147,9 @@ Cada archivo del lote invoca el mismo workflow multiagente que una foto
 individual (`analyze_photo`). No existe un cupo fijo de seleccionadas: cada
 foto queda `Seleccionada` o `Rechazada` según su propia revisión. Si se pide
 XMP, el sidecar se escribe inmediatamente al terminar ese archivo, con rating
-Lightroom, puntaje ADA y motivo. No mueve ni elimina archivos.
+Lightroom, puntaje ADA y motivo. No mueve ni elimina archivos. El procesamiento
+se puede paralelizar con `workers`, manteniendo la decisión y la escritura
+aisladas por archivo.
 
 Con `vision=False` se obtiene únicamente el análisis técnico. Esto permite
 probar la skill y procesar grandes carpetas aun cuando Ollama no esté activo.
