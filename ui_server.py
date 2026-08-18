@@ -128,6 +128,31 @@ def _resolve_photo_reference(text, previous, parsed):
     return {'not_found': name}
 
 
+def _last_photo_path(previous):
+    paths = []
+    for match in re.finditer(r"(/[^\n\"]+?\.(?:nef|arw|cr2|dng|raf|orf|jpg|jpeg|png))", previous, re.I):
+        candidate = Path(match.group(1).rstrip('.,;:!?'))
+        if candidate.is_file():
+            paths.append(candidate)
+    return paths[-1] if paths else None
+
+
+def _resolve_contextual_photo(text, previous):
+    """Resolve short follow-ups such as 'otra' using the active photo session."""
+    lowered = text.strip().lower()
+    if not re.search(r"\b(otra|otro|siguiente|seguí|sigue|continuá|continua)\b", lowered):
+        return None
+    last = _last_photo_path(previous)
+    if not last or not last.parent.is_dir():
+        return None
+    extensions = {'.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}
+    reviewed = {item.lower() for item in re.findall(r"(/[^\n\"]+?\.(?:nef|arw|cr2|dng|raf|orf))", previous, re.I)}
+    candidates = [item for item in sorted(last.parent.iterdir())
+                  if item.is_file() and item.suffix.lower() in extensions and str(item).lower() not in reviewed]
+    following = [item for item in candidates if item.name.lower() > last.name.lower()]
+    return (following or candidates)[0] if (following or candidates) else None
+
+
 def _reply(text, model='ADA · agente'):
     conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': text}])
     return jsonify({'reply': text, 'model': model})
@@ -142,12 +167,17 @@ def _photo_reply(result):
     exposure = technical.get('exposure', {})
     composition = technical.get('composition', {})
     match = semantic.get('session_match') or {}
+    selection_rating = review.get('selection_rating', '—')
+    selection_score = review.get('selection_score', '—')
+    selection_label = review.get('selection_label', '—')
     lines = [
         '# Análisis fotográfico',
         '',
         f"**Archivo:** `{result.get('path', 'sin identificar')}`",
         '',
-        f"## Veredicto: {review.get('recommendation', 'revisar')} · {technical.get('overall_score', '—')}/10",
+        f"## Selección: {selection_rating}/5 · {selection_label} · {review.get('recommendation', 'revisar')}",
+        '',
+        f"**Puntaje de selección:** {selection_score}/10  ·  **Puntaje técnico:** {technical.get('overall_score', '—')}/10",
         '',
         '| Área | Puntuación | Lectura |',
         '|---|---:|---|',
@@ -179,7 +209,9 @@ def _photo_reply(result):
 
 @app.route('/')
 def index():
-    return send_from_directory('ui', 'index.html')
+    response = send_from_directory('ui', 'index.html')
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return response
 
 
 @app.route('/api/status')
@@ -234,6 +266,20 @@ def chat():
     parsed = agent.parse_prompt(text)
     previous_text = ' '.join(item['text'] for item in conversation[-4:])
     previous = previous_text.lower()
+    contextual_photo = _resolve_contextual_photo(text, previous_text)
+    if contextual_photo and parsed.get('action') in {'ask', 'suggest'}:
+        parsed = {'action': 'analyze_photo', 'path': str(contextual_photo), 'photo_name': contextual_photo.name, 'complexity': 5}
+    if pending_action and pending_action.get('type') == 'photo_choice':
+        extension = text.strip().lower().lstrip('.')
+        candidates = pending_action.get('candidates', [])
+        selected = [item for item in candidates if Path(item).suffix.lower().lstrip('.') == extension]
+        if len(selected) == 1:
+            parsed = {'action': 'analyze_photo', 'path': selected[0], 'photo_name': Path(selected[0]).name, 'complexity': 5}
+            pending_action = None
+        elif len(selected) > 1:
+            reply = 'Hay varias versiones .' + extension + ' para ese archivo:\n\n' + '\n'.join(f'- {item}' for item in selected) + '\n\nIndicame la ruta exacta.'
+            conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+            return jsonify({'reply': reply, 'model': 'ADA · agente'})
     affirmative = text.strip().lower() in {'si', 'sí', 's', 'dale', 'hacelo', 'hazlo', 'confirmo', 'confirmar'}
     if pending_action and affirmative:
         action = pending_action
@@ -350,6 +396,7 @@ def chat():
     if parsed.get('action') == 'analyze_photo':
         resolved = _resolve_photo_reference(text, previous_text, parsed)
         if resolved.get('ambiguous'):
+            pending_action = {'type': 'photo_choice', 'photo_name': resolved['photo_name'], 'candidates': resolved['ambiguous']}
             reply = 'Encontré varias versiones de ' + resolved['photo_name'] + ':\n\n' + '\n'.join(f'- {item}' for item in resolved['ambiguous']) + '\n\nIndicame cuál querés analizar.'
             conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
             return jsonify({'reply': reply, 'model': 'ADA · agente'})
