@@ -1,5 +1,2 @@
-"""Specialist agents and workflow coordinators used by ADA."""
-
-from .coordinator import MultiAgentCoordinator
-
-__all__ = ['MultiAgentCoordinator']
+"""Compatibility package; use src.ada.agents."""
+from src.ada.agents import *
