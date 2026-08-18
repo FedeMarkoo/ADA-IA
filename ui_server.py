@@ -164,7 +164,10 @@ def _photo_reply(result):
         lines += ['## Devolución como fotógrafo', '', semantic['photographer_feedback'], '']
     if match:
         confidence = match.get('confidence')
-        confidence_text = f"{round(float(confidence) * 100)}%" if isinstance(confidence, (int, float)) else str(confidence or '—')
+        if isinstance(confidence, (int, float)):
+            confidence_text = f"{round(float(confidence) * 100 if confidence <= 1 else float(confidence))}%"
+        else:
+            confidence_text = str(confidence or '—')
         lines += [f"**Coincidencia con la sesión:** {confidence_text}", str(match.get('reason', '')), '']
     if review.get('strengths'):
         lines += ['**Puntos fuertes**', ''] + [f"- {item}" for item in review['strengths']] + ['']
@@ -229,7 +232,8 @@ def chat():
         return jsonify({'reply': reply, 'model': 'ADA · agente'})
 
     parsed = agent.parse_prompt(text)
-    previous = ' '.join(item['text'].lower() for item in conversation[-4:])
+    previous_text = ' '.join(item['text'] for item in conversation[-4:])
+    previous = previous_text.lower()
     affirmative = text.strip().lower() in {'si', 'sí', 's', 'dale', 'hacelo', 'hazlo', 'confirmo', 'confirmar'}
     if pending_action and affirmative:
         action = pending_action
@@ -344,7 +348,7 @@ def chat():
     elif ('escritorio' in text.lower() or 'desktop' in text.lower()) and ('carpet' in previous or 'directori' in previous) and any(w in previous for w in ('list', 'mostrar', 'ver')):
         parsed = {'action': 'list_dirs', 'complexity': 2}
     if parsed.get('action') == 'analyze_photo':
-        resolved = _resolve_photo_reference(text, previous, parsed)
+        resolved = _resolve_photo_reference(text, previous_text, parsed)
         if resolved.get('ambiguous'):
             reply = 'Encontré varias versiones de ' + resolved['photo_name'] + ':\n\n' + '\n'.join(f'- {item}' for item in resolved['ambiguous']) + '\n\nIndicame cuál querés analizar.'
             conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
