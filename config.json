@@ -1,0 +1,21 @@
+{
+  "name": "ADA",
+  "mount_point": "/Volumes/ADA",
+  "max_threads": 4,
+  "use_mps": false,
+  "ollama_url": "http://127.0.0.1:11434",
+  "ollama_model": "llama3.2:3b",
+  "vision_model": "qwen2.5vl:3b",
+  "local_max_complexity": 5,
+  "privacy_default": "normal",
+  "confirm_risky": true,
+  "script_timeout": 60,
+  "openai_model": "gpt-4o-mini",
+  "anthropic_model": "claude-3-5-sonnet-latest",
+  "db_path": "memory.db",
+  "knowledge_files": ["/Users/home/Desktop/REGLAS_GESTOR_FOTOS.md"],
+  "photo_root": "/Users/home/Desktop/Fotos",
+  "lightroom_script": "/Users/home/Desktop/gestor_fotos_lightroom.py",
+  "lightroom_db": "/Users/home/Desktop/limpieza_lightroom.sqlite3",
+  "mcp_servers": {}
+}
