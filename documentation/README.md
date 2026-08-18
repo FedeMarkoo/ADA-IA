@@ -4,6 +4,29 @@ ADA es un agente local orientado a automatizar tareas sobre archivos, fotos y
 datos. Puede conversar, ejecutar skills, consultar memoria y pedir confirmación
 antes de realizar operaciones que modifican información.
 
+## Arquitectura autónoma de motores
+
+ADA administra su motor local en lugar de exigir que el usuario inicie
+Ollama manualmente. Al necesitar una respuesta generativa o visual, el
+`ModelManager` consulta el runtime local, lo inicia si está instalado y
+espera a que esté listo. Si el servicio ya estaba activo, ADA lo reutiliza y
+no lo detiene al finalizar.
+
+La capacidad se llama `local`; Ollama es su backend actual. La misma interfaz
+permite sumar otros motores (`openai` y `anthropic`) mediante
+`engine_priority`, sin acoplar los agentes a un proveedor específico.
+
+En `config.json`:
+
+- `local_runtime.auto_start`: arranque automático del runtime local.
+- `local_runtime.auto_pull`: desactivado por defecto para evitar descargas
+  inesperadas de modelos grandes.
+- `engine_priority`: orden de fallback para tareas generativas complejas.
+- `ollama_model` y `vision_model`: modelos de texto y visión.
+
+El estado se puede consultar en `GET /api/status`. Incluye motores
+disponibles, salud del runtime, modelos instalados y agentes registrados.
+
 ## Estructura del proyecto
 
 - `ada.py`: CLI para indexar fotos, sugerir organización y ejecutar ADA.
@@ -16,6 +39,7 @@ antes de realizar operaciones que modifican información.
 - `skills/photos/`: análisis, listado, organización y workflows de Lightroom.
 - `skills/system/`: puente opcional con servidores MCP.
 - `skills/data/`: consultas de bases SQLite en modo lectura.
+- `agents/`: especialistas y coordinadores multiagente.
 - `scripts/`: scripts auxiliares y pruebas manuales.
 - `docs/`: documentación histórica y notas internas del proyecto.
 
@@ -36,6 +60,21 @@ de confirmación. Los modelos remotos se habilitan mediante sus variables de
 entorno correspondientes.
 
 ## Analizador de fotos
+
+### Arquitectura multiagente
+
+El análisis fotográfico se ejecuta mediante `MultiAgentCoordinator`. Los
+especialistas independientes son:
+
+- `TechnicalPhotoAgent`: decodificación RAW y métricas técnicas.
+- `ContextPhotoAgent`: sujeto, contexto, estilo y coincidencia con la sesión.
+- `PhotoReviewAgent`: combina resultados y produce una recomendación.
+
+Los dos primeros corren en paralelo. El coordinador conserva los campos
+anteriores (`technical`, `semantic`, `session_context`) para no romper clientes,
+y además devuelve los resultados agrupados en `agents`. Para agregar un nuevo
+especialista se registra en `AgentRegistry`; no hace falta duplicar memoria,
+permisos ni conexión con modelos.
 
 La skill `photos/analyze_photo.py` combina dos fuentes:
 
