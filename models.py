@@ -68,13 +68,16 @@ class ModelManager:
             return "ollama"
         if complexity <= int(self.config.get("local_max_complexity", 5)) and available["ollama"]:
             return "ollama"
-        priority = self.config.get("engine_priority", ["openai", "anthropic", "ollama"])
+        priority = [
+            {"local": "ollama", "chatgpt": "openai", "claude": "anthropic"}.get(item, item)
+            for item in self.config.get("engine_priority", ["openai", "anthropic", "ollama"])
+        ]
         if complexity >= 7:
             for provider in priority:
-                if available[provider]:
+                if available.get(provider, False):
                     return provider
         for provider in priority:
-            if available[provider]:
+            if available.get(provider, False):
                 return provider
         return None
 
