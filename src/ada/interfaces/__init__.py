@@ -1,0 +1,1 @@
+"""User-facing ADA interfaces."""
