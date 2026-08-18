@@ -158,7 +158,7 @@ class Agent:
         if (any(w in lowered for w in ("analizar foto", "analizá foto", "analizá la foto", "analiza foto", "analiza la foto", "analizar imagen", "analizar la imagen", "evaluar foto", "evaluar la foto", "criticar foto", "criticá la foto"))
                 or re.search(r"\b(?:analizá|analiza|analizar|evaluá|evalua|evaluar|criticá|critica|criticar)\s+_?dsc\d+", lowered)):
             photo_name = None
-            name_match = re.search(r"(?<!\w)_?dsc\d+(?:\.(?:nef|arw|cr2|dng|raf|orf|jpg|jpeg|png))?", lowered, re.I)
+            name_match = re.search(r"(?<!\w)_?dsc\d+(?:\.(?:nef|arw|cr2|dng|raf|orf|jpg|jpeg|png))?", text, re.I)
             if name_match and not path:
                 photo_name = name_match.group(0)
             return {"action": "analyze_photo", "path": path, "photo_name": photo_name, "complexity": 5}
