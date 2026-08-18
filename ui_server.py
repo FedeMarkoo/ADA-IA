@@ -241,6 +241,17 @@ def chat():
     parsed = agent.parse_prompt(text)
     previous_text = ' '.join(item['text'] for item in conversation[-4:])
     previous = previous_text.lower()
+    if pending_action and pending_action.get('type') == 'photo_choice':
+        extension = text.strip().lower().lstrip('.')
+        candidates = pending_action.get('candidates', [])
+        selected = [item for item in candidates if Path(item).suffix.lower().lstrip('.') == extension]
+        if len(selected) == 1:
+            parsed = {'action': 'analyze_photo', 'path': selected[0], 'photo_name': Path(selected[0]).name, 'complexity': 5}
+            pending_action = None
+        elif len(selected) > 1:
+            reply = 'Hay varias versiones .' + extension + ' para ese archivo:\n\n' + '\n'.join(f'- {item}' for item in selected) + '\n\nIndicame la ruta exacta.'
+            conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+            return jsonify({'reply': reply, 'model': 'ADA · agente'})
     affirmative = text.strip().lower() in {'si', 'sí', 's', 'dale', 'hacelo', 'hazlo', 'confirmo', 'confirmar'}
     if pending_action and affirmative:
         action = pending_action
@@ -357,6 +368,7 @@ def chat():
     if parsed.get('action') == 'analyze_photo':
         resolved = _resolve_photo_reference(text, previous_text, parsed)
         if resolved.get('ambiguous'):
+            pending_action = {'type': 'photo_choice', 'photo_name': resolved['photo_name'], 'candidates': resolved['ambiguous']}
             reply = 'Encontré varias versiones de ' + resolved['photo_name'] + ':\n\n' + '\n'.join(f'- {item}' for item in resolved['ambiguous']) + '\n\nIndicame cuál querés analizar.'
             conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
             return jsonify({'reply': reply, 'model': 'ADA · agente'})
