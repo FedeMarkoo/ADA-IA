@@ -9,7 +9,6 @@ cd /Users/home/Desktop/ADA
 
 Ese es el entrypoint oficial: levanta la UI web y el agente ADA en el mismo
 proceso. La UI es una interfaz de `application/agent`, no un servicio separado.
-`ui_server.py` queda únicamente como entrypoint de compatibilidad.
 
 ## Pruebas
 
