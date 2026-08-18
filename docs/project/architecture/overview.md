@@ -63,3 +63,7 @@ llamada innecesaria al modelo. Las solicitudes abiertas pasan por
 valida las capabilities resultantes y conserva un fallback semántico local.
 El router nunca ejecuta directamente una respuesta del modelo: solo produce un
 plan validado que el agente y las interfaces pueden ejecutar con sus controles.
+
+El proveedor no forma parte del contrato de una conversación. Se selecciona en
+`config.json` mediante `engine_provider`; cambiarlo no modifica las interfaces,
+el router ni las capabilities.

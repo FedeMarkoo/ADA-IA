@@ -203,8 +203,9 @@ def vision_analysis(path, folder_context, config=None):
     config = config or {}
     from src.ada.infrastructure.engines.model_manager import ModelManager
     manager = ModelManager(config)
-    if not manager.available().get('ollama'):
-        return {'available': False, 'reason': 'ollama_unavailable'}
+    provider = config.get('vision_provider', config.get('engine_provider', 'ollama'))
+    if not manager.available().get(provider):
+        return {'available': False, 'reason': 'vision_provider_unavailable'}
     prompt = (
         'Analiza esta fotografía como un fotógrafo profesional. Devuelve SOLO JSON válido, '
         'sin markdown, con estas claves: subject, context (lista), style, photographer_feedback, '
@@ -221,11 +222,11 @@ def vision_analysis(path, folder_context, config=None):
     buffer = io.BytesIO()
     preview.save(buffer, format='JPEG', quality=90)
     encoded = base64.b64encode(buffer.getvalue()).decode('ascii')
-    result = manager.call_vision('ollama', prompt, image_base64=encoded,
-                                 ollama_model=config.get('vision_model', 'qwen2.5vl:3b'))
+    result = manager.call_vision(provider, prompt, image_base64=encoded,
+                                 ollama_model=(config.get('models', {}).get('vision')
+                                               or config.get('vision_model', 'qwen2.5vl:3b')))
     parsed = _extract_json(result)
     parsed['available'] = True
-    parsed['model'] = config.get('vision_model', 'qwen2.5vl:3b')
     return parsed
 
 

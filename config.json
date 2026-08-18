@@ -4,6 +4,16 @@
   "max_threads": 4,
   "use_mps": false,
   "ollama_url": "http://127.0.0.1:11434",
+  "engine_provider": "ollama",
+  "models": {
+    "chat": "llama3.2:3b",
+    "vision": "qwen2.5vl:3b",
+    "router": "llama3.2:3b"
+  },
+  "gpt4all": {
+    "model_name": "",
+    "model_path": ""
+  },
   "local_runtime": {
     "provider": "ollama",
     "auto_start": true,
@@ -11,9 +21,6 @@
     "startup_timeout": 12
   },
   "engine_priority": ["ollama"],
-  "ollama_model": "llama3.2:3b",
-  "router_model": "llama3.2:3b",
-  "vision_model": "qwen2.5vl:3b",
   "local_max_complexity": 5,
   "agent_max_workers": 1,
   "photo_workers": 1,

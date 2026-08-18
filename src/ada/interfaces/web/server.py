@@ -17,6 +17,18 @@ def handle_unexpected_error(error):
     app.logger.exception('Unhandled ADA request error')
     return jsonify({'error': 'internal_error', 'message': str(error)}), 500
 
+
+@app.after_request
+def hide_provider_metadata(response):
+    """Keep engine/provider details out of public conversation responses."""
+    if request.path == '/api/chat' and response.is_json:
+        payload = response.get_json(silent=True)
+        if isinstance(payload, dict) and 'model' in payload:
+            payload.pop('model', None)
+            response.set_data(json.dumps(payload, ensure_ascii=False))
+            response.headers['Content-Type'] = 'application/json; charset=utf-8'
+    return response
+
 cfg_path = PROJECT_ROOT / 'config.json'
 if os.path.exists(cfg_path):
     cfg = json.loads(open(cfg_path).read())
@@ -202,7 +214,7 @@ def _photo_reply(result):
         lines += ['**Puntos fuertes**', ''] + [f"- {item}" for item in review['strengths']] + ['']
     if review.get('issues'):
         lines += ['**A revisar**', ''] + [f"- {item}" for item in review['issues']] + ['']
-    lines += [f"_Analizado por ADA con el workflow multiagente y {semantic.get('model', 'modelo visual local')}._"]
+    lines += ["_Analizado por ADA con el workflow multiagente._"]
     return '\n'.join(lines)
 
 
