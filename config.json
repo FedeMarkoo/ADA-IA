@@ -4,9 +4,17 @@
   "max_threads": 4,
   "use_mps": false,
   "ollama_url": "http://127.0.0.1:11434",
+  "local_runtime": {
+    "provider": "ollama",
+    "auto_start": true,
+    "auto_pull": false,
+    "startup_timeout": 12
+  },
+  "engine_priority": ["openai", "anthropic", "ollama"],
   "ollama_model": "llama3.2:3b",
   "vision_model": "qwen2.5vl:3b",
   "local_max_complexity": 5,
+  "agent_max_workers": 2,
   "privacy_default": "normal",
   "confirm_risky": true,
   "script_timeout": 60,

@@ -25,12 +25,28 @@ for key in ('db_path', 'local_model_path', 'gpt4all_model_path'):
         cfg[key] = os.path.join(os.path.dirname(__file__), value.replace('ADA/', '', 1))
 
 agent = Agent(cfg)
-conversation = []
+class PersistentConversation(list):
+    """List-compatible history that survives UI and server restarts."""
+    def __init__(self, memory):
+        self.memory = memory
+        super().__init__(memory.conversation(limit=1000))
+
+    def extend(self, items):
+        items = list(items)
+        super().extend(items)
+        self.memory.append_conversation(items)
+
+    def clear(self):
+        super().clear()
+        self.memory.clear_conversation()
+
+
+conversation = PersistentConversation(agent.mem)
 pending_action = None
 
 
 def _context_prompt(text):
-    recent = conversation[-8:]
+    recent = conversation[-30:]
     if not recent:
         return text
     history = '\n'.join(f"{item['role']}: {item['text']}" for item in recent)
@@ -69,6 +85,24 @@ def _reply(text, model='ADA · agente'):
 @app.route('/')
 def index():
     return send_from_directory('ui', 'index.html')
+
+
+@app.route('/api/status')
+def status():
+    """Return active engines, local runtime health, and agent registry."""
+    return jsonify({
+        'engines': agent.model_manager.available(),
+        'runtime': agent.model_manager.runtime_status(),
+        'agents': list(agent.coordinator.available_agents()),
+    })
+
+
+@app.route('/api/conversation', methods=['GET', 'DELETE'])
+def conversation_api():
+    if request.method == 'DELETE':
+        conversation.clear()
+        return jsonify({'ok': True, 'messages': []})
+    return jsonify({'messages': list(conversation), 'count': len(conversation)})
 
 
 @app.route('/api/chat', methods=['POST'])

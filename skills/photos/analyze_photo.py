@@ -5,6 +5,7 @@ analysis is optional and uses a vision-language model through Ollama when it
 is available. The local metrics remain useful when no vision model is loaded.
 """
 import base64
+import io
 import json
 import math
 import os
@@ -43,9 +44,22 @@ def _metadata(image):
     return exif
 
 
+def _load_rgb(path):
+    """Load a normal image or develop a camera RAW into an RGB preview."""
+    if path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}:
+        try:
+            import rawpy
+        except ImportError as exc:
+            raise RuntimeError('rawpy is required for RAW files') from exc
+        with rawpy.imread(str(path)) as raw:
+            rendered = raw.postprocess(use_camera_wb=True, no_auto_bright=True, output_bps=8)
+        return Image.fromarray(rendered, mode='RGB')
+    return Image.open(path).convert('RGB')
+
+
 def technical_analysis(path):
     """Return deterministic image-quality measurements in a compact report."""
-    image = ImageOps.exif_transpose(Image.open(path)).convert('RGB')
+    image = ImageOps.exif_transpose(_load_rgb(Path(path)))
     exif = _metadata(image)
     image.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
     array = np.asarray(image, dtype=np.float32) / 255.0
@@ -115,8 +129,13 @@ def vision_analysis(path, folder_context, config=None):
         f"Algunos archivos vecinos son: {folder_context.get('siblings', [])}. "
         'Evalúa si el contenido parece pertenecer a esa misma sesión.'
     )
-    with open(path, 'rb') as handle:
-        encoded = base64.b64encode(handle.read()).decode('ascii')
+    # Vision models generally do not accept camera RAW containers directly.
+    # Render the RAW with rawpy/Pillow and send a temporary in-memory JPEG.
+    preview = _load_rgb(Path(path))
+    preview.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+    buffer = io.BytesIO()
+    preview.save(buffer, format='JPEG', quality=90)
+    encoded = base64.b64encode(buffer.getvalue()).decode('ascii')
     result = manager.call_vision('ollama', prompt, image_base64=encoded,
                                  ollama_model=config.get('vision_model', 'qwen2.5vl:3b'))
     parsed = _extract_json(result)
