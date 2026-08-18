@@ -1,156 +1,227 @@
-# Estructura propuesta del proyecto
+# Estructura de carpetas por dominio y responsabilidades
 
-## Problema actual
+## Corrección conceptual
 
-La raíz mezcla entrypoints, núcleo, runtime, memoria, adaptadores y utilidades:
+La estructura no debe agrupar todo por tecnología ni por extensión de archivo.
+Hay tres conceptos diferentes:
+
+- **Dominio:** qué problema resuelve ADA (`photography`, `shopping`, `files`).
+- **Aplicación:** qué caso de uso ejecuta (`analyze_photo`, `select_batch`,
+  `generate_shopping_list`).
+- **Infraestructura:** con qué tecnología lo hace (Ollama, SQLite, rawpy,
+  Lightroom, Telegram).
+
+Por eso:
+
+- Ollama es un **engine/provider de modelos**, no un modelo de dominio ni el
+  runtime general de ADA.
+- `runtime` debe ocuparse únicamente del ciclo de vida de procesos, health
+  checks, workers y recursos.
+- Fotografía no debe esconderse dentro de `files`: el archivo RAW es una
+  entrada, pero selección, contexto, ráfaga, revelado y Lightroom forman un
+  dominio propio.
+- `media` es demasiado genérico como carpeta principal. Las capacidades de
+  imagen pertenecen a `photography`; los decodificadores concretos pertenecen a
+  infraestructura.
+
+## Estructura propuesta
 
 ```text
-ada.py  agent.py  agent_loop.py  memory.py  models.py  runtime.py
-image_embedding.py  mcp_client.py  resource_policy.py  ui_server.py
-```
-
-Esto dificulta descubrir responsabilidades, probar módulos y agregar nuevos
-canales o agentes. `agents/` y `skills/` ya tienen una separación útil, pero el
-núcleo todavía está disperso.
-
-## Estructura objetivo
-
-```text
-ada/
-├── pyproject.toml
+ADA/
 ├── README.md
+├── pyproject.toml
 ├── config/
 │   ├── default.json
 │   └── local.example.json
 ├── src/
 │   └── ada/
-│       ├── __init__.py
-│       ├── cli.py
-│       ├── application.py
-│       ├── core/
-│       │   ├── agent.py
-│       │   ├── router.py
-│       │   ├── tasks.py
-│       │   ├── events.py
-│       │   └── audit.py
-│       ├── memory/
-│       │   ├── store.py
-│       │   ├── models.py
-│       │   └── retrieval.py
-│       ├── runtime/
-│       │   ├── model_manager.py
-│       │   ├── ollama.py
-│       │   ├── resources.py
-│       │   └── health.py
+│       ├── bootstrap/
+│       │   ├── application.py
+│       │   ├── dependencies.py
+│       │   └── settings.py
+│       ├── domain/
+│       │   ├── files/
+│       │   │   ├── entities.py
+│       │   │   ├── policies.py
+│       │   │   └── services.py
+│       │   ├── photography/
+│       │   │   ├── entities.py
+│       │   │   ├── analysis.py
+│       │   │   ├── selection.py
+│       │   │   ├── bursts.py
+│       │   │   └── session.py
+│       │   ├── shopping/
+│       │   │   ├── entities.py
+│       │   │   ├── lists.py
+│       │   │   ├── inventory.py
+│       │   │   └── recipes.py
+│       │   ├── conversations/
+│       │   └── automation/
+│       │       ├── events.py
+│       │       ├── tasks.py
+│       │       └── rules.py
+│       ├── application/
+│       │   ├── commands/
+│       │   ├── queries/
+│       │   ├── workflows/
+│       │   │   ├── analyze_photo.py
+│       │   │   ├── select_photo_batch.py
+│       │   │   ├── manage_shopping_list.py
+│       │   │   └── respond_to_event.py
+│       │   └── ports/
+│       │       ├── llm.py
+│       │       ├── vision.py
+│       │       ├── persistence.py
+│       │       └── notifications.py
 │       ├── agents/
 │       │   ├── registry.py
 │       │   ├── coordinator.py
-│       │   └── photo/
-│       ├── skills/
+│       │   └── photography/
+│       │       ├── technical.py
+│       │       ├── context.py
+│       │       └── reviewer.py
+│       ├── capabilities/
 │       │   ├── registry.py
 │       │   ├── files/
-│       │   ├── photos/
+│       │   ├── photography/
+│       │   ├── shopping/
 │       │   ├── data/
 │       │   └── system/
-│       ├── media/
-│       │   ├── raw.py
-│       │   ├── vision.py
-│       │   ├── metadata.py
-│       │   ├── bursts.py
-│       │   └── xmp.py
-│       ├── adapters/
-│       │   ├── web/
-│       │   ├── telegram/
-│       │   └── mobile/
-│       └── infrastructure/
-│           ├── filesystem.py
-│           ├── sqlite.py
-│           └── mcp.py
+│       ├── infrastructure/
+│       │   ├── engines/
+│       │   │   ├── ollama.py
+│       │   │   ├── openai.py
+│       │   │   └── anthropic.py
+│       │   ├── imaging/
+│       │   │   ├── rawpy_decoder.py
+│       │   │   ├── pillow_decoder.py
+│       │   │   └── exiftool.py
+│       │   ├── persistence/
+│       │   │   └── sqlite.py
+│       │   ├── files/
+│       │   │   └── local_filesystem.py
+│       │   ├── integrations/
+│       │   │   ├── lightroom.py
+│       │   │   ├── telegram.py
+│       │   │   └── mobile.py
+│       │   └── runtime/
+│       │       ├── process.py
+│       │       ├── health.py
+│       │       ├── scheduler.py
+│       │       └── resources.py
+│       └── interfaces/
+│           ├── cli.py
+│           ├── web/
+│           │   └── server.py
+│           └── messaging/
+│               └── telegram.py
 ├── tests/
 ├── scripts/
 └── docs/
 ```
 
-## Qué queda en cada zona
+## Por qué esta estructura tiene sentido
 
-- `core/`: decisiones del agente, routing, eventos, tareas y auditoría; no
-  debería importar Flask ni detalles de Ollama.
-- `memory/`: persistencia y recuperación; ninguna skill debería abrir SQLite
-  directamente.
-- `runtime/`: proveedores de modelos, lifecycle y límites de recursos.
-- `agents/`: especialistas y coordinación multiagente.
-- `skills/`: capacidades ejecutables; cada skill conserva una interfaz clara
-  `run(args)` durante la migración.
-- `media/`: decodificación RAW, visión, metadatos, ráfagas y XMP compartidos
-  por las skills de fotos.
-- `adapters/`: entradas y salidas: web, Telegram, CLI y móvil. No contienen la
-  lógica de negocio.
-- `infrastructure/`: acceso a filesystem, SQLite y MCP.
+### `domain/`
 
-## Mapeo desde la estructura actual
+Contiene conceptos y reglas que seguirían existiendo aunque cambiemos Python,
+Ollama, SQLite o Telegram. Por ejemplo, una ráfaga, una selección fotográfica,
+una lista de compras o una tarea autónoma pertenecen al dominio.
+
+### `application/`
+
+Contiene casos de uso. Orquesta dominio, agentes y puertos, pero no sabe si la
+visión la hace Ollama, OpenAI o un modelo futuro. Aquí vive la diferencia entre
+“analizar una foto” y “seleccionar un lote”.
+
+### `agents/`
+
+Contiene especialistas que producen evidencia o recomendaciones. Un agente no
+debe escribir directamente en Lightroom ni abrir SQLite: usa puertos y casos de
+uso.
+
+### `capabilities/`
+
+Es el reemplazo conceptual de `skills/`. Una capability es una herramienta que
+ADA puede descubrir y ejecutar. Debe ser fina: valida argumentos, llama un caso
+de uso y devuelve un resultado. Las reglas importantes no deben quedar
+duplicadas dentro de cada frase del parser.
+
+### `infrastructure/`
+
+Contiene implementaciones intercambiables:
+
+- `engines/ollama.py`: cliente del engine Ollama y sus opciones de inferencia;
+- `imaging/`: rawpy, Pillow y ExifTool;
+- `integrations/lightroom.py`: formato XMP y comunicación con Lightroom;
+- `runtime/`: procesos, scheduler, health checks y límites de recursos;
+- `persistence/`: SQLite y futuras bases;
+- `files/`: filesystem local y permisos.
+
+### `interfaces/`
+
+Son las entradas y salidas de ADA. Web, CLI, Telegram y móvil convierten
+mensajes externos en comandos o eventos. No deben contener reglas de fotos,
+compras ni selección.
+
+## Ubicación de los conceptos discutidos
+
+| Concepto | Ubicación correcta | Motivo |
+|---|---|---|
+| Ollama | `infrastructure/engines/ollama.py` | proveedor de inferencia |
+| modelo de visión | configuración + `application/ports/vision.py` | capacidad contratada, no dominio |
+| proceso Ollama | `infrastructure/runtime/` | lifecycle y health del proceso |
+| RAW/JPG | `domain/files` + `infrastructure/imaging` | archivo como entrada, decoder como tecnología |
+| análisis fotográfico | `domain/photography` | regla y concepto del producto |
+| agente fotógrafo | `agents/photography` | especialista que aporta evidencia |
+| XMP/Lightroom | `infrastructure/integrations/lightroom.py` | formato e integración externa |
+| ráfagas | `domain/photography/bursts.py` | regla de selección fotográfica |
+| lista de compras | `domain/shopping` | producto y estado del usuario |
+| Tasker/Telegram | `interfaces` o `infrastructure/integrations` | canales externos |
+| CPU y workers | `infrastructure/runtime/resources.py` | operación del sistema |
+
+## Mapeo de los archivos actuales
 
 | Actual | Destino |
 |---|---|
-| `agent_loop.py` | `src/ada/core/router.py` y `core/agent.py` |
-| `agent.py` | `src/ada/core/application.py` o `core/legacy.py` |
-| `memory.py` | `src/ada/memory/store.py` |
-| `models.py` | `src/ada/runtime/model_manager.py` |
-| `runtime.py` | `src/ada/runtime/ollama.py` y `runtime/health.py` |
-| `resource_policy.py` | `src/ada/runtime/resources.py` |
-| `image_embedding.py` | `src/ada/media/embeddings.py` |
-| `mcp_client.py` | `src/ada/infrastructure/mcp.py` |
-| `ui_server.py` | `src/ada/adapters/web/server.py` |
-| `skills/photos/analyze_photo.py` | `src/ada/skills/photos/analyze.py` |
-| `skills/photos/burst_detection.py` | `src/ada/media/bursts.py` |
-| `skills/photos/xmp.py` | `src/ada/media/xmp.py` |
-| `ada.py` | `src/ada/cli.py` |
+| `agent_loop.py` | `application` + `interfaces/cli.py` |
+| `agent.py` | `application/workflows` legado |
+| `memory.py` | `infrastructure/persistence/sqlite.py` |
+| `models.py` | `infrastructure/engines/` |
+| `runtime.py` | `infrastructure/runtime/` |
+| `resource_policy.py` | `infrastructure/runtime/resources.py` |
+| `image_embedding.py` | `infrastructure/imaging/embeddings.py` |
+| `mcp_client.py` | `infrastructure/integrations/mcp.py` |
+| `ui_server.py` | `interfaces/web/server.py` |
+| `agents/` | `agents/` |
+| `skills/photos/` | `capabilities/photography/` + `domain/photography/` |
+| `skills/operations/files/` | `capabilities/files/` + `infrastructure/files/` |
+| `skills/data/` | `capabilities/data/` |
+| `skills/system/` | `capabilities/system/` |
+| `ada.py` | `interfaces/cli.py` |
 
-## Reglas de diseño
+## Regla práctica
 
-1. La raíz debe contener solo configuración del proyecto, packaging, README y
-   carpetas estándar.
-2. Los módulos ejecutables deben vivir dentro del paquete `src/ada/`.
-3. Los entrypoints (`cli`, servidor web, workers) solo ensamblan dependencias;
-   no contienen lógica de dominio.
-4. Las skills no deben importar módulos de la interfaz.
-5. Las skills de fotos deben reutilizar `media/` en lugar de duplicar decodificación
-   RAW, metadatos o XMP.
-6. Los adaptadores convierten mensajes externos en comandos/eventos de ADA.
-7. Las rutas se obtienen de configuración, nunca de imports o strings globales.
+Antes de crear una carpeta nueva hay que responder dos preguntas:
 
-## Migración recomendada
+1. ¿Esto es una regla/concepto del producto, un caso de uso o una tecnología?
+2. ¿Quién debería poder cambiarlo sin modificar las otras dos capas?
 
-### Etapa 1: preparar el paquete
+Si la respuesta es una regla de fotografía, va a `domain/photography`. Si es
+un decoder RAW concreto, va a `infrastructure/imaging`. Si es una orden que
+coordina ambos, va a `application/workflows`. Si es un comando que el usuario
+puede invocar, va a `capabilities/`.
 
-- agregar `pyproject.toml` y `src/ada/__init__.py`;
-- crear módulos puente que reexporten las APIs actuales;
-- mantener los entrypoints actuales como compatibilidad temporal;
-- asegurar que las pruebas sigan pasando.
+## Migración segura
 
-### Etapa 2: mover el núcleo
+1. Crear el paquete nuevo y tests de arquitectura.
+2. Mover primero runtime, engines y persistence, manteniendo módulos puente.
+3. Separar dominio de fotografía de decodificadores y XMP.
+4. Convertir `skills/` en capabilities delgadas.
+5. Mover interfaces web y CLI al final.
+6. Eliminar módulos puente solo cuando todos los imports y procedimientos estén
+   actualizados.
 
-- migrar memoria, runtime, modelos y política de recursos;
-- actualizar imports a `ada.memory`, `ada.runtime` y `ada.core`;
-- eliminar duplicaciones y dejar archivos puente con aviso de deprecación.
-
-### Etapa 3: separar adaptadores y media
-
-- mover servidor web y CLI a `adapters/`;
-- extraer RAW, visión, metadatos, ráfagas y XMP a `media/`;
-- hacer que las skills de fotos dependan de esas interfaces.
-
-### Etapa 4: consolidar skills
-
-- mantener el cargador actual, pero apuntando a `ada.skills`;
-- normalizar nombres y contratos de cada skill;
-- eliminar archivos puente solo después de actualizar documentación y pruebas.
-
-### Etapa 5: autonomía
-
-- agregar `events/`, scheduler y workers bajo `core/`;
-- incorporar Telegram y móvil como adaptadores independientes;
-- agregar auditoría, cancelación y límites por tarea.
-
-No se recomienda hacer un gran `mv` sin estas etapas: rompería imports,
-configuración, el cargador dinámico y posibles procedimientos guardados en
-memoria.
+No se debe hacer un `mv` masivo: la aplicación tiene imports absolutos,
+cargador dinámico de skills y memoria persistente que pueden depender de las
+rutas actuales.
