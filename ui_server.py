@@ -454,6 +454,26 @@ def chat():
                 reply = f"Voy a mover los archivos de {source} a {source.rsplit('/', 1)[0]}/{name}. ¿Confirmás?"
         conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
         return jsonify({'reply': reply, 'model': 'ADA · agente'})
+    if parsed.get('action') == 'select_photo_batch':
+        folder = parsed.get('path') or _last_known_folder(previous_text) or _resolve_folder(text, previous_text)
+        if not folder:
+            reply = '¿En qué carpeta querés hacer la selección? Indicame la ruta del evento.'
+            model = 'ADA · agente'
+        else:
+            result = agent.decide_and_run({'type': 'select_photo_batch', 'payload': {'path': folder, 'target': 300}, 'complexity': 6})
+            out = result.get('result', {})
+            model = result.get('model', 'tool: select_photo_batch')
+            if out.get('ok'):
+                reply = (f"Selección preliminar terminada sobre {out['scanned']} fotos.\n\n"
+                         f"- Grupos de ráfaga/duplicados: {out['burst_groups']}\n"
+                         f"- Candidatas redundantes: {out['duplicate_candidates']}\n"
+                         f"- Representantes únicos: {out['representatives']}\n"
+                         f"- Shortlist técnica: {len(out['selected'])} fotos\n\n"
+                         "La siguiente etapa debe validar con visión el contexto y la cobertura del evento antes de entregar la selección final.")
+            else:
+                reply = json.dumps(out, ensure_ascii=False, indent=2)
+        conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+        return jsonify({'reply': reply, 'model': model})
     if parsed.get('action') == 'list_photos':
         folder = parsed.get('path')
         if not folder and ('escritorio' in text.lower() or ('fotos' in previous and 'carpeta' in previous)):
