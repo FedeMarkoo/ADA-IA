@@ -30,6 +30,7 @@ def main():
     sub.add_parser('run')
     p_serve = sub.add_parser('serve', help='Start the web UI and ADA agent in one process')
     p_serve.add_argument('-debug', '--debug', action='store_true', help='Enable detailed router and model logs')
+    p_serve.add_argument('--asgi', action='store_true', help='Use the FastAPI/ASGI interface')
     p_prompt = sub.add_parser('prompt')
     p_prompt.add_argument('text', help='Natural language prompt for ADA')
 
@@ -51,8 +52,17 @@ def main():
             print(f'Debug log: {log_path}')
         else:
             logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(name)s: %(message)s')
-        from src.ada.interfaces.web.server import main as serve_web
-        serve_web()
+        if args.asgi or os.environ.get('ADA_WEB_FRAMEWORK') == 'asgi' or cfg.get('web_framework') == 'asgi':
+            try:
+                import uvicorn
+            except ImportError as exc:
+                raise SystemExit("Instalá la extra web: python3 -m pip install -e '.[web]'") from exc
+            uvicorn.run('src.ada.interfaces.web.asgi:create_app', factory=True,
+                        host=os.environ.get('ADA_UI_HOST', '127.0.0.1'),
+                        port=int(os.environ.get('ADA_UI_PORT', '5006')))
+        else:
+            from src.ada.interfaces.web.server import main as serve_web
+            serve_web()
         return
     mem = Memory(cfg.get('db_path', str(Path(__file__).parent / 'memory.db')))
     if args.cmd == 'index':
