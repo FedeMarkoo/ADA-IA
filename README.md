@@ -96,6 +96,13 @@ y el router no necesitan cambios.
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
+.venv/bin/pre-commit run --all-files
+```
+
+La memoria se puede respaldar sin copiar manualmente el archivo WAL:
+
+```bash
+.venv/bin/python ada.py backup --path ~/Desktop/ada-backups/memory.db
 ```
 
 ## Seguridad y datos
@@ -113,3 +120,7 @@ Para autonomía controlada, configurá `watch_folders`, ejecutá
 `ada-autonomous` y revisá la auditoría mediante `/api/audit`. Las acciones
 externas requieren confirmación y las operaciones de archivos devuelven un
 manifiesto utilizable por la acción `undo`.
+
+Las reglas evento→acción se configuran en `event_rules`; por defecto solo se
+ejecutan automáticamente acciones no riesgosas. Las acciones sensibles quedan
+como propuestas auditadas hasta recibir confirmación explícita.
