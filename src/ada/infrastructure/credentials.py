@@ -1,5 +1,4 @@
 """Local encrypted credential storage; never falls back to plaintext."""
-import base64
 import json
 import os
 from pathlib import Path
