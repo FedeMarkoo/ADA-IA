@@ -103,9 +103,12 @@ def run(args):
         )
         duplicate_paths = set(burst_duplicates)
         repair_threshold = float(args.get('batch_accept_threshold', 3.5))
+        repair_feedback_mode = {_feedback_label(path) for path in raw_files} == {'selected', 'rejected'}
         for path in raw_files:
             stored = _stored_review(path)
             selected = stored['score'] >= repair_threshold and str(path) not in duplicate_paths
+            if repair_feedback_mode:
+                selected = _feedback_label(path) == 'selected'
             write_photo_xmp(
                 path,
                 'Seleccionada' if selected else 'Rechazada',
