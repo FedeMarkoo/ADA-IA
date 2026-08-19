@@ -52,6 +52,7 @@ class MemoryCredentialTests(unittest.TestCase):
             store = CredentialStore(Path(directory) / "credentials.enc", Fernet.generate_key())
             store.set("token", "secret")
             self.assertEqual(store.get("token"), "secret")
+            self.assertEqual(store.path.stat().st_mode & 0o777, 0o600)
 
     def test_credential_store_rejects_missing_key_even_for_reads(self):
         with tempfile.TemporaryDirectory() as directory:

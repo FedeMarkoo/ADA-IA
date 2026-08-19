@@ -3,12 +3,15 @@
 import json
 import os
 from pathlib import Path
+import tempfile
+import threading
 
 
 class CredentialStore:
     def __init__(self, path=None, key=None):
         self.path = Path(path or os.environ.get("ADA_CREDENTIALS_PATH", "~/.config/ada/credentials.enc")).expanduser()
         self.key = key or os.environ.get("ADA_CREDENTIAL_KEY")
+        self._lock = threading.RLock()
 
     def _fernet(self):
         if not self.key:
@@ -29,20 +32,32 @@ class CredentialStore:
         return json.loads(raw.decode("utf-8"))
 
     def get(self, name, default=None):
-        return self._read().get(name, default)
+        with self._lock:
+            return self._read().get(name, default)
 
     def set(self, name, value):
-        data = self._read()
-        data[str(name)] = value
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_bytes(self._fernet().encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8")))
-        try:
-            self.path.chmod(0o600)
-        except OSError:
-            pass
+        with self._lock:
+            data = self._read()
+            data[str(name)] = value
+            self._write(data)
 
     def delete(self, name):
-        data = self._read()
-        data.pop(str(name), None)
+        with self._lock:
+            data = self._read()
+            data.pop(str(name), None)
+            self._write(data)
+
+    def _write(self, data):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_bytes(self._fernet().encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8")))
+        payload = self._fernet().encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=str(self.path.parent))
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
