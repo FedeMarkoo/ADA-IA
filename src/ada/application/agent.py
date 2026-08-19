@@ -10,6 +10,8 @@ from src.ada.capabilities.registry import load_capabilities
 from src.ada.agents import MultiAgentCoordinator
 from src.ada.application.router import IntentRouter
 from src.ada.domain.policy import PolicyEngine, PolicyViolation
+from src.ada.application.planner import Planner
+from src.ada.domain.tasks import Action
 
 
 logger = logging.getLogger('ada.agent')
@@ -26,10 +28,20 @@ class Agent:
         self.coordinator = MultiAgentCoordinator(self.cfg)
         self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem)
         self.policy = PolicyEngine(self.cfg)
+        self.planner = Planner(self.skills, self.policy)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
         self.running = True
+
+    def plan_request(self, text):
+        """Turn a routed request into a validated, non-executing plan."""
+        parsed = self.parse_prompt(text)
+        action_name = parsed.get('action')
+        if action_name in {None, 'ask', 'suggest'}:
+            return self.planner.from_actions([], explanation='Conversación o sugerencia sin mutación.')
+        payload = {key: value for key, value in parsed.items() if key not in {'action', 'complexity'}}
+        return self.planner.from_actions([Action(action_name, payload)], explanation=f'Acción seleccionada: {action_name}')
 
     def _load_knowledge(self):
         for filename in self.cfg.get('knowledge_files', []):
