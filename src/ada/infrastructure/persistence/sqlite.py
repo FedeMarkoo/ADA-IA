@@ -14,8 +14,9 @@ from pathlib import Path
 
 class Memory:
     def __init__(self, db_path):
-        self.db_path = str(Path(db_path).expanduser().resolve())
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.db_path = ':memory:' if str(db_path) == ':memory:' else str(Path(db_path).expanduser().resolve())
+        if self.db_path != ':memory:':
+            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._lock = threading.RLock()
         self.conn.row_factory = sqlite3.Row
@@ -44,7 +45,131 @@ class Memory:
                 session TEXT NOT NULL DEFAULT 'main', role TEXT NOT NULL,
                 text TEXT NOT NULL, model TEXT
             );
+            CREATE TABLE IF NOT EXISTS router_catalog (
+                action TEXT PRIMARY KEY, description TEXT NOT NULL,
+                keywords TEXT, enabled INTEGER NOT NULL DEFAULT 1, meta TEXT
+            );
+            CREATE TABLE IF NOT EXISTS prompt_templates (
+                name TEXT PRIMARY KEY, body TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                meta TEXT
+            );
+            CREATE TABLE IF NOT EXISTS json_schemas (
+                name TEXT PRIMARY KEY, body TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                meta TEXT
+            );
         """)
+        columns = {row[1] for row in self.conn.execute('PRAGMA table_info(router_catalog)').fetchall()}
+        if 'keywords' not in columns:
+            self.conn.execute('ALTER TABLE router_catalog ADD COLUMN keywords TEXT')
+        self.conn.commit()
+        self._seed_dynamic_ai_defaults()
+
+    def _seed_dynamic_ai_defaults(self):
+        actions = {
+            'analyze_photo': ('Analizar una foto', ('foto','imagen','raw','jpg','nef','arw','enfoque','exposición','iso')),
+            'select_photo_batch': ('Seleccionar un lote de fotos', ('selección','seleccionar','descartes','ráfaga','rafaga','lote','xmp')),
+            'lightroom': ('Consultar o preparar acciones de Lightroom', ('lightroom','colección','sqlite','biblioteca','rechazadas')),
+            'list_photos': ('Listar fotos', ('listar fotos','mostrame fotos','ver fotos')),
+            'list_files': ('Listar archivos', ('listar archivos','lista los archivos','listame los archivos','documentos')),
+            'list_dirs': ('Listar carpetas', ('carpetas','directorios','estructura')),
+            'group_files': ('Agrupar archivos', ('agrupar','mover archivos','juntar archivos')),
+            'organize': ('Organizar archivos', ('organizar','ordenar archivos','ordenar los archivos')),
+            'suggest': ('Sugerir una acción general', ('sugerir','recomendar')),
+            'run': ('Ejecutar un script', ('ejecutar','correr comando','script')),
+            'food': ('Compras, recetas, cocina y planificación de comidas', ('comida','comidas','receta','recetas','cocinar','compras','supermercado','ingredientes','comer')),
+            'ask': ('Conversación general', ()),
+        }
+        self.conn.executemany(
+            'INSERT OR IGNORE INTO router_catalog(action,description,keywords) VALUES (?,?,?)',
+            [(action, description, json.dumps(keywords, ensure_ascii=False)) for action, (description, keywords) in actions.items()]
+        )
+        templates = {
+            'router': ('Sos el router de ADA. Devolvé SOLO JSON válido. Elegí una action del catálogo: {actions}. '
+                       'Para comida usá domain=shopping|recipes y food_action={food_actions}. '
+                       'Si el pedido trata de cocinar, comer, recetas, gustos o supermercado, elegí food. '
+                       'No ejecutes acciones. Historial: {history}\nPedido: {text}'),
+            'food_classifier': ('Clasificá semánticamente el pedido. Devolvé SOLO JSON válido. '
+                                'Si trata de comida, cocina, recetas o compras, is_food=true y food_action={food_actions}. '
+                                'Una duda como qué cocinar usa advise. Si no es comida, is_food=false. '
+                                'Historial: {history}\nPedido: {text}'),
+            'food_mutation_verifier': ('Verificá si el usuario pidió modificar explícitamente la lista de compras. '
+                                       'allow=true para agregar, comprar, marcar o quitar un producto concreto; '
+                                       'allow=false para recomendaciones o recetas. Devolvé SOLO JSON. '
+                                       'Intención: {intent}\nPedido: {text}'),
+            'food_advisor': ('Sos el asesor culinario personal. Respondé en español rioplatense. Usá el perfil y catálogo. '
+                             'Priorizá comidas simples, rendidoras, reutilizables y aptas para freezer; evitá lentejas, '
+                             'supremas y repetir pizza. Interpretá restricciones del hilo. Elegí una recomendación y como '
+                             'máximo una alternativa. No hagas cuestionarios, no muestres razonamiento ni pasos internos. '
+                             'Devolvé SOLO JSON con el campo reply. PERFIL:\n{profile}\nCATÁLOGO:\n{catalog}\n'
+                             'HILO DE USUARIO:\n{conversation}\nPEDIDO:\n{request}')
+        }
+        self.conn.executemany('INSERT OR IGNORE INTO prompt_templates(name,body) VALUES (?,?)', templates.items())
+        schemas = {
+            'router': {
+                'type': 'object', 'properties': {
+                    'action': {'type': 'string', 'enum': ['analyze_photo','select_photo_batch','lightroom','list_photos','list_files','list_dirs','group_files','organize','suggest','run','food','ask']},
+                    'domain': {'type': 'string', 'enum': ['shopping','recipes']},
+                    'food_action': {'type': 'string', 'enum': ['add','list','check','remove','save','suggest','recipe_to_shopping','advise']},
+                    'item': {'type': 'string'}, 'quantity': {'type': 'string'}, 'unit': {'type': 'string'},
+                    'name': {'type': 'string'}, 'ingredients': {'type': 'string'}, 'available': {'type': 'string'},
+                    'confidence': {'type': 'number'}, 'reason': {'type': 'string'},
+                    'needs_clarification': {'type': 'boolean'}, 'clarifying_question': {'type': 'string'},
+                }, 'required': ['action'], 'additionalProperties': False,
+            },
+            'food': {
+                'type': 'object', 'properties': {
+                    'is_food': {'type': 'boolean'}, 'domain': {'type': 'string', 'enum': ['shopping','recipes']},
+                    'food_action': {'type': 'string', 'enum': ['add','list','check','remove','save','recipe_to_shopping','advise']},
+                    'item': {'type': 'string'}, 'quantity': {'type': 'string'}, 'unit': {'type': 'string'},
+                    'name': {'type': 'string'}, 'ingredients': {'type': 'string'}, 'confidence': {'type': 'number'},
+                }, 'required': ['is_food'], 'additionalProperties': False,
+            },
+            'food_verify': {'type': 'object', 'properties': {'allow': {'type': 'boolean'}, 'reason': {'type': 'string'}}, 'required': ['allow'], 'additionalProperties': False},
+            'food_reply': {'type': 'object', 'properties': {'reply': {'type': 'string'}}, 'required': ['reply'], 'additionalProperties': False},
+        }
+        self.conn.executemany('INSERT OR IGNORE INTO json_schemas(name,body) VALUES (?,?)', [(name, json.dumps(body, ensure_ascii=False)) for name, body in schemas.items()])
+        self.conn.commit()
+
+    def router_actions(self):
+        rows = [dict(row) for row in self.conn.execute(
+            'SELECT action,description,keywords FROM router_catalog WHERE enabled=1 ORDER BY action'
+        ).fetchall()]
+        for row in rows:
+            try:
+                row['keywords'] = json.loads(row.get('keywords') or '[]')
+            except (TypeError, ValueError):
+                row['keywords'] = []
+        return rows
+
+    def prompt_template(self, name, fallback=''):
+        row = self.conn.execute('SELECT body FROM prompt_templates WHERE name=? AND enabled=1', (name,)).fetchone()
+        return row['body'] if row else fallback
+
+    def upsert_prompt_template(self, name, body, meta=None):
+        self.conn.execute(
+            'INSERT INTO prompt_templates(name,body,meta) VALUES (?,?,?) '
+            'ON CONFLICT(name) DO UPDATE SET body=excluded.body,meta=excluded.meta,updated_at=CURRENT_TIMESTAMP',
+            (name, body, json.dumps(meta or {}, ensure_ascii=False)),
+        )
+        self.conn.commit()
+
+    def json_schema(self, name, fallback=None):
+        row = self.conn.execute('SELECT body FROM json_schemas WHERE name=? AND enabled=1', (name,)).fetchone()
+        if not row:
+            return fallback
+        try:
+            return json.loads(row['body'])
+        except (TypeError, ValueError):
+            return fallback
+
+    def upsert_json_schema(self, name, schema, meta=None):
+        self.conn.execute(
+            'INSERT INTO json_schemas(name,body,meta) VALUES (?,?,?) '
+            'ON CONFLICT(name) DO UPDATE SET body=excluded.body,meta=excluded.meta,updated_at=CURRENT_TIMESTAMP',
+            (name, json.dumps(schema, ensure_ascii=False), json.dumps(meta or {}, ensure_ascii=False)),
+        )
         self.conn.commit()
 
     def add(self, path, vector=None, meta=None):

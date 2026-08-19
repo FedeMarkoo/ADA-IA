@@ -26,6 +26,23 @@ lista de compras. Los datos viven en las tablas `food_shopping` y
 El inventario, el presupuesto, la planificación semanal y el detector de
 ubicación siguen pendientes. Tampoco se realizan pedidos ni pagos externos.
 
+## Configuración dinámica de IA
+
+El comportamiento no depende únicamente de texto en Python. ADA mantiene en
+SQLite las tablas `router_catalog` y `prompt_templates`. La primera describe
+las acciones disponibles, keywords de fallback y sus descripciones; la segunda contiene los prompts
+versionables del router, del clasificador de comida, del verificador de
+compras y del asesor culinario.
+
+Los contratos JSON que Ollama debe respetar viven en `json_schemas` (`router`,
+`food`, `food_verify` y `food_reply`). También pueden actualizarse sin tocar el
+código mediante `Memory.upsert_json_schema()`.
+
+Al iniciar, ADA crea los valores predeterminados solo si no existen. Esto
+permite editar un prompt o desactivar una acción sin modificar el código. Las
+validaciones de seguridad y el conjunto máximo de acciones siguen siendo
+inmutables en código.
+
 ### Ejemplos por Telegram
 
 ```text

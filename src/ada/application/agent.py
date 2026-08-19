@@ -13,13 +13,6 @@ from src.ada.application.router import IntentRouter
 
 logger = logging.getLogger('ada.agent')
 
-FOOD_REPLY_FORMAT = {
-    'type': 'object',
-    'properties': {'reply': {'type': 'string'}},
-    'required': ['reply'], 'additionalProperties': False,
-}
-
-
 class Agent:
     """ADA's general-purpose agent: route, execute tools, report and remember."""
 
@@ -30,7 +23,7 @@ class Agent:
         self.mem = Memory(db_path)
         self.skills = load_capabilities()
         self.coordinator = MultiAgentCoordinator(self.cfg)
-        self.router = IntentRouter(self.model_manager, self.cfg)
+        self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
@@ -140,27 +133,13 @@ class Agent:
         # Previous assistant answers can contain hallucinated steps or menus;
         # only user turns are reliable conversational constraints.
         conversation = '\n'.join(f"usuario: {item['text']}" for item in recent if item['role'] == 'user')
-        prompt = (
-            'Sos el asesor culinario personal de Fede dentro de ADA. Respondé en español rioplatense, '
-            'con criterio práctico y sin inventar preferencias. Usá este perfil y catálogo como contexto. '
-            'Podés proponer recetas nuevas, combinaciones, sustituciones y planes. Priorizá comidas rendidoras, '
-            'simples, reutilizables y aptas para freezer; evitá lentejas, supremas y repetir variaciones de pizza. '
-            'Interpretá también el hilo reciente: restricciones como "sin congelar", "para un día" o '
-            '"no me listes todo" siguen vigentes hasta que el usuario las cambie. '
-            'Si el usuario pide una idea abierta, elegí vos: respondé con UNA recomendación principal y, como máximo, '
-            'UNA alternativa. No hagas un cuestionario ni enumeres el catálogo completo. '
-            'Para la recomendación incluí ingredientes, pasos breves, tiempo, porciones, conservación y por qué encaja. '
-            'Solo preguntá algo si bloquea realmente la respuesta, y después de dar una propuesta útil. '
-            'No muestres razonamiento, análisis, pasos internos ni encabezados como "Paso 1". '
-            'Devolvé una respuesta final breve dentro del campo JSON reply. No devuelvas ningún otro campo.\n\n'
-            f'PERFIL:\n{context}\n\nCATÁLOGO INTERNO (no lo listes completo):\n{catalog}\n\n'
-            f'HILO RECIENTE:\n{conversation}\n\nPEDIDO ACTUAL:\n{request}'
-        )
+        template = self.mem.prompt_template('food_advisor')
+        prompt = template.replace('{profile}', context).replace('{catalog}', catalog).replace('{conversation}', conversation).replace('{request}', request)
         logger.debug('food advisor request=%r profile_chars=%d catalog_items=%d history_items=%d', request, len(context), len(recipes), len(recent))
         try:
             result = self.model_manager.call(
                 provider, prompt, complexity=4, temperature=0.25, max_tokens=900,
-                timeout=self.cfg.get('food_advisor_timeout', 45), format=FOOD_REPLY_FORMAT,
+                timeout=self.cfg.get('food_advisor_timeout', 45), format=self.mem.json_schema('food_reply'),
             )
             decoded = result
             if isinstance(result, str):

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from src.ada.application.agent import Agent
 from src.ada.capabilities.data.food import run
+from src.ada.infrastructure.persistence.sqlite import Memory
 
 
 class FoodTests(unittest.TestCase):
@@ -29,6 +30,17 @@ class FoodTests(unittest.TestCase):
             db = str(Path(directory) / 'food.db')
             result = run({'db_path': db, 'config': {'food_profile': str(profile)}, 'domain': 'recipes', 'action': 'list'})
             self.assertEqual(result['recipes'][0]['name'], 'Hamburguesas caseras')
+
+    def test_ai_prompts_are_dynamic_in_sqlite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            memory = Memory(str(Path(directory) / 'memory.db'))
+            self.assertTrue(memory.router_actions())
+            memory.upsert_prompt_template('router', 'PEDIDO: {text}')
+            self.assertEqual(memory.prompt_template('router'), 'PEDIDO: {text}')
+            schema = memory.json_schema('food_reply')
+            self.assertIn('reply', schema['properties'])
+            memory.upsert_json_schema('food_reply', {'type': 'object', 'properties': {'reply': {'type': 'string'}}})
+            self.assertEqual(memory.json_schema('food_reply')['type'], 'object')
 
 
 if __name__ == '__main__':
