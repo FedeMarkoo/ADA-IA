@@ -2,6 +2,11 @@
 import os
 import time
 
+try:
+    import psutil
+except Exception:
+    psutil = None
+
 
 def cpu_budget(config=None):
     config = config or {}
@@ -31,10 +36,13 @@ def wait_for_cpu_budget(config=None):
     max_wait = max(1.0, float(config.get('cpu_throttle_max_wait_seconds', 30.0)))
     started_waiting = time.monotonic()
     while True:
-        try:
-            load = os.getloadavg()[0] / cores
-        except (AttributeError, OSError):
-            return
+        if psutil is not None:
+            load = psutil.cpu_percent(interval=0.1) / 100.0
+        else:
+            try:
+                load = os.getloadavg()[0] / cores
+            except (AttributeError, OSError):
+                return
         if load < limit:
             return
         # Load average includes unrelated system work and can remain above the
@@ -43,3 +51,18 @@ def wait_for_cpu_budget(config=None):
         if time.monotonic() - started_waiting >= max_wait:
             return
         time.sleep(float(config.get('cpu_throttle_seconds', 1.0)))
+
+
+def hardware_profile():
+    """Return a small, portable hardware profile for model selection."""
+    cores = os.cpu_count() or 1
+    ram_gb = 0.0
+    if psutil is not None:
+        ram_gb = round(psutil.virtual_memory().total / (1024 ** 3), 1)
+    if ram_gb >= 32 and cores >= 8:
+        tier = 'high'
+    elif ram_gb >= 16 and cores >= 4:
+        tier = 'mid'
+    else:
+        tier = 'low'
+    return {'tier': tier, 'cpu_cores': cores, 'ram_gb': ram_gb}

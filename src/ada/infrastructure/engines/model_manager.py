@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 
 from src.ada.infrastructure.runtime.resources import recommended_threads
+from src.ada.infrastructure.runtime.resources import hardware_profile
 
 from src.ada.infrastructure.runtime.ollama import LocalModelRuntime
 
@@ -57,7 +58,44 @@ class ModelManager:
         }
 
     def _model(self, role, legacy_key, default):
+        policy = self.config.get('model_policy', {})
+        candidate = policy.get(role)
+        if isinstance(candidate, dict):
+            candidate = candidate.get('preferred') or (candidate.get('fallbacks') or [None])[0]
+        if candidate:
+            return candidate
         return self.models.get(role) or self.config.get(legacy_key, default)
+
+    def model_catalog(self):
+        """Return the declarative model catalog filtered by the current hardware."""
+        profile = hardware_profile()
+        catalog = self.config.get('model_catalog') or []
+        if isinstance(catalog, dict):
+            catalog = [dict({'name': name}, **value) for name, value in catalog.items()]
+        result = []
+        for item in catalog:
+            if not isinstance(item, dict) or not item.get('name'):
+                continue
+            minimum = item.get('min_ram_gb', 0)
+            if profile['ram_gb'] and profile['ram_gb'] < float(minimum):
+                continue
+            result.append(dict(item, hardware_tier=profile['tier']))
+        return result
+
+    def select_model(self, task, role='chat'):
+        """Select a model name from policy/catalog without requiring code changes."""
+        policy = self.config.get('model_policy', {})
+        configured = policy.get(task) or policy.get(role)
+        names = []
+        if isinstance(configured, str):
+            names = [configured]
+        elif isinstance(configured, dict):
+            names = [configured.get('preferred')] + list(configured.get('fallbacks') or [])
+        available = {item['name'] for item in self.model_catalog()}
+        for name in names:
+            if name and (not available or name in available):
+                return name
+        return self._model(role, f'{role}_model', self.models.get(role, ''))
 
     def _gpt4all_available(self):
         if GPT4All is None:
