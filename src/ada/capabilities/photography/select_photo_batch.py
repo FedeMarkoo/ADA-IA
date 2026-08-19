@@ -109,6 +109,10 @@ def run(args):
     # Import lazily so skill discovery remains independent from agent startup.
     from src.ada.agents import MultiAgentCoordinator
     config = dict(args.get('config') or {})
+    # A batch must yield between files without waiting indefinitely for a
+    # noisy system load average. The worker/thread limit still enforces the
+    # configured CPU policy; this only bounds admission latency.
+    config.setdefault('cpu_throttle_max_wait_seconds', 2.0)
     config.setdefault('agent_max_workers', int(args.get('workers', config.get('photo_workers', 1))))
     coordinator = MultiAgentCoordinator(config)
     records, failures, xmp_written = [], [], []
