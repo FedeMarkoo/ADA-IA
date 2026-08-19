@@ -45,6 +45,13 @@ class ModelManager:
         self.models = self.config.get("models", {})
         self._gpt4all = None
 
+    def reload(self, config=None):
+        """Reload model policy at runtime without recreating the agent."""
+        if config is not None:
+            self.config = dict(config)
+        self.models = self.config.get('models', {})
+        self.local_runtime.config = self.config
+
     def available(self):
         local_available = self._ollama_available() if self.provider == "ollama" else False
         return {

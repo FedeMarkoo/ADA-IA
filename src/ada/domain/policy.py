@@ -43,7 +43,7 @@ class PolicyEngine:
         arguments = arguments or {}
         if action in {'gmail_send', 'instagram_publish', 'run_script', 'group_files', 'organize_photos', 'mcp'}:
             return True
-        if action == 'filesystem' and arguments.get('action') in {'move_files', 'copy_files', 'mkdir'}:
+        if action == 'filesystem' and arguments.get('action') in {'move_files', 'copy_files', 'mkdir', 'undo'}:
             return True
         if action == 'lightroom' and arguments.get('action') in {'organize', 'organizar', 'mover', 'limpiar', 'recuperar'}:
             return True

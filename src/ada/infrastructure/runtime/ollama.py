@@ -111,9 +111,27 @@ class LocalModelRuntime:
         """Report model readiness; optional pulling is explicit to avoid surprise downloads."""
         installed = set(self.installed_models())
         missing = [model for model in models if model and model not in installed]
+        pulled = []
+        if missing and bool(self.config.get('local_runtime', {}).get('auto_pull', False)):
+            for model in missing:
+                if self.pull_model(model):
+                    pulled.append(model)
+            installed.update(pulled)
+            missing = [model for model in missing if model not in pulled]
         return {
             "ready": not missing,
             "installed": sorted(installed),
             "missing": missing,
+            "pulled": pulled,
             "auto_pull": bool(self.config.get("local_runtime", {}).get("auto_pull", False)),
         }
+
+    def pull_model(self, model):
+        try:
+            payload = json.dumps({'name': model, 'stream': False}).encode('utf-8')
+            request = urllib.request.Request(self.endpoint + '/api/pull', data=payload,
+                                              headers={'Content-Type': 'application/json'}, method='POST')
+            with urllib.request.urlopen(request, timeout=float(self.config.get('model_pull_timeout', 1800))) as response:
+                return response.status == 200
+        except (OSError, ValueError, urllib.error.URLError):
+            return False
