@@ -1,6 +1,5 @@
 """Small multiprocessing supervisor for API, inference and autonomy workers."""
 import multiprocessing
-import signal
 
 
 class ServiceSupervisor:
