@@ -371,6 +371,14 @@ class Memory:
             "SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()]
 
+    def purge_tasks(self, keep=1000):
+        with self._lock:
+            cursor = self.conn.execute(
+                'DELETE FROM tasks WHERE id NOT IN (SELECT id FROM tasks ORDER BY id DESC LIMIT ?)', (max(0, int(keep)),)
+            )
+            self.conn.commit()
+            return cursor.rowcount
+
     def append_conversation(self, messages, session="main"):
         rows = [(session, item.get("role", "assistant"), str(item.get("text", "")), item.get("model"))
                 for item in messages if item.get("text") is not None]

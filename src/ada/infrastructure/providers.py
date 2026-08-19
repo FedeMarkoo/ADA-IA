@@ -1,0 +1,16 @@
+"""Protocols that keep model providers replaceable."""
+from typing import Any, Dict, Protocol
+
+
+class ModelProvider(Protocol):
+    def available(self) -> bool: ...
+    def call(self, prompt: str, **kwargs: Any) -> Any: ...
+
+
+class MemoryStore(Protocol):
+    def add_text(self, text: str, **kwargs: Any) -> None: ...
+    def search_text(self, query: str, k: int = 5) -> list: ...
+
+
+class Notifier(Protocol):
+    def send(self, text: str, **kwargs: Any) -> None: ...
