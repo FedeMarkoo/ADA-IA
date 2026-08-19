@@ -1,4 +1,5 @@
 """Small building blocks for extensible specialist agents."""
+
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable
 
@@ -13,7 +14,7 @@ class AgentResult:
 class SpecialistAgent:
     """A focused unit with one responsibility and a stable output contract."""
 
-    name = 'specialist'
+    name = "specialist"
 
     def run(self, task: Dict[str, Any]) -> AgentResult:
         raise NotImplementedError

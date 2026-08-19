@@ -1,4 +1,5 @@
 """Durable local event bus backed by ADA's SQLite memory store."""
+
 import json
 
 
@@ -12,9 +13,9 @@ class EventBus:
     def consume(self, limit=10):
         for event in self.memory.claim_events(limit):
             try:
-                event['payload'] = json.loads(event['payload'])
+                event["payload"] = json.loads(event["payload"])
             except (TypeError, ValueError):
-                event['payload'] = {}
+                event["payload"] = {}
             yield event
 
     def ack(self, event_id):

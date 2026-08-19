@@ -4,6 +4,7 @@ ADA treats Ollama as an implementation detail of its local engine.  This
 module starts it when needed, waits for readiness, and never stops a process
 that ADA did not start itself.
 """
+
 from dataclasses import dataclass
 import json
 import os
@@ -111,7 +112,7 @@ class LocalModelRuntime:
         installed = set(self.installed_models())
         missing = [model for model in models if model and model not in installed]
         pulled = []
-        if missing and bool(self.config.get('local_runtime', {}).get('auto_pull', False)):
+        if missing and bool(self.config.get("local_runtime", {}).get("auto_pull", False)):
             for model in missing:
                 if self.pull_model(model):
                     pulled.append(model)
@@ -127,10 +128,13 @@ class LocalModelRuntime:
 
     def pull_model(self, model):
         try:
-            payload = json.dumps({'name': model, 'stream': False}).encode('utf-8')
-            request = urllib.request.Request(self.endpoint + '/api/pull', data=payload,
-                                              headers={'Content-Type': 'application/json'}, method='POST')
-            with urllib.request.urlopen(request, timeout=float(self.config.get('model_pull_timeout', 1800))) as response:
+            payload = json.dumps({"name": model, "stream": False}).encode("utf-8")
+            request = urllib.request.Request(
+                self.endpoint + "/api/pull", data=payload, headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with urllib.request.urlopen(
+                request, timeout=float(self.config.get("model_pull_timeout", 1800))
+            ) as response:
                 return response.status == 200
         except (OSError, ValueError, urllib.error.URLError):
             return False

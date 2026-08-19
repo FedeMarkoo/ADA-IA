@@ -1,4 +1,5 @@
 """Small multiprocessing supervisor for API, inference and autonomy workers."""
+
 import multiprocessing
 
 
@@ -10,7 +11,7 @@ class ServiceSupervisor:
 
     def start(self):
         for name, target in self.targets.items():
-            process = multiprocessing.Process(target=target, name=f'ada-{name}', daemon=False)
+            process = multiprocessing.Process(target=target, name=f"ada-{name}", daemon=False)
             process.start()
             self.processes[name] = process
         return self.processes

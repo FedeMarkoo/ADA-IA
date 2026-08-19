@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 
-logger = logging.getLogger('ada.telegram')
+logger = logging.getLogger("ada.telegram")
 
 
 class TelegramListener:
@@ -27,8 +27,7 @@ class TelegramListener:
         self.api_url = f"https://api.telegram.org/bot{self.token}"
         self.poll_seconds = float(telegram.get("poll_seconds", 2))
         self.allowed_chat_ids = self._allowed_chat_ids(
-            os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "")
-            or telegram.get("allowed_chat_ids", [])
+            os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "") or telegram.get("allowed_chat_ids", [])
         )
         self.inbox = Path(telegram.get("inbox", "telegram_inbox"))
         self.stop_event = threading.Event()
@@ -110,7 +109,9 @@ class TelegramListener:
             path = self._download_photo(photos[-1])
             text = f"{text}\nAnalizá la imagen descargada: {path}".strip()
         if not text:
-            self.send_message(chat_id, "Puedo procesar texto y fotos. Enviame un mensaje o una imagen con una consulta.")
+            self.send_message(
+                chat_id, "Puedo procesar texto y fotos. Enviame un mensaje o una imagen con una consulta."
+            )
             return
 
         reply = self._invoke_internal_chat(text)
@@ -132,7 +133,7 @@ class TelegramListener:
     def send_message(self, chat_id, text):
         text = str(text)
         for start in range(0, len(text), 4000):
-            self._api("sendMessage", {"chat_id": chat_id, "text": text[start:start + 4000]})
+            self._api("sendMessage", {"chat_id": chat_id, "text": text[start : start + 4000]})
 
     def _download_photo(self, photo):
         file_info = self._api("getFile", {"file_id": photo["file_id"]})

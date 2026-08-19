@@ -1,4 +1,5 @@
 """Protocols that keep model providers replaceable."""
+
 from typing import Any, Optional, Protocol
 
 
