@@ -27,7 +27,7 @@ def main():
     p_index.add_argument('--dir', required=True)
     p_suggest = sub.add_parser('suggest')
     p_suggest.add_argument('--dir', required=True)
-    p_run = sub.add_parser('run')
+    sub.add_parser('run')
     p_serve = sub.add_parser('serve', help='Start the web UI and ADA agent in one process')
     p_serve.add_argument('-debug', '--debug', action='store_true', help='Enable detailed router and model logs')
     p_prompt = sub.add_parser('prompt')
@@ -72,7 +72,7 @@ def main():
             parts = text.split()
             path = None
             for p in parts:
-                if p.startswith('/') or p.startswith('~') or p.startswith('.'): 
+                if p.startswith('/') or p.startswith('~') or p.startswith('.'):
                     path = os.path.expanduser(p)
                     break
             if path:

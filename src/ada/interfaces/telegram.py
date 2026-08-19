@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import threading
-import time
 import urllib.parse
 import urllib.request
 from pathlib import Path

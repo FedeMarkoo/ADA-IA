@@ -1,5 +1,5 @@
 """Protocols that keep model providers replaceable."""
-from typing import Any, Dict, Protocol
+from typing import Any, Protocol
 
 
 class ModelProvider(Protocol):

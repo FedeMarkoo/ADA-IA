@@ -7,7 +7,6 @@ that ADA did not start itself.
 from dataclasses import dataclass
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import threading
