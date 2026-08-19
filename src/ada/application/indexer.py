@@ -1,6 +1,3 @@
-import os
-import json
-import argparse
 from pathlib import Path
 from src.ada.infrastructure.imaging.embeddings import get_image_embedding
 from src.ada.infrastructure.integrations.web_search import search_web

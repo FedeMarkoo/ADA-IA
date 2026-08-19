@@ -3,7 +3,6 @@
 ADA plans and simulates by default. Real operations are delegated to the
 tested project script and require explicit confirmation.
 """
-import json
 import os
 import subprocess
 import sys

@@ -5,7 +5,6 @@ SQLite lexical search so it survives restarts and does not depend on embedding
 dimensions or heavyweight model downloads.
 """
 import json
-import os
 import re
 import sqlite3
 import threading
