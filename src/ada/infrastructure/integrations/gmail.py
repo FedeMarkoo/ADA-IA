@@ -14,6 +14,7 @@ def _service(config, scopes):
     except ImportError as exc:
         raise RuntimeError("Instalá la extra Gmail para habilitar esta integración.") from exc
     credential_name = config.get("gmail_credential_name")
+    token_path = None
     if credential_name:
         from src.ada.infrastructure.credentials import CredentialStore
 
@@ -30,6 +31,18 @@ def _service(config, scopes):
         from google.auth.transport.requests import Request
 
         credentials.refresh(Request())
+        refreshed_token = json.loads(credentials.to_json())
+        if credential_name:
+            from src.ada.infrastructure.credentials import CredentialStore
+
+            CredentialStore().set(credential_name, refreshed_token)
+        else:
+            token_path = token_path or Path(
+                os.path.expanduser(config.get("gmail_token_path", "~/.config/ada/gmail-token.json"))
+            )
+            token_path.parent.mkdir(parents=True, exist_ok=True)
+            token_path.write_text(json.dumps(refreshed_token, ensure_ascii=False), encoding="utf-8")
+            token_path.chmod(0o600)
     return build("gmail", "v1", credentials=credentials, cache_discovery=False)
 
 
