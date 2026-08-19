@@ -1,0 +1,5 @@
+[
+  {"name": "food", "prompt": "qué puedo cocinar hoy", "expected_action": "food"},
+  {"name": "photo", "prompt": "analizá esta foto", "expected_action": "analyze_photo"},
+  {"name": "files", "prompt": "listame los archivos", "expected_action": "list_files"}
+]
