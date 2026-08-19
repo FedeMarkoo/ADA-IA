@@ -154,6 +154,7 @@ def detect_burst_groups(files):
             if left_value is not None and right_value is not None and abs(right_value - left_value) == 1:
                 sequence_signal = True
                 break
+        filename_signal = large_batch_fast and right_number - left_number == 1
         mode_signal = any(
             _continuous(_tag(left_tags, key)) and _continuous(_tag(right_tags, key))
             for key in BURST_KEYS
@@ -162,7 +163,7 @@ def detect_burst_groups(files):
         for item in (left_meta['raw'], right_meta['raw']):
             times.append(_parse_datetime(item.get('timestamp')))
         time_signal = bool(times[0] and times[1] and abs((times[1] - times[0]).total_seconds()) <= 1.0)
-        metadata_signal = sequence_signal or mode_signal or time_signal
+        metadata_signal = sequence_signal or mode_signal or time_signal or filename_signal
         # RAW visual decoding is expensive. Metadata and capture time are
         # stronger and cheaper signals, so only use visual fallback when they
         # cannot decide the pair.
@@ -172,7 +173,7 @@ def detect_burst_groups(files):
             groups.append({left, right})
             evidence.append({'files': [str(left), str(right)],
                              'signals': [name for name, value in (
-                                 ('maker_sequence', sequence_signal), ('maker_mode', mode_signal),
+                                 ('maker_sequence', sequence_signal or filename_signal), ('maker_mode', mode_signal),
                                  ('capture_time', time_signal), ('visual_similarity', visual_signal)) if value],
                              'similarity': round(similarity, 4) if similarity is not None else None})
 
