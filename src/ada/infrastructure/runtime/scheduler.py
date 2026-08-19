@@ -1,10 +1,11 @@
 """Small durable scheduler for event-driven ADA workflows."""
+
 import logging
 import threading
 
 from src.ada.infrastructure.runtime.event_bus import EventBus
 
-logger = logging.getLogger('ada.scheduler')
+logger = logging.getLogger("ada.scheduler")
 
 
 class Scheduler:
@@ -18,19 +19,19 @@ class Scheduler:
     def run_once(self):
         handled = 0
         for event in self.bus.consume():
-            handler = self.handlers.get(event['topic'])
+            handler = self.handlers.get(event["topic"])
             if handler is None:
-                self.bus.fail(event['id'], 'no_handler')
+                self.bus.fail(event["id"], "no_handler")
                 continue
             try:
-                handler(event['payload'])
-                self.bus.ack(event['id'])
+                handler(event["payload"])
+                self.bus.ack(event["id"])
             except Exception as exc:
-                logger.exception('event_failed topic=%s id=%s', event['topic'], event['id'])
-                if event['attempts'] < self.max_attempts:
-                    self.bus.retry(event['id'], exc, delay_seconds=min(60, 2 ** event['attempts']))
+                logger.exception("event_failed topic=%s id=%s", event["topic"], event["id"])
+                if event["attempts"] < self.max_attempts:
+                    self.bus.retry(event["id"], exc, delay_seconds=min(60, 2 ** event["attempts"]))
                 else:
-                    self.bus.fail(event['id'], exc)
+                    self.bus.fail(event["id"], exc)
             handled += 1
         return handled
 

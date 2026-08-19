@@ -3,6 +3,7 @@
 The local provider is Ollama. Remote providers are optional and are only used
 when configured and when the router decides that the task needs them.
 """
+
 import json
 import os
 import urllib.error
@@ -49,7 +50,7 @@ class ModelManager:
         """Reload model policy at runtime without recreating the agent."""
         if config is not None:
             self.config = dict(config)
-        self.models = self.config.get('models', {})
+        self.models = self.config.get("models", {})
         self.local_runtime.config = self.config
 
     def available(self):
@@ -65,10 +66,10 @@ class ModelManager:
         }
 
     def _model(self, role, legacy_key, default):
-        policy = self.config.get('model_policy', {})
+        policy = self.config.get("model_policy", {})
         candidate = policy.get(role)
         if isinstance(candidate, dict):
-            candidate = candidate.get('preferred') or (candidate.get('fallbacks') or [None])[0]
+            candidate = candidate.get("preferred") or (candidate.get("fallbacks") or [None])[0]
         if candidate:
             return candidate
         return self.models.get(role) or self.config.get(legacy_key, default)
@@ -76,33 +77,33 @@ class ModelManager:
     def model_catalog(self):
         """Return the declarative model catalog filtered by the current hardware."""
         profile = hardware_profile()
-        catalog = self.config.get('model_catalog') or []
+        catalog = self.config.get("model_catalog") or []
         if isinstance(catalog, dict):
-            catalog = [dict({'name': name}, **value) for name, value in catalog.items()]
+            catalog = [dict({"name": name}, **value) for name, value in catalog.items()]
         result = []
         for item in catalog:
-            if not isinstance(item, dict) or not item.get('name'):
+            if not isinstance(item, dict) or not item.get("name"):
                 continue
-            minimum = item.get('min_ram_gb', 0)
-            if profile['ram_gb'] and profile['ram_gb'] < float(minimum):
+            minimum = item.get("min_ram_gb", 0)
+            if profile["ram_gb"] and profile["ram_gb"] < float(minimum):
                 continue
-            result.append(dict(item, hardware_tier=profile['tier']))
+            result.append(dict(item, hardware_tier=profile["tier"]))
         return result
 
-    def select_model(self, task, role='chat'):
+    def select_model(self, task, role="chat"):
         """Select a model name from policy/catalog without requiring code changes."""
-        policy = self.config.get('model_policy', {})
+        policy = self.config.get("model_policy", {})
         configured = policy.get(task) or policy.get(role)
         names = []
         if isinstance(configured, str):
             names = [configured]
         elif isinstance(configured, dict):
-            names = [configured.get('preferred')] + list(configured.get('fallbacks') or [])
-        available = {item['name'] for item in self.model_catalog()}
+            names = [configured.get("preferred")] + list(configured.get("fallbacks") or [])
+        available = {item["name"] for item in self.model_catalog()}
         for name in names:
             if name and (not available or name in available):
                 return name
-        return self._model(role, f'{role}_model', self.models.get(role, ''))
+        return self._model(role, f"{role}_model", self.models.get(role, ""))
 
     def _gpt4all_available(self):
         if GPT4All is None:
@@ -115,20 +116,30 @@ class ModelManager:
 
     def runtime_status(self):
         """Expose runtime and installed-model state for the UI and diagnostics."""
-        status = self.local_runtime.ensure_ready() if self.provider == "ollama" else {
-            "provider": self.provider,
-            "endpoint": "configured locally",
-            "available": self.available().get(self.provider, False),
-            "managed": False,
-            "reason": "ready" if self.available().get(self.provider, False) else "provider_unavailable",
-        }
+        status = (
+            self.local_runtime.ensure_ready()
+            if self.provider == "ollama"
+            else {
+                "provider": self.provider,
+                "endpoint": "configured locally",
+                "available": self.available().get(self.provider, False),
+                "managed": False,
+                "reason": "ready" if self.available().get(self.provider, False) else "provider_unavailable",
+            }
+        )
         if self.provider == "ollama":
-            status_available = status.available if isinstance(status, RuntimeStatus) else bool(status.get('available'))
-            models = self.local_runtime.ensure_models([
-                self._model("chat", "ollama_model", "llama3.2:3b"),
-                self._model("vision", "vision_model", "qwen2.5vl:3b"),
-                self._model("router", "router_model", "llama3.2:3b"),
-            ]) if status_available else {"ready": False, "installed": [], "missing": []}
+            status_available = status.available if isinstance(status, RuntimeStatus) else bool(status.get("available"))
+            models = (
+                self.local_runtime.ensure_models(
+                    [
+                        self._model("chat", "ollama_model", "llama3.2:3b"),
+                        self._model("vision", "vision_model", "qwen2.5vl:3b"),
+                        self._model("router", "router_model", "llama3.2:3b"),
+                    ]
+                )
+                if status_available
+                else {"ready": False, "installed": [], "missing": []}
+            )
         else:
             models = {"ready": self.available().get(self.provider, False), "installed": [], "missing": []}
         status_payload = status.as_dict() if hasattr(status, "as_dict") else status
@@ -198,12 +209,14 @@ class ModelManager:
         }
         # Ollama accepts a JSON schema here and constrains the model output.
         # This is stronger than asking for JSON in the natural-language prompt.
-        if kwargs.get('format'):
-            payload['format'] = kwargs['format']
+        if kwargs.get("format"):
+            payload["format"] = kwargs["format"]
         request_body = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
-            self.ollama_url + "/api/chat", data=request_body,
-            headers={"Content-Type": "application/json"}, method="POST"
+            self.ollama_url + "/api/chat",
+            data=request_body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
         try:
             with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
@@ -215,18 +228,21 @@ class ModelManager:
 
     def _call_ollama_vision(self, prompt, image_base64, **kwargs):
         model = kwargs.get("ollama_model") or self._model("vision", "vision_model", "qwen2.5vl:3b")
-        payload = json.dumps({
-            "model": model,
-            "messages": [{"role": "user", "content": prompt, "images": [image_base64]}],
-            "stream": False,
-            "format": "json",
-            "options": {
-                "temperature": kwargs.get("temperature", 0.1),
-                "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
-            },
-        }).encode("utf-8")
-        request = urllib.request.Request(self.ollama_url + "/api/chat", data=payload,
-                                         headers={"Content-Type": "application/json"}, method="POST")
+        payload = json.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt, "images": [image_base64]}],
+                "stream": False,
+                "format": "json",
+                "options": {
+                    "temperature": kwargs.get("temperature", 0.1),
+                    "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
+                },
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            self.ollama_url + "/api/chat", data=payload, headers={"Content-Type": "application/json"}, method="POST"
+        )
         try:
             with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
                 data = json.loads(response.read().decode("utf-8"))

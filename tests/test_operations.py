@@ -14,23 +14,26 @@ class OperationsTests(unittest.TestCase):
         class FakeAgent:
             @staticmethod
             def parse_prompt(prompt):
-                return {'action': 'food' if 'receta' in prompt else 'ask'}
-        result = evaluate(FakeAgent(), [EvaluationCase('food', 'dame una receta', 'food')])
-        self.assertEqual(result['accuracy'], 1.0)
+                return {"action": "food" if "receta" in prompt else "ask"}
+
+        result = evaluate(FakeAgent(), [EvaluationCase("food", "dame una receta", "food")])
+        self.assertEqual(result["accuracy"], 1.0)
 
     def test_composite_notifier_and_supervisor_lifecycle(self):
         calls = []
+
         class N:
             def send(self, text, **kwargs):
                 calls.append(text)
+
         notifier = CompositeNotifier([N()])
-        notifier.send('hola')
-        self.assertEqual(calls, ['hola'])
-        supervisor = ServiceSupervisor({'noop': noop})
+        notifier.send("hola")
+        self.assertEqual(calls, ["hola"])
+        supervisor = ServiceSupervisor({"noop": noop})
         processes = supervisor.start()
-        self.assertIn('noop', processes)
+        self.assertIn("noop", processes)
         supervisor.stop()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

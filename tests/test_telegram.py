@@ -26,7 +26,7 @@ class TelegramAdapterTests(unittest.TestCase):
         listener = TelegramListener({"telegram": {"enabled": False}})
         listener._invoke_internal_chat = lambda text: text
         listener.send_message = lambda chat_id, text: None
-        with self.assertLogs('ada.telegram', level='INFO') as logs:
+        with self.assertLogs("ada.telegram", level="INFO") as logs:
             listener.handle_update({"message": {"chat": {"id": 987654321}, "text": "hola"}})
         self.assertIn("chat_id=987654321", "\n".join(logs.output))
 

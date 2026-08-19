@@ -8,23 +8,23 @@ from src.ada.application.services.chat import ChatService
 
 class PlannerPolicyTests(unittest.TestCase):
     def test_policy_requires_confirmation_for_external_side_effects(self):
-        policy = PolicyEngine({'allowed_roots': ['/tmp'], 'confirm_risky': True})
+        policy = PolicyEngine({"allowed_roots": ["/tmp"], "confirm_risky": True})
         with self.assertRaises(PolicyViolation):
-            policy.authorize('gmail_send', {}, confirmed=False)
-        policy.authorize('gmail_send', {}, confirmed=True)
+            policy.authorize("gmail_send", {}, confirmed=False)
+        policy.authorize("gmail_send", {}, confirmed=True)
 
     def test_policy_rejects_paths_outside_scope(self):
-        policy = PolicyEngine({'allowed_roots': ['/tmp']})
+        policy = PolicyEngine({"allowed_roots": ["/tmp"]})
         with self.assertRaises(PolicyViolation):
-            policy.validate_paths(['/etc/passwd'])
+            policy.validate_paths(["/etc/passwd"])
 
     def test_planner_validates_capability_names(self):
-        policy = PolicyEngine({'allowed_roots': ['/tmp']})
-        planner = Planner({'list_files': lambda _: None}, policy)
-        plan = planner.from_actions([Action('list_files', {'dir': '/tmp'})])
+        policy = PolicyEngine({"allowed_roots": ["/tmp"]})
+        planner = Planner({"list_files": lambda _: None}, policy)
+        plan = planner.from_actions([Action("list_files", {"dir": "/tmp"})])
         self.assertTrue(plan.dry_run)
         with self.assertRaises(ValueError):
-            planner.from_actions([Action('missing', {})])
+            planner.from_actions([Action("missing", {})])
 
     def test_chat_service_keeps_sessions_isolated(self):
         class FakeManager:
@@ -32,29 +32,30 @@ class PlannerPolicyTests(unittest.TestCase):
                 return None
 
         class FakeAgent:
-            lang = 'auto'
+            lang = "auto"
             model_manager = FakeManager()
 
             @staticmethod
             def parse_prompt(text):
-                return {'action': 'ask', 'complexity': 1}
+                return {"action": "ask", "complexity": 1}
 
             @staticmethod
             def decide_and_run(task):
-                return {'model': None, 'result': {'text': task['prompt']}}
+                return {"model": None, "result": {"text": task["prompt"]}}
 
         service = ChatService(FakeAgent())
-        service.handle('uno', 'a')
-        service.handle('dos', 'b')
-        self.assertEqual([item['text'] for item in service.history('a')], ['uno', 'uno'])
-        self.assertEqual([item['text'] for item in service.history('b')], ['dos', 'dos'])
+        service.handle("uno", "a")
+        service.handle("dos", "b")
+        self.assertEqual([item["text"] for item in service.history("a")], ["uno", "uno"])
+        self.assertEqual([item["text"] for item in service.history("b")], ["dos", "dos"])
 
     def test_agent_plan_request_is_validated_before_execution(self):
         from src.ada.application.agent import Agent
-        agent = Agent({'db_path': ':memory:', 'allowed_roots': ['/tmp'], 'local_runtime': {'auto_start': False}})
-        plan = agent.plan_request('listame los archivos')
+
+        agent = Agent({"db_path": ":memory:", "allowed_roots": ["/tmp"], "local_runtime": {"auto_start": False}})
+        plan = agent.plan_request("listame los archivos")
         self.assertTrue(plan.plan_id)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

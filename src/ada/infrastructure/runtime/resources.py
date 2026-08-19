@@ -1,4 +1,5 @@
 """Lightweight resource policy used before starting expensive local work."""
+
 import os
 import time
 
@@ -10,13 +11,13 @@ except Exception:
 
 def cpu_budget(config=None):
     config = config or {}
-    return max(10.0, min(100.0, float(config.get('cpu_limit_percent', 50))))
+    return max(10.0, min(100.0, float(config.get("cpu_limit_percent", 50))))
 
 
 def recommended_threads(config=None):
     """Return a conservative Ollama thread count for the configured budget."""
     config = config or {}
-    explicit = config.get('ollama_num_thread')
+    explicit = config.get("ollama_num_thread")
     if explicit:
         return max(1, int(explicit))
     cores = os.cpu_count() or 2
@@ -33,7 +34,7 @@ def wait_for_cpu_budget(config=None):
     config = config or {}
     limit = cpu_budget(config) / 100.0
     cores = max(1, os.cpu_count() or 1)
-    max_wait = max(1.0, float(config.get('cpu_throttle_max_wait_seconds', 30.0)))
+    max_wait = max(1.0, float(config.get("cpu_throttle_max_wait_seconds", 30.0)))
     started_waiting = time.monotonic()
     while True:
         if psutil is not None:
@@ -50,7 +51,7 @@ def wait_for_cpu_budget(config=None):
         # batch forever; after the grace period one admitted worker may run.
         if time.monotonic() - started_waiting >= max_wait:
             return
-        time.sleep(float(config.get('cpu_throttle_seconds', 1.0)))
+        time.sleep(float(config.get("cpu_throttle_seconds", 1.0)))
 
 
 def hardware_profile():
@@ -58,11 +59,11 @@ def hardware_profile():
     cores = os.cpu_count() or 1
     ram_gb = 0.0
     if psutil is not None:
-        ram_gb = round(psutil.virtual_memory().total / (1024 ** 3), 1)
+        ram_gb = round(psutil.virtual_memory().total / (1024**3), 1)
     if ram_gb >= 32 and cores >= 8:
-        tier = 'high'
+        tier = "high"
     elif ram_gb >= 16 and cores >= 4:
-        tier = 'mid'
+        tier = "mid"
     else:
-        tier = 'low'
-    return {'tier': tier, 'cpu_cores': cores, 'ram_gb': ram_gb}
+        tier = "low"
+    return {"tier": tier, "cpu_cores": cores, "ram_gb": ram_gb}
