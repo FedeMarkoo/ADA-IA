@@ -477,6 +477,7 @@ def chat():
                 'write_xmp': parsed.get('write_xmp', False),
                 'repair_xmp': parsed.get('repair_xmp', False),
                 'mark_bursts': parsed.get('mark_bursts', False),
+                'batch_accept_threshold': cfg.get('batch_accept_threshold', 5.6),
                 # Large batches stay deterministic and fast. Vision remains
                 # enabled for individual reviews and can be explicitly opted
                 # into for a smaller batch through the internal action.
