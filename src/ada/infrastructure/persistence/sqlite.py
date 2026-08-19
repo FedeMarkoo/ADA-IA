@@ -584,6 +584,18 @@ class Memory:
             self.conn.commit()
             return cursor.rowcount
 
+    def backup_to(self, path):
+        """Create a consistent SQLite backup without copying a live WAL file."""
+        target = Path(path).expanduser().resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            destination = sqlite3.connect(str(target))
+            try:
+                self.conn.backup(destination)
+            finally:
+                destination.close()
+        return str(target)
+
     def append_conversation(self, messages, session="main"):
         rows = [
             (session, item.get("role", "assistant"), str(item.get("text", "")), item.get("model"))
