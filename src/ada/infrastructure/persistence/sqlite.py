@@ -71,6 +71,12 @@ class Memory:
                 request TEXT, result TEXT, success INTEGER NOT NULL DEFAULT 1,
                 correlation_id TEXT
             );
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                topic TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0, available_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                last_error TEXT
+            );
             CREATE INDEX IF NOT EXISTS idx_memories_kind_id ON memories(kind, id DESC);
             CREATE INDEX IF NOT EXISTS idx_conversation_session_id ON conversation_messages(session, id DESC);
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(id DESC);
@@ -323,6 +329,39 @@ class Memory:
             return [dict(row) for row in self.conn.execute(
                 'SELECT * FROM audit_log ORDER BY id DESC LIMIT ?', (limit,)
             ).fetchall()]
+
+    def publish_event(self, topic, payload):
+        with self._lock:
+            cursor = self.conn.execute(
+                'INSERT INTO events(topic, payload) VALUES (?, ?)',
+                (str(topic), json.dumps(payload, ensure_ascii=False, default=str)),
+            )
+            self.conn.commit()
+            return cursor.lastrowid
+
+    def claim_events(self, limit=10):
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT * FROM events WHERE status='pending' AND available_at <= CURRENT_TIMESTAMP ORDER BY id LIMIT ?",
+                (limit,),
+            ).fetchall()
+            for row in rows:
+                self.conn.execute("UPDATE events SET status='processing', attempts=attempts+1 WHERE id=?", (row['id'],))
+            self.conn.commit()
+            return [dict(row) for row in rows]
+
+    def finish_event(self, event_id, success=True, error=None, retry_seconds=0):
+        with self._lock:
+            if success:
+                self.conn.execute("UPDATE events SET status='done', last_error=NULL WHERE id=?", (event_id,))
+            elif retry_seconds:
+                self.conn.execute(
+                    "UPDATE events SET status='pending', available_at=datetime('now', ?), last_error=? WHERE id=?",
+                    (f'+{int(retry_seconds)} seconds', str(error or ''), event_id),
+                )
+            else:
+                self.conn.execute("UPDATE events SET status='failed', last_error=? WHERE id=?", (str(error or ''), event_id))
+            self.conn.commit()
 
     def recent_tasks(self, limit=10):
         return [dict(row) for row in self.conn.execute(

@@ -69,7 +69,7 @@ def run(args):
             return {'error': 'path_outside_allowed_roots', 'path': str(destination)}
         if destination == root or root in destination.parents:
             return {'error': 'destination cannot be inside source'}
-        destination.mkdir(parents=True, exist_ok=True)
+        dry_run = bool(args.get('dry_run'))
         # Flatten files from nested folders into the destination. This makes
         # “mover todas las fotos” behave as users expect for organized trees.
         items = _files(root, recursive=True)
@@ -80,11 +80,12 @@ def run(args):
             while target.exists():
                 target = destination / f'{item.stem}_ada_{index}{item.suffix}'
                 index += 1
-            target.parent.mkdir(parents=True, exist_ok=True)
-            operation = shutil.move if action == 'move_files' else shutil.copy2
-            operation(str(item), str(target))
+            if not dry_run:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                operation = shutil.move if action == 'move_files' else shutil.copy2
+                operation(str(item), str(target))
             changed.append({'from': str(item), 'to': str(target)})
-        return {'ok': True, 'action': action, 'source': str(root), 'destination': str(destination), 'count': len(changed), 'changed': changed}
+        return {'ok': True, 'dry_run': dry_run, 'action': action, 'source': str(root), 'destination': str(destination), 'count': len(changed), 'changed': changed}
 
     if action == 'mkdir':
         if not args.get('confirm'):
@@ -92,7 +93,9 @@ def run(args):
         target = _path(args.get('path'))
         if not _allowed(target, args):
             return {'error': 'path_outside_allowed_roots', 'path': str(target)}
-        target.mkdir(parents=True, exist_ok=True)
-        return {'ok': True, 'action': action, 'created': str(target)}
+        dry_run = bool(args.get('dry_run'))
+        if not dry_run:
+            target.mkdir(parents=True, exist_ok=True)
+        return {'ok': True, 'dry_run': dry_run, 'action': action, 'created': str(target)}
 
     return {'error': 'unsupported filesystem action', 'action': action}
