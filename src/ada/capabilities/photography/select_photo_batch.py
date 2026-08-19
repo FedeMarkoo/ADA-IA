@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import re
 
-from src.ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS
+from src.ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS, _folder_context
 from src.ada.capabilities.photography.burst_detection import detect_burst_groups
 from src.ada.capabilities.photography.xmp import mark_xmp_label, repair_photo_xmp, write_photo_xmp
 from src.ada.infrastructure.runtime.resources import wait_for_cpu_budget
@@ -107,6 +107,14 @@ def run(args):
     root = Path(args.get("path") or args.get("folder") or "").expanduser()
     if not root.is_dir():
         return {"error": "folder not found", "path": str(root)}
+    stored_reviews = {}
+
+    def stored_review(path):
+        key = str(path)
+        if key not in stored_reviews:
+            stored_reviews[key] = _stored_review(path)
+        return stored_reviews[key]
+
     repair_only = (args.get("repair_xmp") or args.get("mark_bursts")) and not args.get("write_xmp")
     if repair_only:
         sidecars = sorted(root.rglob("*.xmp"))
@@ -125,9 +133,9 @@ def run(args):
                     "path": str(path),
                     "review": {
                         "selection_rating": (
-                            3 if _stored_review(path)["score"] >= float(args.get("batch_accept_threshold", 3.5)) else 0
+                            3 if stored_review(path)["score"] >= float(args.get("batch_accept_threshold", 3.5)) else 0
                         ),
-                        "selection_score": _stored_review(path)["score"],
+                        "selection_score": stored_review(path)["score"],
                     },
                 }
                 for path in raw_files
@@ -139,7 +147,7 @@ def run(args):
         repair_threshold = float(args.get("batch_accept_threshold", 3.5))
         repair_feedback_mode = {_feedback_label(path) for path in raw_files} == {"selected", "rejected"}
         for path in raw_files:
-            stored = _stored_review(path)
+            stored = stored_review(path)
             selected = stored["score"] >= repair_threshold and str(path) not in duplicate_paths
             if repair_feedback_mode:
                 selected = _feedback_label(path) == "selected"
@@ -179,6 +187,7 @@ def run(args):
     config.setdefault("agent_max_workers", int(args.get("workers", config.get("photo_workers", 1))))
     accept_threshold = float(args.get("batch_accept_threshold", config.get("batch_accept_threshold", 3.5)))
     coordinator = MultiAgentCoordinator(config)
+    folder_context = _folder_context(files[0], root)
     records, failures, xmp_written = [], [], []
 
     def analyze(path):
@@ -187,6 +196,7 @@ def run(args):
             {
                 "path": str(path),
                 "folder": str(root),
+                "folder_context": folder_context,
                 "vision": args.get("vision", True),
                 "write_xmp": args.get("write_xmp", False),
             }

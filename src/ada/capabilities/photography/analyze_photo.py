@@ -293,7 +293,7 @@ def run(args):
     except Exception as exc:
         return {"error": f"could not analyze image: {exc}", "path": str(path)}
     result = {"ok": True, "path": str(path), "technical": technical}
-    context = _folder_context(path, args.get("folder"))
+    context = args.get("folder_context") or _folder_context(path, args.get("folder"))
     result["session_context"] = context
     if args.get("vision", True):
         try:
