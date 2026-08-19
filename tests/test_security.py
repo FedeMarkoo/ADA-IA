@@ -38,6 +38,18 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(result['error'], 'confirmation_required')
         self.assertEqual(result['preview']['to'], 'fede@example.com')
 
+    def test_filesystem_move_can_be_undone(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source'
+            source.mkdir()
+            item = source / 'file.txt'
+            item.write_text('data')
+            moved = filesystem_run({'action': 'move_files', 'source': source, 'name': 'target', 'confirm': True})
+            self.assertFalse(item.exists())
+            result = filesystem_run({'action': 'undo', 'manifest': moved['changed'], 'confirm': True})
+            self.assertTrue(result['ok'])
+            self.assertTrue(item.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

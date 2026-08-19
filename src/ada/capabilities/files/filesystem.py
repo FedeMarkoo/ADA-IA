@@ -32,6 +32,22 @@ def _files(root, recursive=True):
 
 def run(args):
     action = str(args.get('action', 'list_files')).lower()
+    if action == 'undo':
+        if not args.get('confirm'):
+            return {'error': 'confirmation_required', 'action': action}
+        manifest = args.get('manifest') or []
+        restored = []
+        for item in reversed(manifest):
+            source = _path(item.get('from'))
+            target = _path(item.get('to'))
+            if not target.exists():
+                continue
+            if source.exists():
+                return {'error': 'undo_target_exists', 'path': str(source)}
+            source.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(target), str(source))
+            restored.append({'from': str(target), 'to': str(source)})
+        return {'ok': True, 'action': action, 'count': len(restored), 'restored': restored}
     root = _path(args.get('dir') or args.get('source'))
     recursive = bool(args.get('recursive', True))
     if not _allowed(root, args):
@@ -84,7 +100,7 @@ def run(args):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 operation = shutil.move if action == 'move_files' else shutil.copy2
                 operation(str(item), str(target))
-            changed.append({'from': str(item), 'to': str(target)})
+            changed.append({'from': str(item), 'to': str(target), 'operation': action})
         return {'ok': True, 'dry_run': dry_run, 'action': action, 'source': str(root), 'destination': str(destination), 'count': len(changed), 'changed': changed}
 
     if action == 'mkdir':
