@@ -4,6 +4,7 @@ import logging
 import time
 
 from src.ada.application.agent import Agent
+from src.ada.application.services.autonomy import AutonomyService
 from src.ada.config import load_config
 from src.ada.infrastructure.runtime.event_bus import EventBus
 from src.ada.infrastructure.runtime.scheduler import Scheduler
@@ -15,10 +16,12 @@ logger = logging.getLogger("ada.daemon")
 def run(config=None):
     config = config or load_config()
     agent = Agent(config)
+    autonomy = AutonomyService(agent, config)
     bus = EventBus(agent.mem)
 
     def file_created(payload):
         logger.info("new_file path=%s", payload.get("path"))
+        return autonomy.handle("filesystem.file_created", payload)
 
     scheduler = Scheduler(
         agent.mem, {"filesystem.file_created": file_created}, interval=config.get("scheduler_interval", 2)

@@ -28,4 +28,13 @@
   "privacy_default": "normal",
   "local_runtime": {"provider": "ollama", "auto_start": true, "auto_pull": false},
   "telegram": {"enabled": false, "allowed_chat_ids": []}
+  ,"event_rules": {
+    "filesystem.file_created": {
+      "action": "analyze_photo",
+      "extensions": [".jpg", ".jpeg", ".png", ".nef", ".arw", ".cr2", ".dng"],
+      "payload": {"vision": false},
+      "auto_execute": true,
+      "complexity": 4
+    }
+  }
 }
