@@ -101,6 +101,19 @@ def run(args):
             write_xmp=True,
             accept_threshold=float(args.get('batch_accept_threshold', 4.8)),
         )
+        duplicate_paths = set(burst_duplicates)
+        repair_threshold = float(args.get('batch_accept_threshold', 4.8))
+        for path in raw_files:
+            stored = _stored_review(path)
+            selected = stored['score'] >= repair_threshold and str(path) not in duplicate_paths
+            write_photo_xmp(
+                path,
+                'Seleccionada' if selected else 'Rechazada',
+                3 if selected else 0,
+                stored['score'],
+                'Selección de lote recalibrada por ADA',
+                label='Amarillo' if str(path) in burst_paths else None,
+            )
         burst_xmp = [mark_xmp_label(path, 'Amarillo') for path in raw_files if str(path) in burst_paths]
         return {'ok': True, 'workflow': 'photo_xmp_repair', 'path': str(root),
                 'repaired_count': len(repaired), 'burst_count': len(burst_paths),
