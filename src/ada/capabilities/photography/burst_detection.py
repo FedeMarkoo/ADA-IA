@@ -154,7 +154,7 @@ def detect_burst_groups(files):
             if left_value is not None and right_value is not None and abs(right_value - left_value) == 1:
                 sequence_signal = True
                 break
-        filename_signal = large_batch_fast and right_number - left_number == 1
+        filename_signal = large_batch_fast and (_number(right) - _number(left) == 1)
         mode_signal = any(
             _continuous(_tag(left_tags, key)) and _continuous(_tag(right_tags, key))
             for key in BURST_KEYS
