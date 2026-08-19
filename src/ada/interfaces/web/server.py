@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 import json
 import os
 from pathlib import Path
@@ -565,6 +565,54 @@ def chat():
         pass
     conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': out_text}])
     return jsonify({'reply': out_text, 'model': model or 'sin modelo'})
+
+
+def _sse(event, payload):
+    """Encode one chat progress event for the web client."""
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+@app.route('/api/chat/stream', methods=['POST'])
+def chat_stream():
+    """Answer through SSE so the UI can show ADA's progress incrementally.
+
+    The existing JSON endpoint remains available for Telegram and integrations.
+    This endpoint deliberately reuses the same chat action, so web and Telegram
+    cannot drift into different agent behavior.
+    """
+    data = request.get_json() or {}
+    text = data.get('message', '')
+    if not text:
+        return jsonify({'error': 'empty message'}), 400
+
+    @stream_with_context
+    def events():
+        received = 'Recibí tu pedido. Estoy entendiendo qué tarea corresponde.'
+        conversation.extend([{'role': 'assistant', 'text': received, 'kind': 'status'}])
+        yield _sse('status', {'text': received})
+
+        processing = 'Estoy procesando la información y preparando la respuesta.'
+        conversation.extend([{'role': 'assistant', 'text': processing, 'kind': 'status'}])
+        yield _sse('status', {'text': processing})
+        try:
+            response = chat()
+            payload = response.get_json(silent=True) or {}
+            if payload.get('error'):
+                yield _sse('error', {'text': payload.get('message') or payload['error']})
+            else:
+                yield _sse('reply', {'text': payload.get('reply', '(sin respuesta)')})
+        except Exception as error:
+            app.logger.exception('Streaming chat failed')
+            failure = f'La tarea terminó con un error: {error}'
+            conversation.extend([{'role': 'assistant', 'text': failure, 'kind': 'error'}])
+            yield _sse('error', {'text': failure})
+        yield _sse('done', {'ok': True})
+
+    return Response(events(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+        'Connection': 'keep-alive',
+    })
 
 
 def main():
