@@ -1,5 +1,6 @@
 """Optional Gmail API adapter; credentials are always supplied outside Git."""
 import base64
+import json
 import os
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -23,7 +24,34 @@ def _service(config, scopes):
         if not token_path.is_file():
             raise RuntimeError(f'Falta el token OAuth local de Gmail: {token_path}')
         credentials = Credentials.from_authorized_user_file(str(token_path), scopes)
+    if credentials.expired and credentials.refresh_token:
+        from google.auth.transport.requests import Request
+        credentials.refresh(Request())
     return build('gmail', 'v1', credentials=credentials, cache_discovery=False)
+
+
+def authenticate(config, scopes=None):
+    """Run the explicit installed-app OAuth flow and persist the refresh token."""
+    try:
+        from google_auth_oauthlib.flow import InstalledAppFlow
+    except ImportError as exc:
+        raise RuntimeError('Instalá la extra Gmail para iniciar OAuth.') from exc
+    scopes = scopes or ['https://www.googleapis.com/auth/gmail.readonly']
+    client_path = Path(os.path.expanduser(config.get('gmail_client_secret_path', '~/.config/ada/google-client.json')))
+    if not client_path.is_file():
+        raise RuntimeError(f'Falta el client secret OAuth: {client_path}')
+    credentials = InstalledAppFlow.from_client_secrets_file(str(client_path), scopes).run_local_server(port=0)
+    token = json.loads(credentials.to_json())
+    credential_name = config.get('gmail_credential_name')
+    if credential_name and os.environ.get('ADA_CREDENTIAL_KEY'):
+        from src.ada.infrastructure.credentials import CredentialStore
+        CredentialStore().set(credential_name, token)
+    else:
+        token_path = Path(os.path.expanduser(config.get('gmail_token_path', '~/.config/ada/gmail-token.json')))
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_path.write_text(json.dumps(token, ensure_ascii=False), encoding='utf-8')
+        token_path.chmod(0o600)
+    return {'ok': True, 'scopes': scopes, 'credential_name': credential_name}
 
 
 def read(config, query='is:unread', limit=10):

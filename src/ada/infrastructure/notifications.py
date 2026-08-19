@@ -22,3 +22,12 @@ class CompositeNotifier:
                 errors.append(str(exc))
         if errors:
             raise RuntimeError('; '.join(errors))
+
+
+class DesktopNotifier:
+    def send(self, text, title='ADA', **kwargs):
+        try:
+            from plyer import notification
+        except ImportError as exc:
+            raise RuntimeError("Instalá la extra desktop para notificaciones.") from exc
+        notification.notify(title=title, message=str(text), app_name='ADA', timeout=int(kwargs.get('timeout', 5)))
