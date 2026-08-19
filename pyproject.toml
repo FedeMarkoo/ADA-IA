@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=1.24,<3",
     "Pillow>=9,<12",
     "rawpy>=0.27,<0.28",
+    "psutil>=5.9,<8",
 ]
 
 [project.optional-dependencies]
