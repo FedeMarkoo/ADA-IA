@@ -7,6 +7,8 @@
   "photo_root": "~/Desktop/Fotos",
   "allowed_roots": ["~/Desktop"],
   "allowed_commands": [],
+  "gmail_token_path": "~/.config/ada/gmail-token.json",
+  "instagram_publish_script": "",
   "model_catalog": [
     {"name": "llama3.2:3b", "roles": ["chat", "router"], "quality_tier": "small", "min_ram_gb": 4},
     {"name": "qwen2.5vl:3b", "roles": ["vision"], "quality_tier": "small", "min_ram_gb": 6}

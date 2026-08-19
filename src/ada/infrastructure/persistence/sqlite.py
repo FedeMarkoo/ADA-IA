@@ -121,6 +121,9 @@ class Memory:
             'suggest': ('Sugerir una acción general', ('sugerir','recomendar')),
             'run': ('Ejecutar un script', ('ejecutar','correr comando','script')),
             'food': ('Compras, recetas, cocina y planificación de comidas', ('comida','comidas','receta','recetas','cocinar','compras','supermercado','ingredientes','comer')),
+            'gmail_read': ('Leer metadatos de Gmail', ('gmail','correo','mail','email','bandeja')),
+            'gmail_send': ('Enviar un correo de Gmail', ('enviar correo','mandar mail','gmail enviar')),
+            'instagram_publish': ('Publicar una imagen en Instagram', ('instagram','publicar foto','postear')),
             'ask': ('Conversación general', ()),
         }
         self.conn.executemany(
@@ -151,7 +154,7 @@ class Memory:
         schemas = {
             'router': {
                 'type': 'object', 'properties': {
-                    'action': {'type': 'string', 'enum': ['analyze_photo','select_photo_batch','lightroom','list_photos','list_files','list_dirs','group_files','organize','suggest','run','food','ask']},
+                    'action': {'type': 'string', 'enum': ['analyze_photo','select_photo_batch','lightroom','list_photos','list_files','list_dirs','group_files','organize','suggest','run','food','gmail_read','gmail_send','instagram_publish','ask']},
                     'domain': {'type': 'string', 'enum': ['shopping','recipes']},
                     'food_action': {'type': 'string', 'enum': ['add','list','check','remove','save','suggest','recipe_to_shopping','advise']},
                     'item': {'type': 'string'}, 'quantity': {'type': 'string'}, 'unit': {'type': 'string'},

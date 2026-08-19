@@ -4,6 +4,7 @@ from pathlib import Path
 
 from src.ada.capabilities.system.run_script import run as script_run
 from src.ada.infrastructure.runtime.resources import recommended_threads
+from src.ada.infrastructure.integrations.gmail import send as gmail_send
 from src.ada.capabilities.files.filesystem import run as filesystem_run
 
 
@@ -31,6 +32,11 @@ class SecurityTests(unittest.TestCase):
             self.assertTrue(result['dry_run'])
             self.assertTrue((source / 'file.txt').exists())
             self.assertFalse((Path(directory) / 'target').exists())
+
+    def test_gmail_send_returns_preview_before_side_effect(self):
+        result = gmail_send({}, 'fede@example.com', 'Asunto', 'Mensaje')
+        self.assertEqual(result['error'], 'confirmation_required')
+        self.assertEqual(result['preview']['to'], 'fede@example.com')
 
 
 if __name__ == '__main__':
