@@ -149,6 +149,25 @@ def run(args):
     burst_paths = {str(path) for group in burst_groups for path in group}
     burst_duplicates = _demote_burst_duplicates(
         burst_groups, records, write_xmp=args.get('write_xmp', False), accept_threshold=accept_threshold)
+    if args.get('write_xmp'):
+        # The coordinator writes an initial decision, then the batch applies
+        # its calibrated threshold and burst winner policy to the actual XMP.
+        # This keeps the Lightroom sidecar in sync with the returned shortlist.
+        for item in records:
+            review = item.get('review') or {}
+            score = float(review.get('selection_score', 0) or 0)
+            selected_by_batch = (
+                int(review.get('selection_rating', 0) or 0) >= 3
+                and score >= accept_threshold
+            )
+            write_photo_xmp(
+                item['path'],
+                'Seleccionada' if selected_by_batch else 'Rechazada',
+                max(1, min(5, round(score / 2))) if selected_by_batch else 0,
+                score,
+                review.get('recommendation', 'evaluación de lote calibrada'),
+                label='Amarillo' if item['path'] in burst_paths else None,
+            )
     selected = [item for item in records if (
         int((item.get('review') or {}).get('selection_rating', 0) or 0) >= 3
         and float((item.get('review') or {}).get('selection_score', 0) or 0) >= accept_threshold)]
