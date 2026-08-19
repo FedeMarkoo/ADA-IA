@@ -170,9 +170,10 @@ class Agent:
                 or ('shortlist' in lowered and ('fotos' in lowered or path))):
             target_match = (re.search(r'shortlist\s+(?:de|con|a)?\s*(\d{2,5})', lowered)
                             or re.search(r'\b(\d{2,5})\s*(?:fotos|imágenes|imagenes)\b', lowered))
+            repair_xmp = any(w in lowered for w in ('repar', 'correg'))
             return {"action": "select_photo_batch", "path": path, "target": int(target_match.group(1)) if target_match else 300,
-                    "write_xmp": any(w in lowered for w in ('xmp', 'lightroom', 'marcar', 'etiquetar')),
-                    "repair_xmp": any(w in lowered for w in ('repar', 'correg')),
+                    "write_xmp": any(w in lowered for w in ('xmp', 'lightroom', 'marcar', 'etiquetar')) and not repair_xmp,
+                    "repair_xmp": repair_xmp,
                     "mark_bursts": any(w in lowered for w in ('ráfag', 'rafag')), "complexity": 6}
         if any(w in lowered for w in ('reporte de mis fotos', 'reporte de fotos', 'informe de mis fotos', 'informe de fotos')):
             return {'action': 'lightroom', 'lightroom_action': 'report', 'path': path, 'complexity': 3}
