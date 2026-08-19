@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 class Memory:
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, db_path):
         self.db_path = ":memory:" if str(db_path) == ":memory:" else str(Path(db_path).expanduser().resolve())
@@ -78,11 +78,15 @@ class Memory:
                 id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 topic TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
                 attempts INTEGER NOT NULL DEFAULT 0, available_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                last_error TEXT
+                last_error TEXT, priority INTEGER NOT NULL DEFAULT 0,
+                cancelled INTEGER NOT NULL DEFAULT 0, dedupe_key TEXT,
+                locked_at TEXT, lock_owner TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_memories_kind_id ON memories(kind, id DESC);
             CREATE INDEX IF NOT EXISTS idx_conversation_session_id ON conversation_messages(session, id DESC);
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(id DESC);
+            CREATE INDEX IF NOT EXISTS idx_events_ready ON events(status, cancelled, priority DESC, id);
+            CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key);
         """
         )
         columns = {row[1] for row in self.conn.execute("PRAGMA table_info(router_catalog)").fetchall()}
@@ -123,7 +127,26 @@ class Memory:
                 "INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)",
                 (self.SCHEMA_VERSION,),
             )
-            self.conn.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
+            self.conn.execute("PRAGMA user_version = 1")
+            version = 1
+        if version < 2:
+            columns = {row[1] for row in self.conn.execute("PRAGMA table_info(events)").fetchall()}
+            additions = {
+                "priority": "INTEGER NOT NULL DEFAULT 0",
+                "cancelled": "INTEGER NOT NULL DEFAULT 0",
+                "dedupe_key": "TEXT",
+                "locked_at": "TEXT",
+                "lock_owner": "TEXT",
+            }
+            for name, definition in additions.items():
+                if name not in columns:
+                    self.conn.execute(f"ALTER TABLE events ADD COLUMN {name} {definition}")
+            self.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_ready ON events(status, cancelled, priority DESC, id)"
+            )
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key)")
+            self.conn.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)")
+            self.conn.execute("PRAGMA user_version = 2")
 
     def _seed_dynamic_ai_defaults(self):
         actions = {
@@ -474,40 +497,80 @@ class Memory:
                 for row in self.conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
             ]
 
-    def publish_event(self, topic, payload):
+    def publish_event(self, topic, payload, priority=0, dedupe_key=None, delay_seconds=0):
         with self._lock:
+            if dedupe_key:
+                existing = self.conn.execute(
+                    "SELECT id FROM events WHERE dedupe_key=? AND status IN ('pending', 'processing') AND cancelled=0 "
+                    "ORDER BY id DESC LIMIT 1",
+                    (str(dedupe_key),),
+                ).fetchone()
+                if existing:
+                    return existing["id"]
             cursor = self.conn.execute(
-                "INSERT INTO events(topic, payload) VALUES (?, ?)",
-                (str(topic), json.dumps(payload, ensure_ascii=False, default=str)),
+                "INSERT INTO events(topic, payload, priority, dedupe_key, available_at) "
+                "VALUES (?, ?, ?, ?, datetime('now', ?))",
+                (
+                    str(topic),
+                    json.dumps(payload, ensure_ascii=False, default=str),
+                    int(priority),
+                    str(dedupe_key) if dedupe_key else None,
+                    f"+{max(0, int(delay_seconds))} seconds",
+                ),
             )
             self.conn.commit()
             return cursor.lastrowid
 
-    def claim_events(self, limit=10):
+    def claim_events(self, limit=10, lease_seconds=300, owner=None):
         with self._lock:
+            self.conn.execute(
+                "UPDATE events SET status='pending', locked_at=NULL, lock_owner=NULL "
+                "WHERE status='processing' AND (locked_at IS NULL OR locked_at < datetime('now', ?))",
+                (f"-{max(1, int(lease_seconds))} seconds",),
+            )
             rows = self.conn.execute(
-                "SELECT * FROM events WHERE status='pending' AND available_at <= CURRENT_TIMESTAMP ORDER BY id LIMIT ?",
+                "SELECT * FROM events WHERE status='pending' AND cancelled=0 AND available_at <= CURRENT_TIMESTAMP "
+                "ORDER BY priority DESC, id LIMIT ?",
                 (limit,),
             ).fetchall()
             for row in rows:
-                self.conn.execute("UPDATE events SET status='processing', attempts=attempts+1 WHERE id=?", (row["id"],))
+                self.conn.execute(
+                    "UPDATE events SET status='processing', attempts=attempts+1, locked_at=CURRENT_TIMESTAMP, "
+                    "lock_owner=? WHERE id=?",
+                    (owner, row["id"]),
+                )
             self.conn.commit()
             return [dict(row) for row in rows]
 
     def finish_event(self, event_id, success=True, error=None, retry_seconds=0):
         with self._lock:
             if success:
-                self.conn.execute("UPDATE events SET status='done', last_error=NULL WHERE id=?", (event_id,))
+                self.conn.execute(
+                    "UPDATE events SET status='done', last_error=NULL, locked_at=NULL, lock_owner=NULL WHERE id=?",
+                    (event_id,),
+                )
             elif retry_seconds:
                 self.conn.execute(
-                    "UPDATE events SET status='pending', available_at=datetime('now', ?), last_error=? WHERE id=?",
+                    "UPDATE events SET status='pending', available_at=datetime('now', ?), last_error=?, "
+                    "locked_at=NULL, lock_owner=NULL WHERE id=?",
                     (f"+{int(retry_seconds)} seconds", str(error or ""), event_id),
                 )
             else:
                 self.conn.execute(
-                    "UPDATE events SET status='failed', last_error=? WHERE id=?", (str(error or ""), event_id)
+                    "UPDATE events SET status='failed', last_error=?, locked_at=NULL, lock_owner=NULL WHERE id=?",
+                    (str(error or ""), event_id),
                 )
             self.conn.commit()
+
+    def cancel_event(self, event_id):
+        with self._lock:
+            cursor = self.conn.execute(
+                "UPDATE events SET cancelled=1, status='cancelled', locked_at=NULL, lock_owner=NULL "
+                "WHERE id=? AND status IN ('pending', 'processing')",
+                (event_id,),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
 
     def recent_tasks(self, limit=10):
         return [

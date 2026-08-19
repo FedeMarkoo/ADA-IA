@@ -2,6 +2,7 @@
 
 import logging
 import threading
+import uuid
 
 from src.ada.infrastructure.runtime.event_bus import EventBus
 
@@ -15,6 +16,13 @@ class Scheduler:
         self.interval = max(0.1, float(interval))
         self.max_attempts = max(1, int(max_attempts))
         self._stop = threading.Event()
+        self.owner = uuid.uuid4().hex
+
+    def schedule(self, topic, payload, priority=0, delay_seconds=0, dedupe_key=None):
+        return self.bus.publish(topic, payload, priority, dedupe_key, delay_seconds)
+
+    def cancel(self, event_id):
+        return self.bus.cancel(event_id)
 
     def run_once(self):
         handled = 0
