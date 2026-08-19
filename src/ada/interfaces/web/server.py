@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 import json
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from src.ada.application.agent import Agent
@@ -58,6 +60,7 @@ class PersistentConversation(list):
 
 conversation = PersistentConversation(agent.mem)
 pending_action = None
+chat_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='ada-chat')
 
 
 def _context_prompt(text):
@@ -572,6 +575,13 @@ def _sse(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _run_chat_in_worker(data):
+    """Run the existing JSON chat action in an isolated request context."""
+    with app.test_request_context('/api/chat', method='POST', json=data):
+        response = chat()
+        return response.get_json(silent=True) or {}
+
+
 @app.route('/api/chat/stream', methods=['POST'])
 def chat_stream():
     """Answer through SSE so the UI can show ADA's progress incrementally.
@@ -591,12 +601,20 @@ def chat_stream():
         conversation.extend([{'role': 'assistant', 'text': received, 'kind': 'status'}])
         yield _sse('status', {'text': received})
 
-        processing = 'Estoy procesando la información y preparando la respuesta.'
+        processing = 'Estoy procesando la información y preparando la respuesta. Las tareas largas continúan en segundo plano.'
         conversation.extend([{'role': 'assistant', 'text': processing, 'kind': 'status'}])
         yield _sse('status', {'text': processing})
+        future = chat_executor.submit(_run_chat_in_worker, data)
         try:
-            response = chat()
-            payload = response.get_json(silent=True) or {}
+            last_update = time.monotonic()
+            while not future.done():
+                if time.monotonic() - last_update >= 5:
+                    update = 'La tarea sigue en ejecución. ADA continúa trabajando y guardará los resultados progresivamente.'
+                    conversation.extend([{'role': 'assistant', 'text': update, 'kind': 'status'}])
+                    yield _sse('status', {'text': update})
+                    last_update = time.monotonic()
+                time.sleep(0.25)
+            payload = future.result()
             if payload.get('error'):
                 yield _sse('error', {'text': payload.get('message') or payload['error']})
             else:

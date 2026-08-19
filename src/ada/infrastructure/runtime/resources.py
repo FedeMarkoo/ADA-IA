@@ -28,11 +28,18 @@ def wait_for_cpu_budget(config=None):
     config = config or {}
     limit = cpu_budget(config) / 100.0
     cores = max(1, os.cpu_count() or 1)
+    max_wait = max(1.0, float(config.get('cpu_throttle_max_wait_seconds', 30.0)))
+    started_waiting = time.monotonic()
     while True:
         try:
             load = os.getloadavg()[0] / cores
         except (AttributeError, OSError):
             return
         if load < limit:
+            return
+        # Load average includes unrelated system work and can remain above the
+        # threshold for minutes. Throttling must slow ADA down, not deadlock a
+        # batch forever; after the grace period one admitted worker may run.
+        if time.monotonic() - started_waiting >= max_wait:
             return
         time.sleep(float(config.get('cpu_throttle_seconds', 1.0)))
