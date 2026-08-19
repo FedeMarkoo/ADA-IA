@@ -8,11 +8,13 @@ import json
 import os
 import urllib.error
 import urllib.request
+import time
 
 from src.ada.infrastructure.runtime.resources import recommended_threads
 from src.ada.infrastructure.runtime.resources import hardware_profile
 
 from src.ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
+from src.ada.infrastructure.observability import Metrics
 
 try:
     from openai import OpenAI
@@ -45,6 +47,7 @@ class ModelManager:
         )
         self.models = self.config.get("models", {})
         self._gpt4all = None
+        self.metrics = Metrics("models")
 
     def reload(self, config=None):
         """Reload model policy at runtime without recreating the agent."""
@@ -187,15 +190,23 @@ class ModelManager:
         return None
 
     def call(self, provider, prompt, **kwargs):
-        if provider == "ollama":
-            return self._call_ollama(prompt, **kwargs)
-        if provider == "openai":
-            return self._call_openai(prompt, **kwargs)
-        if provider == "anthropic":
-            return self._call_anthropic(prompt, **kwargs)
-        if provider == "gpt4all":
-            return self._call_gpt4all(prompt, **kwargs)
-        raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
+        started = time.monotonic()
+        self.metrics.increment("provider.calls", tags={"provider": provider})
+        try:
+            if provider == "ollama":
+                return self._call_ollama(prompt, **kwargs)
+            if provider == "openai":
+                return self._call_openai(prompt, **kwargs)
+            if provider == "anthropic":
+                return self._call_anthropic(prompt, **kwargs)
+            if provider == "gpt4all":
+                return self._call_gpt4all(prompt, **kwargs)
+            raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
+        except Exception:
+            self.metrics.increment("provider.errors", tags={"provider": provider})
+            raise
+        finally:
+            self.metrics.observe("provider.duration", time.monotonic() - started, {"provider": provider})
 
     def call_vision(self, provider, prompt, image_base64, **kwargs):
         if provider != "ollama":
