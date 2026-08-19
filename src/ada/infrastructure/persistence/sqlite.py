@@ -20,6 +20,8 @@ class Memory:
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._lock = threading.RLock()
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute('PRAGMA journal_mode=WAL')
+        self.conn.execute('PRAGMA synchronous=NORMAL')
         self._ensure_tables()
 
     def _ensure_tables(self):
@@ -59,6 +61,9 @@ class Memory:
                 enabled INTEGER NOT NULL DEFAULT 1, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 meta TEXT
             );
+            CREATE INDEX IF NOT EXISTS idx_memories_kind_id ON memories(kind, id DESC);
+            CREATE INDEX IF NOT EXISTS idx_conversation_session_id ON conversation_messages(session, id DESC);
+            CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(id DESC);
         """)
         columns = {row[1] for row in self.conn.execute('PRAGMA table_info(router_catalog)').fetchall()}
         if 'keywords' not in columns:
@@ -148,12 +153,13 @@ class Memory:
         return row['body'] if row else fallback
 
     def upsert_prompt_template(self, name, body, meta=None):
-        self.conn.execute(
-            'INSERT INTO prompt_templates(name,body,meta) VALUES (?,?,?) '
-            'ON CONFLICT(name) DO UPDATE SET body=excluded.body,meta=excluded.meta,updated_at=CURRENT_TIMESTAMP',
-            (name, body, json.dumps(meta or {}, ensure_ascii=False)),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                'INSERT INTO prompt_templates(name,body,meta) VALUES (?,?,?) '
+                'ON CONFLICT(name) DO UPDATE SET body=excluded.body,meta=excluded.meta,updated_at=CURRENT_TIMESTAMP',
+                (name, body, json.dumps(meta or {}, ensure_ascii=False)),
+            )
+            self.conn.commit()
 
     def json_schema(self, name, fallback=None):
         row = self.conn.execute('SELECT body FROM json_schemas WHERE name=? AND enabled=1', (name,)).fetchone()
@@ -165,34 +171,32 @@ class Memory:
             return fallback
 
     def upsert_json_schema(self, name, schema, meta=None):
-        self.conn.execute(
-            'INSERT INTO json_schemas(name,body,meta) VALUES (?,?,?) '
-            'ON CONFLICT(name) DO UPDATE SET body=excluded.body,meta=excluded.meta,updated_at=CURRENT_TIMESTAMP',
-            (name, json.dumps(schema, ensure_ascii=False), json.dumps(meta or {}, ensure_ascii=False)),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                'INSERT INTO json_schemas(name,body,meta) VALUES (?,?,?) '
+                'ON CONFLICT(name) DO UPDATE SET body=excluded.body,meta=excluded.meta,updated_at=CURRENT_TIMESTAMP',
+                (name, json.dumps(schema, ensure_ascii=False), json.dumps(meta or {}, ensure_ascii=False)),
+            )
+            self.conn.commit()
 
     def add(self, path, vector=None, meta=None):
-        self.conn.execute(
-            "INSERT OR REPLACE INTO images(path, meta) VALUES (?, ?)",
-            (str(path), json.dumps(meta or {}, ensure_ascii=False)),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute("INSERT OR REPLACE INTO images(path, meta) VALUES (?, ?)",
+                              (str(path), json.dumps(meta or {}, ensure_ascii=False)))
+            self.conn.commit()
 
     def add_text(self, text, vector=None, meta=None, kind="note"):
-        self.conn.execute(
-            "INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
-            (str(text), kind, json.dumps(meta or {}, ensure_ascii=False)),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute("INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
+                              (str(text), kind, json.dumps(meta or {}, ensure_ascii=False)))
+            self.conn.commit()
 
     def add_knowledge(self, name, content, source=None):
         """Persist a trusted reference document for retrieval by the agent."""
-        self.conn.execute(
-            "INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
-            (str(content), "knowledge", json.dumps({'name': name, 'source': source}, ensure_ascii=False)),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute("INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
+                              (str(content), "knowledge", json.dumps({'name': name, 'source': source}, ensure_ascii=False)))
+            self.conn.commit()
 
     def knowledge(self, query=None, limit=3):
         rows = self.conn.execute(
@@ -250,11 +254,10 @@ class Memory:
         return [item for _, item in scored[:k]]
 
     def record_task(self, task, result, provider=None, success=True):
-        self.conn.execute(
-            "INSERT INTO tasks(task, result, provider, success) VALUES (?, ?, ?, ?)",
-            (json.dumps(task, ensure_ascii=False), str(result), provider, int(bool(success))),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute("INSERT INTO tasks(task, result, provider, success) VALUES (?, ?, ?, ?)",
+                              (json.dumps(task, ensure_ascii=False), str(result), provider, int(bool(success))))
+            self.conn.commit()
 
     def recent_tasks(self, limit=10):
         return [dict(row) for row in self.conn.execute(

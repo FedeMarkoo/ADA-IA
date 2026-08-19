@@ -167,6 +167,16 @@ class Agent:
         if name == 'food' and 'config' not in args:
             args = dict(args)
             args['config'] = self.cfg
+        if name == 'filesystem' and 'allowed_roots' not in args:
+            configured = self.cfg.get('allowed_roots') or []
+            args['allowed_roots'] = configured + [
+                self.cfg.get('photo_root', ''), os.path.expanduser('~/Desktop')
+            ]
+            args['allowed_roots'] = [item for item in args['allowed_roots'] if item]
+        if name == 'run_script' and 'allowed_commands' not in args:
+            args['allowed_commands'] = self.cfg.get('allowed_commands', [])
+        if name == 'group_files' and 'allowed_roots' not in args:
+            args['allowed_roots'] = self.cfg.get('allowed_roots') or [os.path.expanduser('~/Desktop')]
         risky_filesystem = name == 'filesystem' and args.get('action') in {'move_files', 'copy_files', 'mkdir'}
         risky_lightroom = name == 'lightroom' and args.get('action') in {'organize', 'organizar', 'mover', 'limpiar', 'recuperar'}
         risky_mcp = name == 'mcp' and not args.get('list_tools')

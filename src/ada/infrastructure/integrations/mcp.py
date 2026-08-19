@@ -1,6 +1,8 @@
 """Small optional MCP stdio client using JSON-RPC over newline-delimited IO."""
 import json
 import subprocess
+import selectors
+import time
 
 
 class MCPClient:
@@ -15,7 +17,16 @@ class MCPClient:
         proc.stdin.write((json.dumps(payload) + '\n').encode('utf-8'))
         proc.stdin.flush()
         while True:
-            line = proc.stdout.readline()
+            deadline = time.monotonic() + self.timeout
+            selector = selectors.DefaultSelector()
+            selector.register(proc.stdout, selectors.EVENT_READ)
+            try:
+                remaining = max(0, deadline - time.monotonic())
+                if not selector.select(remaining):
+                    raise TimeoutError(f'MCP timeout waiting for {method}')
+                line = proc.stdout.readline()
+            finally:
+                selector.close()
             if not line:
                 error = proc.stderr.read().decode('utf-8', errors='replace')
                 raise RuntimeError('MCP server closed: ' + error[-1000:])

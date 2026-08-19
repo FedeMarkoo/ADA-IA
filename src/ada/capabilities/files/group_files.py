@@ -9,6 +9,9 @@ def run(args):
     name = str(args.get('name', '')).strip()
     if not source.is_dir():
         return {'error': 'source not found', 'source': str(source)}
+    roots = [Path(os.path.expanduser(str(item))).resolve() for item in args.get('allowed_roots', []) if item]
+    if roots and not any(source == root or root in source.parents for root in roots):
+        return {'error': 'path_outside_allowed_roots', 'source': str(source)}
     if not name or Path(name).name != name or name in {'.', '..'}:
         return {'error': 'invalid destination name'}
     destination = (source.parent / name).resolve()

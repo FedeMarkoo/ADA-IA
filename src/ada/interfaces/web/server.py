@@ -9,6 +9,9 @@ from src.ada.application.agent import Agent
 from src.ada.capabilities.files.filesystem import IMAGE_EXTENSIONS
 from src.ada.interfaces.telegram import TelegramListener
 import re
+import secrets
+import threading
+from functools import wraps
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 app = Flask(__name__, static_folder=str(PROJECT_ROOT / 'ui'))
@@ -17,7 +20,31 @@ app = Flask(__name__, static_folder=str(PROJECT_ROOT / 'ui'))
 @app.errorhandler(Exception)
 def handle_unexpected_error(error):
     app.logger.exception('Unhandled ADA request error')
-    return jsonify({'error': 'internal_error', 'message': str(error)}), 500
+    correlation_id = secrets.token_hex(8)
+    app.logger.error('request_failed correlation_id=%s', correlation_id)
+    return jsonify({'error': 'internal_error', 'message': 'Error interno. Reintentá más tarde.', 'correlation_id': correlation_id}), 500
+
+
+def _csrf_token():
+    return request.cookies.get('ada_csrf') or secrets.token_urlsafe(32)
+
+
+@app.before_request
+def protect_mutating_requests():
+    if request.method not in {'POST', 'DELETE', 'PUT', 'PATCH'}:
+        return None
+    if request.host.split(':', 1)[0].lower() not in {'127.0.0.1', 'localhost'}:
+        return jsonify({'error': 'invalid_host'}), 403
+    origin = request.headers.get('Origin')
+    if origin and not re.match(r'^https?://(127\.0\.0\.1|localhost)(:\d+)?$', origin, re.I):
+        return jsonify({'error': 'invalid_origin'}), 403
+    if request.path.startswith('/api/'):
+        if (request.content_type or '').split(';', 1)[0].lower() != 'application/json':
+            return jsonify({'error': 'content_type_must_be_json'}), 415
+        token = request.headers.get('X-ADA-Token')
+        if not token or not secrets.compare_digest(token, request.cookies.get('ada_csrf', '')):
+            return jsonify({'error': 'csrf_token_required'}), 403
+    return None
 
 
 @app.after_request
@@ -33,13 +60,13 @@ def hide_provider_metadata(response):
 
 cfg_path = PROJECT_ROOT / 'config.json'
 if os.path.exists(cfg_path):
-    cfg = json.loads(open(cfg_path).read())
+    cfg = json.loads(cfg_path.read_text(encoding='utf-8'))
 else:
     cfg = {}
 for key in ('db_path', 'local_model_path', 'gpt4all_model_path'):
     value = cfg.get(key)
     if isinstance(value, str) and not os.path.isabs(value):
-        cfg[key] = os.path.join(str(PROJECT_ROOT), value.replace('ADA/', '', 1))
+        cfg[key] = str((PROJECT_ROOT / value).resolve())
 
 agent = Agent(cfg)
 class PersistentConversation(list):
@@ -60,7 +87,16 @@ class PersistentConversation(list):
 
 conversation = PersistentConversation(agent.mem)
 pending_action = None
+state_lock = threading.RLock()
 chat_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='ada-chat')
+
+
+def serialize_state(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        with state_lock:
+            return function(*args, **kwargs)
+    return wrapped
 
 
 def _context_prompt(text):
@@ -72,7 +108,7 @@ def _context_prompt(text):
 
 
 def _desktop_path():
-    return os.path.expanduser('~/Desktop')
+    return str(Path.home() / 'Desktop')
 
 
 def _mentions_desktop(text):
@@ -224,6 +260,7 @@ def _photo_reply(result):
 @app.route('/')
 def index():
     response = send_from_directory(str(PROJECT_ROOT / 'ui'), 'index.html')
+    response.set_cookie('ada_csrf', _csrf_token(), samesite='Strict', secure=False)
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     return response
 
@@ -247,6 +284,7 @@ def conversation_api():
 
 
 @app.route('/api/chat', methods=['POST'])
+@serialize_state
 def chat():
     global pending_action
     data = request.get_json() or {}

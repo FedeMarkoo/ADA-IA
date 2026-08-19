@@ -1,7 +1,10 @@
 try:
-    from duckduckgo_search.duckduckgo_search import DDGS
+    from ddgs import DDGS
 except Exception:  # Web search is optional; the core agent must work offline.
-    DDGS = None
+    try:
+        from duckduckgo_search import DDGS
+    except Exception:
+        DDGS = None
 
 
 def search_web(query, max_results=5):
