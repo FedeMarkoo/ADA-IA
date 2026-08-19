@@ -9,20 +9,16 @@ import os
 from src.ada.infrastructure.persistence.sqlite import Memory
 from src.ada.application.indexer import index_folder, suggest_organization
 from src.ada.application.agent import Agent
+from src.ada.config import load_config as load_validated_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 def load_config():
     cfg_path = PROJECT_ROOT / 'config.json'
     try:
-        cfg = json.loads(cfg_path.read_text())
-        # Resolve project-relative paths independently of the current directory.
-        for key in ('db_path', 'faiss_index_path', 'local_model_path', 'gpt4all_model_path'):
-            value = cfg.get(key)
-            if isinstance(value, str) and not os.path.isabs(value):
-                cfg[key] = str((PROJECT_ROOT / value.replace('ADA/', '', 1)).resolve())
-        return cfg
-    except Exception:
+        return load_validated_config(cfg_path, PROJECT_ROOT)
+    except (OSError, ValueError) as exc:
+        logging.getLogger('ada.cli').warning('config_load_failed path=%s error=%s', cfg_path, exc)
         return {"name": "ADA", "max_threads": 4, "use_mps": False, "db_path": str(PROJECT_ROOT / 'memory.db')}
 
 def main():
