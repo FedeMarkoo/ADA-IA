@@ -3,6 +3,8 @@
 from dataclasses import dataclass, field
 import threading
 
+from src.ada.interfaces.i18n import tr
+
 
 @dataclass
 class SessionState:
@@ -27,7 +29,7 @@ class ChatService:
     def handle(self, message, session_id="main", lang=None, confirm=None):
         text = str(message or "").strip()
         if not text:
-            return {"error": "empty_message"}
+            return {"error": "empty_message", "message": tr("empty_message", lang)}
         state = self.session(session_id)
         if lang:
             self.agent.lang = lang
