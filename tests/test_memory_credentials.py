@@ -2,9 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.ada.application.memory import MemoryLayers
-from src.ada.infrastructure.credentials import CredentialStore
-from src.ada.infrastructure.persistence.sqlite import Memory
+from ada.application.memory import MemoryLayers
+from ada.infrastructure.credentials import CredentialStore
+from ada.infrastructure.persistence.sqlite import Memory
 
 
 class MemoryCredentialTests(unittest.TestCase):

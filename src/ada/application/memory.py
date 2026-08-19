@@ -1,7 +1,7 @@
 """Layered memory facade over the persistent store."""
 
 from dataclasses import dataclass
-from src.ada.infrastructure.providers import MemoryStore
+from ada.infrastructure.providers import MemoryStore
 
 
 @dataclass

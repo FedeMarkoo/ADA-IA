@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 import tempfile
 
-from src.ada.application.router import IntentRouter
+from ada.application.router import IntentRouter
 
 
 class FakeModelManager:
@@ -52,7 +52,7 @@ class IntentRouterTests(unittest.TestCase):
         self.assertEqual(result["action"], "organize")
 
     def test_photo_path_can_be_followed_by_more_text(self):
-        from src.ada.application.agent import Agent
+        from ada.application.agent import Agent
 
         with tempfile.TemporaryDirectory() as directory:
             agent = Agent({"engine_provider": "unknown", "db_path": str(Path(directory) / "test.db")})

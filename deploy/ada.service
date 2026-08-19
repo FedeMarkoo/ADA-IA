@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h/ADA
-ExecStart=%h/ADA/.venv/bin/python -m src.ada.infrastructure.runtime.daemon
+ExecStart=%h/ADA/.venv/bin/python -m ada.infrastructure.runtime.daemon
 Restart=on-failure
 RestartSec=5
 Environment=ADA_CONFIG=%h/ADA/config.json

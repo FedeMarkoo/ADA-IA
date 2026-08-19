@@ -1,7 +1,7 @@
 from pathlib import Path
-from src.ada.infrastructure.imaging.embeddings import get_image_embedding
-from src.ada.infrastructure.integrations.web_search import search_web
-from src.ada.infrastructure.persistence.sqlite import Memory
+from ada.infrastructure.imaging.embeddings import get_image_embedding
+from ada.infrastructure.integrations.web_search import search_web
+from ada.infrastructure.persistence.sqlite import Memory
 
 
 def index_folder(folder, mem: Memory):

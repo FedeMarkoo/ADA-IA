@@ -6,12 +6,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.ada.application.agent import Agent
-from src.ada.config import load_config
-from src.ada.infrastructure.runtime.resources import hardware_profile
-from src.ada.capabilities.files.filesystem import IMAGE_EXTENSIONS
-from src.ada.interfaces.telegram import TelegramListener
-from src.ada.interfaces.i18n import tr
+from ada.application.agent import Agent
+from ada.config import load_config
+from ada.infrastructure.runtime.resources import hardware_profile
+from ada.capabilities.files.filesystem import IMAGE_EXTENSIONS
+from ada.interfaces.telegram import TelegramListener
+from ada.interfaces.i18n import tr
 import re
 import secrets
 import threading

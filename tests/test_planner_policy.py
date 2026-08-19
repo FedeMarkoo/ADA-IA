@@ -1,10 +1,10 @@
 import unittest
 
-from src.ada.application.planner import Planner
-from src.ada.capabilities.registry import capability_catalog
-from src.ada.domain.policy import PolicyEngine, PolicyViolation
-from src.ada.domain.tasks import Action
-from src.ada.application.services.chat import ChatService
+from ada.application.planner import Planner
+from ada.capabilities.registry import capability_catalog
+from ada.domain.policy import PolicyEngine, PolicyViolation
+from ada.domain.tasks import Action
+from ada.application.services.chat import ChatService
 
 
 class PlannerPolicyTests(unittest.TestCase):
@@ -51,7 +51,7 @@ class PlannerPolicyTests(unittest.TestCase):
         self.assertEqual([item["text"] for item in service.history("b")], ["dos", "dos"])
 
     def test_agent_plan_request_is_validated_before_execution(self):
-        from src.ada.application.agent import Agent
+        from ada.application.agent import Agent
 
         agent = Agent({"db_path": ":memory:", "allowed_roots": ["/tmp"], "local_runtime": {"auto_start": False}})
         plan = agent.plan_request("listame los archivos")

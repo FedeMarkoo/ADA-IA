@@ -1,6 +1,6 @@
 import unittest
 
-from src.ada.config import validate_config
+from ada.config import validate_config
 
 
 class ConfigTests(unittest.TestCase):

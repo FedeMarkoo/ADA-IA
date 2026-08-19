@@ -5,10 +5,10 @@ from datetime import datetime
 from pathlib import Path
 import os
 
-from src.ada.infrastructure.persistence.sqlite import Memory
-from src.ada.application.indexer import index_folder, suggest_organization
-from src.ada.application.agent import Agent
-from src.ada.config import load_config as load_validated_config
+from ada.infrastructure.persistence.sqlite import Memory
+from ada.application.indexer import index_folder, suggest_organization
+from ada.application.agent import Agent
+from ada.config import load_config as load_validated_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
@@ -62,13 +62,13 @@ def main():
             except ImportError as exc:
                 raise SystemExit("Instalá la extra web: python3 -m pip install -e '.[web]'") from exc
             uvicorn.run(
-                "src.ada.interfaces.web.asgi:create_app",
+                "ada.interfaces.web.asgi:create_app",
                 factory=True,
                 host=os.environ.get("ADA_UI_HOST", "127.0.0.1"),
                 port=int(os.environ.get("ADA_UI_PORT", "5006")),
             )
         else:
-            from src.ada.interfaces.web.server import main as serve_web
+            from ada.interfaces.web.server import main as serve_web
 
             serve_web()
         return

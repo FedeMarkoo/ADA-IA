@@ -1,6 +1,6 @@
 """Minimal validated planner: the model can propose actions, never execute them."""
 
-from src.ada.domain.tasks import Action, Plan
+from ada.domain.tasks import Action, Plan
 
 
 class Planner:

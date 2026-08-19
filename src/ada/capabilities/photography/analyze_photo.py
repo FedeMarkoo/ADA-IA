@@ -251,7 +251,7 @@ def _extract_json(text):
 def vision_analysis(path, folder_context, config=None):
     """Ask the configured local VLM for semantic and photographer feedback."""
     config = config or {}
-    from src.ada.infrastructure.engines.model_manager import ModelManager
+    from ada.infrastructure.engines.model_manager import ModelManager
 
     manager = ModelManager(config)
     provider = config.get("vision_provider", config.get("engine_provider", "ollama"))

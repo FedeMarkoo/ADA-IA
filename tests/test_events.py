@@ -2,10 +2,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.ada.infrastructure.persistence.sqlite import Memory
-from src.ada.infrastructure.runtime.event_bus import EventBus
-from src.ada.infrastructure.runtime.scheduler import Scheduler
-from src.ada.infrastructure.runtime.watchers import FolderWatcher
+from ada.infrastructure.persistence.sqlite import Memory
+from ada.infrastructure.runtime.event_bus import EventBus
+from ada.infrastructure.runtime.scheduler import Scheduler
+from ada.infrastructure.runtime.watchers import FolderWatcher
 
 
 class EventTests(unittest.TestCase):

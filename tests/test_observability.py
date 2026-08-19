@@ -1,6 +1,6 @@
 import unittest
 
-from src.ada.infrastructure.observability import Metrics
+from ada.infrastructure.observability import Metrics
 
 
 class ObservabilityTests(unittest.TestCase):

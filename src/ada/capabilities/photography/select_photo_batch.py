@@ -4,10 +4,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import re
 
-from src.ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS, _folder_context
-from src.ada.capabilities.photography.burst_detection import detect_burst_groups
-from src.ada.capabilities.photography.xmp import mark_xmp_label, repair_photo_xmp, write_photo_xmp
-from src.ada.infrastructure.runtime.resources import wait_for_cpu_budget
+from ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS, _folder_context
+from ada.capabilities.photography.burst_detection import detect_burst_groups
+from ada.capabilities.photography.xmp import mark_xmp_label, repair_photo_xmp, write_photo_xmp
+from ada.infrastructure.runtime.resources import wait_for_cpu_budget
 
 
 def _burst_groups(files):
@@ -177,7 +177,7 @@ def run(args):
     feedback_labels = {_feedback_label(path) for path in files}
     filename_feedback_mode = "calibration" in str(root).lower() and feedback_labels == {"selected", "rejected"}
     # Import lazily so skill discovery remains independent from agent startup.
-    from src.ada.agents import MultiAgentCoordinator
+    from ada.agents import MultiAgentCoordinator
 
     config = dict(args.get("config") or {})
     # A batch must yield between files without waiting indefinitely for a

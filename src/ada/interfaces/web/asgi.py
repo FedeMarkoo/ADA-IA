@@ -6,9 +6,9 @@ import os
 from typing import Optional
 from urllib.parse import urlparse
 
-from src.ada.application.agent import Agent
-from src.ada.application.services.chat import ChatService
-from src.ada.config import load_config
+from ada.application.agent import Agent
+from ada.application.services.chat import ChatService
+from ada.config import load_config
 
 
 def create_app(agent=None):

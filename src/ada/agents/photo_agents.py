@@ -6,12 +6,12 @@ duplicating RAW decoding, model access, or scoring logic.
 
 from pathlib import Path
 
-from src.ada.capabilities.photography.analyze_photo import (
+from ada.capabilities.photography.analyze_photo import (
     _folder_context,
     technical_analysis,
     vision_analysis,
 )
-from src.ada.domain.photography.selection import evaluate_selection
+from ada.domain.photography.selection import evaluate_selection
 
 from .base import AgentResult, SpecialistAgent
 

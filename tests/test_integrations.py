@@ -1,10 +1,10 @@
 import unittest
 import sys
 
-from src.ada.infrastructure.integrations.gmail import send as gmail_send
-from src.ada.infrastructure.integrations.mcp import MCPClient
-from src.ada.infrastructure.integrations.instagram_graph import publish as graph_publish
-from src.ada.interfaces.voice import FasterWhisperSTT, PiperTTS
+from ada.infrastructure.integrations.gmail import send as gmail_send
+from ada.infrastructure.integrations.mcp import MCPClient
+from ada.infrastructure.integrations.instagram_graph import publish as graph_publish
+from ada.interfaces.voice import FasterWhisperSTT, PiperTTS
 
 
 class IntegrationTests(unittest.TestCase):

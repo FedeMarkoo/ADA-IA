@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from src.ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS, _load_rgb
+from ada.capabilities.photography.analyze_photo import IMAGE_EXTENSIONS, _load_rgb
 
 RAW_EXTENSIONS = {".raw", ".cr2", ".nef", ".arw", ".dng", ".raf", ".orf"}
 SEQUENCE_KEYS = ("SequenceNumber", "SequenceFileNumber", "ContinuousNumber", "ShotOrder")

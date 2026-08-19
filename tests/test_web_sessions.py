@@ -1,7 +1,7 @@
 import unittest
 
 try:
-    from src.ada.interfaces.web.server import app
+    from ada.interfaces.web.server import app
 except ImportError:
     app = None
 

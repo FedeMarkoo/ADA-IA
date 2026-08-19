@@ -1,6 +1,6 @@
 import unittest
 
-from src.ada.interfaces.telegram import TelegramListener
+from ada.interfaces.telegram import TelegramListener
 
 
 class TelegramAdapterTests(unittest.TestCase):

@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from src.ada.domain.tasks import Action
+from ada.domain.tasks import Action
 
 logger = logging.getLogger("ada.autonomy")
 
@@ -56,4 +56,6 @@ class AutonomyService:
         if not extensions:
             return True
         path = Path(str((payload or {}).get("path", "")))
-        return path.suffix.lower() in {str(item).lower() if str(item).startswith(".") else f".{str(item).lower()}" for item in extensions}
+        return path.suffix.lower() in {
+            str(item).lower() if str(item).startswith(".") else f".{str(item).lower()}" for item in extensions
+        }

@@ -17,7 +17,7 @@ class IntentRouter:
     def __init__(self, model_manager, config=None, memory=None):
         self.model_manager = model_manager
         self.config = config or {}
-        from src.ada.infrastructure.persistence.sqlite import Memory
+        from ada.infrastructure.persistence.sqlite import Memory
 
         self.memory = memory or Memory(":memory:")
 

@@ -3,12 +3,12 @@
 import logging
 import time
 
-from src.ada.application.agent import Agent
-from src.ada.application.services.autonomy import AutonomyService
-from src.ada.config import load_config
-from src.ada.infrastructure.runtime.event_bus import EventBus
-from src.ada.infrastructure.runtime.scheduler import Scheduler
-from src.ada.infrastructure.runtime.watchers import FolderWatcher
+from ada.application.agent import Agent
+from ada.application.services.autonomy import AutonomyService
+from ada.config import load_config
+from ada.infrastructure.runtime.event_bus import EventBus
+from ada.infrastructure.runtime.scheduler import Scheduler
+from ada.infrastructure.runtime.watchers import FolderWatcher
 
 logger = logging.getLogger("ada.daemon")
 
