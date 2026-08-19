@@ -1,3 +1,0 @@
-[console_scripts]
-ada = ada.interfaces.cli:main
-ada-autonomous = ada.infrastructure.runtime.daemon:run
