@@ -16,6 +16,15 @@ def _path(value):
     return Path(os.path.expanduser(str(value or ''))).resolve()
 
 
+def _allowed(path, args):
+    roots = args.get('allowed_roots') or []
+    if not roots:
+        return True
+    candidate = _path(path)
+    allowed = [_path(root) for root in roots]
+    return any(candidate == root or root in candidate.parents for root in allowed)
+
+
 def _files(root, recursive=True):
     paths = root.rglob('*') if recursive else root.iterdir()
     return [p for p in paths if p.is_file() and not p.name.startswith('.') and not any(part in SKIP_PARTS for part in p.parts)]
@@ -25,6 +34,8 @@ def run(args):
     action = str(args.get('action', 'list_files')).lower()
     root = _path(args.get('dir') or args.get('source'))
     recursive = bool(args.get('recursive', True))
+    if not _allowed(root, args):
+        return {'error': 'path_outside_allowed_roots', 'path': str(root)}
     if action in {'list_files', 'list_dirs', 'search'} and not root.is_dir():
         return {'error': 'dir not found', 'dir': str(root)}
 
@@ -54,6 +65,8 @@ def run(args):
         if not name or Path(name).name != name or name in {'.', '..'}:
             return {'error': 'invalid destination name'}
         destination = (root.parent / name).resolve()
+        if not _allowed(destination, args):
+            return {'error': 'path_outside_allowed_roots', 'path': str(destination)}
         if destination == root or root in destination.parents:
             return {'error': 'destination cannot be inside source'}
         destination.mkdir(parents=True, exist_ok=True)
@@ -77,6 +90,8 @@ def run(args):
         if not args.get('confirm'):
             return {'error': 'confirmation_required', 'action': action}
         target = _path(args.get('path'))
+        if not _allowed(target, args):
+            return {'error': 'path_outside_allowed_roots', 'path': str(target)}
         target.mkdir(parents=True, exist_ok=True)
         return {'ok': True, 'action': action, 'created': str(target)}
 

@@ -15,7 +15,7 @@ def recommended_threads(config=None):
     if explicit:
         return max(1, int(explicit))
     cores = os.cpu_count() or 2
-    return max(1, min(2, int(cores * cpu_budget(config) / 100.0)))
+    return max(1, min(cores, int(cores * cpu_budget(config) / 100.0) or 1))
 
 
 def wait_for_cpu_budget(config=None):

@@ -1,0 +1,14 @@
+{
+  "name": "ADA",
+  "ollama_url": "http://127.0.0.1:11434",
+  "engine_provider": "ollama",
+  "models": {"chat": "llama3.2:3b", "vision": "qwen2.5vl:3b", "router": "llama3.2:3b"},
+  "db_path": "memory.db",
+  "photo_root": "~/Desktop/Fotos",
+  "allowed_roots": ["~/Desktop"],
+  "allowed_commands": [],
+  "confirm_risky": true,
+  "privacy_default": "normal",
+  "local_runtime": {"provider": "ollama", "auto_start": true, "auto_pull": false},
+  "telegram": {"enabled": false, "allowed_chat_ids": []}
+}
