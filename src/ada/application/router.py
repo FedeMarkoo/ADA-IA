@@ -105,7 +105,8 @@ class IntentRouter:
     def _verify_food_mutation(self, provider, text, intent):
         prompt = (
             'Verificá si el usuario pidió explícitamente modificar una lista de compras. Devolvé SOLO JSON. '
-            'allow=true únicamente si pidió agregar, marcar como comprado o quitar un producto concreto. '
+            'allow=true si pidió agregar, comprar, marcar como comprado o quitar un producto concreto. '
+            'Frases como "necesito comprar pollo", "me falta leche" o "agregá arroz" son órdenes explícitas. '
             'Si pide una receta, una recomendación, otra opción o qué cocinar, allow=false. '
             f'Intención propuesta: {intent}\nPedido: {text}\n'
             '{"allow":false,"reason":""}'
