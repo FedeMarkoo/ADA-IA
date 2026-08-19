@@ -57,6 +57,18 @@ def repair_photo_xmp(path):
 
 def mark_xmp_label(path, label):
     sidecar = Path(path).with_suffix('.xmp')
+    if not sidecar.is_file():
+        # A burst can contain a file whose analysis failed or was skipped.
+        # Still create a valid sidecar so the burst label is not lost and the
+        # batch can continue processing the remaining files.
+        return write_photo_xmp(
+            path,
+            'Rechazada',
+            0,
+            0.0,
+            'Ráfaga detectada por ADA; análisis individual no disponible',
+            label=label,
+        )
     content = sidecar.read_text(encoding='utf-8', errors='ignore')
     status_match = re.search(r'ada:Status="([^"]+)"', content)
     score_match = re.search(r'ada:Score="([^"]+)"', content)
