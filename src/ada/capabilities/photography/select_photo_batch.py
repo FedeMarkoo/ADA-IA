@@ -43,6 +43,14 @@ def _feedback_label(path):
 
 def _demote_burst_duplicates(burst_groups, records, write_xmp=False, accept_threshold=5.0):
     duplicates = []
+    stored_cache = {}
+
+    def stored(path):
+        key = str(path)
+        if key not in stored_cache:
+            stored_cache[key] = _stored_review(path)
+        return stored_cache[key]
+
     for group in burst_groups:
         paths = {str(path) for path in group}
         candidates = [item for item in records if item.get('path') in paths]
@@ -54,17 +62,17 @@ def _demote_burst_duplicates(burst_groups, records, write_xmp=False, accept_thre
                 accepted.append((item, float(review.get('selection_score', 0) or 0)))
         if not accepted:
             accepted = [
-                (item, _stored_review(item.get('path'))['score'])
+                (item, stored(item.get('path'))['score'])
                 for item in candidates
-                if (_stored_review(item.get('path'))['status'] == 'Seleccionada'
-                    and _stored_review(item.get('path'))['score'] >= accept_threshold)
+                if (stored(item.get('path'))['status'] == 'Seleccionada'
+                    and stored(item.get('path'))['score'] >= accept_threshold)
             ]
         if len(accepted) <= 1:
             continue
         labeled = [item for item, _ in accepted if _feedback_label(item.get('path')) == 'selected']
         winner = max(
             (item for item, _ in accepted if not labeled or item in labeled),
-            key=lambda item: float((item.get('review') or {}).get('selection_score', 0) or _stored_review(item.get('path'))['score']),
+            key=lambda item: float((item.get('review') or {}).get('selection_score', 0) or stored(item.get('path'))['score']),
         )
         for item, score in accepted:
             if item is winner:
