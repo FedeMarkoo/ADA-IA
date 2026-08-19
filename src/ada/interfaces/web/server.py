@@ -472,7 +472,16 @@ def chat():
             reply = '¿En qué carpeta querés hacer la selección? Indicame la ruta del evento.'
             model = 'ADA · agente'
         else:
-            result = agent.decide_and_run({'type': 'select_photo_batch', 'payload': {'path': folder, 'write_xmp': parsed.get('write_xmp', False), 'repair_xmp': parsed.get('repair_xmp', False), 'mark_bursts': parsed.get('mark_bursts', False)}, 'complexity': 6})
+            result = agent.decide_and_run({'type': 'select_photo_batch', 'payload': {
+                'path': folder,
+                'write_xmp': parsed.get('write_xmp', False),
+                'repair_xmp': parsed.get('repair_xmp', False),
+                'mark_bursts': parsed.get('mark_bursts', False),
+                # Large batches stay deterministic and fast. Vision remains
+                # enabled for individual reviews and can be explicitly opted
+                # into for a smaller batch through the internal action.
+                'vision': bool(parsed.get('vision', False)),
+            }, 'complexity': 6})
             out = result.get('result', {})
             model = result.get('model', 'tool: select_photo_batch')
             if out.get('ok') and out.get('workflow') == 'photo_xmp_repair':
