@@ -22,9 +22,15 @@ class MultiAgentCoordinator:
             ]
         )
         self.max_workers = max(1, int(self.config.get("agent_max_workers", 1)))
+        self.workflows = {"photo_review": self.analyze_photo, "analyze_photo": self.analyze_photo}
 
     def available_agents(self):
         return self.registry.names()
+
+    def register_workflow(self, name, handler):
+        if not name or not callable(handler):
+            raise ValueError("El workflow debe tener nombre y handler ejecutable.")
+        self.workflows[str(name)] = handler
 
     def analyze_photo(self, task):
         wait_for_cpu_budget(self.config)
@@ -87,6 +93,7 @@ class MultiAgentCoordinator:
 
     def run(self, task):
         workflow = task.get("workflow") or task.get("type")
-        if workflow in {"photo_review", "analyze_photo"}:
-            return self.analyze_photo(task)
+        handler = self.workflows.get(workflow)
+        if handler:
+            return handler(task)
         return {"error": f"workflow not available: {workflow}"}

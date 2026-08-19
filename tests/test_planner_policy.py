@@ -1,6 +1,7 @@
 import unittest
 
 from src.ada.application.planner import Planner
+from src.ada.capabilities.registry import capability_catalog
 from src.ada.domain.policy import PolicyEngine, PolicyViolation
 from src.ada.domain.tasks import Action
 from src.ada.application.services.chat import ChatService
@@ -55,6 +56,12 @@ class PlannerPolicyTests(unittest.TestCase):
         agent = Agent({"db_path": ":memory:", "allowed_roots": ["/tmp"], "local_runtime": {"auto_start": False}})
         plan = agent.plan_request("listame los archivos")
         self.assertTrue(plan.plan_id)
+
+    def test_capability_catalog_exposes_contracts(self):
+        catalog = capability_catalog()
+        self.assertIn("filesystem", catalog)
+        self.assertIn("argument_schema", catalog["filesystem"])
+        self.assertTrue(catalog["filesystem"]["requires_confirmation"])
 
 
 if __name__ == "__main__":

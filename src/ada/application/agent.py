@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.ada.infrastructure.engines.model_manager import ModelManager
 from src.ada.infrastructure.persistence.sqlite import Memory
-from src.ada.capabilities.registry import load_capabilities
+from src.ada.capabilities.registry import capability_catalog, load_capabilities
 from src.ada.agents import MultiAgentCoordinator
 from src.ada.application.router import IntentRouter
 from src.ada.domain.policy import PolicyEngine, PolicyViolation
@@ -52,6 +52,9 @@ class Agent:
         return self.planner.from_actions(
             [Action(action_name, payload)], explanation=f"Acción seleccionada: {action_name}"
         )
+
+    def capability_catalog(self):
+        return capability_catalog()
 
     def _load_knowledge(self):
         for filename in self.cfg.get("knowledge_files", []):
