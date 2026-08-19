@@ -95,11 +95,11 @@ def run(args):
         burst_duplicates = _demote_burst_duplicates(
             burst_groups,
             [{'path': str(path), 'review': {
-                'selection_rating': 3 if _stored_review(path)['status'] == 'Seleccionada' else 0,
+                'selection_rating': 3 if _stored_review(path)['score'] >= float(args.get('batch_accept_threshold', 4.8)) else 0,
                 'selection_score': _stored_review(path)['score'],
             }} for path in raw_files],
             write_xmp=True,
-            accept_threshold=float(args.get('batch_accept_threshold', 5.6)),
+            accept_threshold=float(args.get('batch_accept_threshold', 4.8)),
         )
         burst_xmp = [mark_xmp_label(path, 'Amarillo') for path in raw_files if str(path) in burst_paths]
         return {'ok': True, 'workflow': 'photo_xmp_repair', 'path': str(root),
@@ -123,7 +123,7 @@ def run(args):
     # configured CPU policy; this only bounds admission latency.
     config.setdefault('cpu_throttle_max_wait_seconds', 2.0)
     config.setdefault('agent_max_workers', int(args.get('workers', config.get('photo_workers', 1))))
-    accept_threshold = float(args.get('batch_accept_threshold', config.get('batch_accept_threshold', 5.6)))
+    accept_threshold = float(args.get('batch_accept_threshold', config.get('batch_accept_threshold', 4.8)))
     coordinator = MultiAgentCoordinator(config)
     records, failures, xmp_written = [], [], []
 
