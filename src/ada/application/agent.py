@@ -153,6 +153,12 @@ class Agent:
             re.I,
         )
         candidate_path = quoted_path.group(1) if quoted_path and ("/" in quoted_path.group(1) or quoted_path.group(1).startswith("~")) else (path_match.group(1) if path_match else None)
+        # Quoted directories are valid workflow targets too. Without this,
+        # photo-batch requests fell through to the slow general router.
+        if quoted_path and candidate_path:
+            quoted_candidate = Path(os.path.expanduser(candidate_path.strip()))
+            if quoted_candidate.is_dir():
+                candidate_path = str(quoted_candidate)
         path = os.path.expanduser(candidate_path.strip().rstrip(".,;:!?\"'")) if candidate_path else None
         if path and Path(path).suffix.lower() in {'.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.nef', '.arw', '.cr2', '.dng', '.raf', '.orf'}:
             return {"action": "analyze_photo", "path": path, "photo_name": Path(path).name, "complexity": 5}
