@@ -11,10 +11,18 @@ def _service(config, scopes):
         from googleapiclient.discovery import build
     except ImportError as exc:
         raise RuntimeError('Instalá la extra Gmail para habilitar esta integración.') from exc
-    token_path = Path(os.path.expanduser(config.get('gmail_token_path', '~/.config/ada/gmail-token.json')))
-    if not token_path.is_file():
-        raise RuntimeError(f'Falta el token OAuth local de Gmail: {token_path}')
-    credentials = Credentials.from_authorized_user_file(str(token_path), scopes)
+    credential_name = config.get('gmail_credential_name')
+    if credential_name:
+        from src.ada.infrastructure.credentials import CredentialStore
+        token = CredentialStore().get(credential_name)
+        if not token:
+            raise RuntimeError(f'Falta la credencial cifrada de Gmail: {credential_name}')
+        credentials = Credentials.from_authorized_user_info(token, scopes)
+    else:
+        token_path = Path(os.path.expanduser(config.get('gmail_token_path', '~/.config/ada/gmail-token.json')))
+        if not token_path.is_file():
+            raise RuntimeError(f'Falta el token OAuth local de Gmail: {token_path}')
+        credentials = Credentials.from_authorized_user_file(str(token_path), scopes)
     return build('gmail', 'v1', credentials=credentials, cache_discovery=False)
 
 

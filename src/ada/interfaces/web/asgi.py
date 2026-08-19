@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 from typing import Optional
+from urllib.parse import urlparse
 
 from src.ada.application.agent import Agent
 from src.ada.application.services.chat import ChatService
@@ -20,6 +21,25 @@ def create_app(agent=None):
     config = load_config()
     service = ChatService(agent or Agent(config))
     app = FastAPI(title='ADA', version='0.1.0')
+
+    @app.middleware('http')
+    async def security(request, call_next):
+        if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+            host = request.headers.get('host', '').split(':', 1)[0].lower()
+            origin = request.headers.get('origin')
+            if host not in {'127.0.0.1', 'localhost'}:
+                from fastapi.responses import JSONResponse
+                return JSONResponse({'error': 'invalid_host'}, status_code=403)
+            origin_host = urlparse(origin).hostname if origin else None
+            if origin and origin_host not in {'127.0.0.1', 'localhost'}:
+                from fastapi.responses import JSONResponse
+                return JSONResponse({'error': 'invalid_origin'}, status_code=403)
+            token = request.headers.get('x-ada-token')
+            cookie = request.cookies.get('ada_csrf')
+            if not token or not cookie or token != cookie:
+                from fastapi.responses import JSONResponse
+                return JSONResponse({'error': 'csrf_token_required'}, status_code=403)
+        return await call_next(request)
 
     class ChatRequest(BaseModel):
         message: str
