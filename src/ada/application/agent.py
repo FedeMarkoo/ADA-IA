@@ -38,7 +38,8 @@ class Agent:
                 marker = f"[ADA knowledge: {path.name}]"
                 if not any(marker in item for item in self.mem.knowledge()):
                     self.mem.add_knowledge(path.name, marker + "\n" + path.read_text(encoding='utf-8'), source=str(path))
-            except Exception:
+            except Exception as exc:
+                logger.warning('knowledge_load_failed file=%s error=%s', filename, exc)
                 continue
 
     def _system_prompt(self):
@@ -113,7 +114,8 @@ class Agent:
                     result = self.model_manager.call("ollama", prompt, complexity=task["complexity"])
                     self.mem.record_task(task, result, provider="ollama", success=True)
                     return {"model": "ollama (fallback)", "result": result}
-                except Exception:
+                except Exception as fallback_exc:
+                    logger.warning('provider_fallback_failed provider=ollama error=%s', fallback_exc)
                     pass
             result = {"error": str(exc), "provider": provider}
             self.mem.record_task(task, result, provider=provider, success=False)

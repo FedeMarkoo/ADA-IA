@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.ada.application.agent import Agent
 from src.ada.config import load_config
+from src.ada.infrastructure.runtime.resources import hardware_profile
 from src.ada.capabilities.files.filesystem import IMAGE_EXTENSIONS
 from src.ada.interfaces.telegram import TelegramListener
 import re
@@ -266,7 +267,21 @@ def status():
         'engines': agent.model_manager.available(),
         'runtime': agent.model_manager.runtime_status(),
         'agents': list(agent.coordinator.available_agents()),
+        'hardware': hardware_profile(),
+        'models': agent.model_manager.model_catalog(),
     })
+
+
+@app.route('/api/audit')
+def audit_api():
+    limit = min(200, max(1, request.args.get('limit', default=50, type=int)))
+    entries = agent.mem.recent_audit(limit)
+    return jsonify({'entries': entries, 'count': len(entries)})
+
+
+@app.route('/api/warmup', methods=['POST'])
+def warmup():
+    return jsonify({'runtime': agent.model_manager.runtime_status(), 'ok': True})
 
 
 @app.route('/api/conversation', methods=['GET', 'DELETE'])
