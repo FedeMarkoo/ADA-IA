@@ -9,6 +9,7 @@ from src.ada.infrastructure.persistence.sqlite import Memory
 from src.ada.capabilities.registry import load_capabilities
 from src.ada.agents import MultiAgentCoordinator
 from src.ada.application.router import IntentRouter
+from src.ada.domain.policy import PolicyEngine, PolicyViolation
 
 
 logger = logging.getLogger('ada.agent')
@@ -24,6 +25,7 @@ class Agent:
         self.skills = load_capabilities()
         self.coordinator = MultiAgentCoordinator(self.cfg)
         self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem)
+        self.policy = PolicyEngine(self.cfg)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
@@ -184,18 +186,18 @@ class Agent:
             args['allowed_commands'] = self.cfg.get('allowed_commands', [])
         if name == 'group_files' and 'allowed_roots' not in args:
             args['allowed_roots'] = self.cfg.get('allowed_roots') or [os.path.expanduser('~/Desktop')]
-        risky_filesystem = name == 'filesystem' and args.get('action') in {'move_files', 'copy_files', 'mkdir'}
-        risky_lightroom = name == 'lightroom' and args.get('action') in {'organize', 'organizar', 'mover', 'limpiar', 'recuperar'}
-        risky_mcp = name == 'mcp' and not args.get('list_tools')
-        risky_external = name in {'gmail_send', 'instagram_publish'}
-        if (name in {"organize_photos", "run_script", "group_files"} or risky_filesystem or risky_lightroom or risky_mcp or risky_external) and self.cfg.get("confirm_risky", True):
-            if confirm is None:
-                return {"error": "confirmation_required", "message": f"La skill '{name}' requiere confirmación."}
-            if not confirm:
-                return {"cancelled": True, "message": "Operación cancelada por el usuario."}
         try:
+            self.policy.authorize(name, args, confirmed=bool(confirm))
             result = self.skills[name](args)
+            if isinstance(result, dict) and result.get('changed'):
+                self.mem.record_audit('operation', request={'skill': name, 'args': args}, result=result)
             return result if isinstance(result, dict) else {"result": result}
+        except PolicyViolation as exc:
+            if str(exc) == 'confirmation_required' and confirm is None:
+                return {"error": "confirmation_required", "message": f"La skill '{name}' requiere confirmación."}
+            if str(exc) == 'confirmation_required' and not confirm:
+                return {"cancelled": True, "message": "Operación cancelada por el usuario."}
+            return {"error": str(exc), "skill": name}
         except Exception as exc:
             return {"error": str(exc), "skill": name}
 
