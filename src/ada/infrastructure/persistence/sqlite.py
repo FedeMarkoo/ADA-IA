@@ -20,12 +20,16 @@ class Memory:
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._lock = threading.RLock()
         self.conn.row_factory = sqlite3.Row
+        self._fts_available = False
         self.conn.execute('PRAGMA journal_mode=WAL')
         self.conn.execute('PRAGMA synchronous=NORMAL')
         self._ensure_tables()
 
     def _ensure_tables(self):
         self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY, applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE IF NOT EXISTS images (
                 id INTEGER PRIMARY KEY, path TEXT UNIQUE NOT NULL, meta TEXT
             );
@@ -61,6 +65,12 @@ class Memory:
                 enabled INTEGER NOT NULL DEFAULT 1, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 meta TEXT
             );
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                action TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'ada',
+                request TEXT, result TEXT, success INTEGER NOT NULL DEFAULT 1,
+                correlation_id TEXT
+            );
             CREATE INDEX IF NOT EXISTS idx_memories_kind_id ON memories(kind, id DESC);
             CREATE INDEX IF NOT EXISTS idx_conversation_session_id ON conversation_messages(session, id DESC);
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(id DESC);
@@ -69,6 +79,27 @@ class Memory:
         if 'keywords' not in columns:
             self.conn.execute('ALTER TABLE router_catalog ADD COLUMN keywords TEXT')
         self.conn.commit()
+        try:
+            self.conn.executescript("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS memory_search USING fts5(
+                    content, kind, content='memories', content_rowid='id'
+                );
+                CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+                    INSERT INTO memory_search(rowid, content, kind) VALUES (new.id, new.content, new.kind);
+                END;
+                CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+                    INSERT INTO memory_search(memory_search, rowid, content, kind) VALUES ('delete', old.id, old.content, old.kind);
+                END;
+                CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+                    INSERT INTO memory_search(memory_search, rowid, content, kind) VALUES ('delete', old.id, old.content, old.kind);
+                    INSERT INTO memory_search(rowid, content, kind) VALUES (new.id, new.content, new.kind);
+                END;
+                INSERT INTO memory_search(memory_search) VALUES ('rebuild');
+            """)
+            self._fts_available = True
+        except sqlite3.OperationalError:
+            # Some minimal Python builds omit SQLite FTS5; lexical fallback remains available.
+            self._fts_available = False
         self._seed_dynamic_ai_defaults()
 
     def _seed_dynamic_ai_defaults(self):
@@ -199,8 +230,18 @@ class Memory:
             self.conn.commit()
 
     def knowledge(self, query=None, limit=3):
+        if query and self._fts_available:
+            terms = [t for t in re.findall(r"[\wáéíóúñü]+", query.lower()) if len(t) > 2]
+            if terms:
+                match = ' OR '.join('"' + term.replace('"', '') + '"' for term in terms)
+                rows = self.conn.execute(
+                    "SELECT m.content FROM memory_search s JOIN memories m ON m.id=s.rowid "
+                    "WHERE memory_search MATCH ? AND m.kind='knowledge' ORDER BY bm25(memory_search) LIMIT ?",
+                    (match, limit),
+                ).fetchall()
+                return [row['content'] for row in rows]
         rows = self.conn.execute(
-            "SELECT content, meta FROM memories WHERE kind='knowledge' ORDER BY id DESC"
+            "SELECT content, meta FROM memories WHERE kind='knowledge' ORDER BY id DESC LIMIT 10000"
         ).fetchall()
         if not query:
             return [row['content'] for row in rows[:limit]]
@@ -217,7 +258,15 @@ class Memory:
         if not query:
             return []
         terms = [t for t in re.findall(r"[\wáéíóúñü]+", query.lower()) if len(t) > 2]
-        rows = self.conn.execute("SELECT content FROM memories ORDER BY id DESC").fetchall()
+        if self._fts_available and terms:
+            match = ' OR '.join('"' + term.replace('"', '') + '"' for term in terms)
+            rows = self.conn.execute(
+                "SELECT m.content FROM memory_search s JOIN memories m ON m.id=s.rowid "
+                "WHERE memory_search MATCH ? ORDER BY bm25(memory_search) LIMIT ?",
+                (match, k),
+            ).fetchall()
+            return [row['content'] for row in rows]
+        rows = self.conn.execute("SELECT content FROM memories ORDER BY id DESC LIMIT 10000").fetchall()
         scored = []
         for row in rows:
             content = row["content"]
@@ -258,6 +307,22 @@ class Memory:
             self.conn.execute("INSERT INTO tasks(task, result, provider, success) VALUES (?, ?, ?, ?)",
                               (json.dumps(task, ensure_ascii=False), str(result), provider, int(bool(success))))
             self.conn.commit()
+
+    def record_audit(self, action, request=None, result=None, success=True, actor='ada', correlation_id=None):
+        with self._lock:
+            self.conn.execute(
+                'INSERT INTO audit_log(action, actor, request, result, success, correlation_id) VALUES (?, ?, ?, ?, ?, ?)',
+                (str(action), actor, json.dumps(request, ensure_ascii=False, default=str) if request is not None else None,
+                 json.dumps(result, ensure_ascii=False, default=str) if result is not None else None,
+                 int(bool(success)), correlation_id),
+            )
+            self.conn.commit()
+
+    def recent_audit(self, limit=50):
+        with self._lock:
+            return [dict(row) for row in self.conn.execute(
+                'SELECT * FROM audit_log ORDER BY id DESC LIMIT ?', (limit,)
+            ).fetchall()]
 
     def recent_tasks(self, limit=10):
         return [dict(row) for row in self.conn.execute(
