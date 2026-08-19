@@ -20,6 +20,12 @@ class MemoryCredentialTests(unittest.TestCase):
             self.assertEqual(memory.purge_tasks(1), 2)
             self.assertEqual(len(memory.recent_tasks(10)), 1)
 
+    def test_memory_records_schema_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            memory = Memory(str(Path(directory) / "memory.db"))
+            self.assertEqual(memory.conn.execute("PRAGMA user_version").fetchone()[0], Memory.SCHEMA_VERSION)
+            self.assertEqual(memory.conn.execute("SELECT version FROM schema_migrations").fetchone()[0], 1)
+
     def test_credentials_require_encryption_key(self):
         with tempfile.TemporaryDirectory() as directory:
             store = CredentialStore(Path(directory) / "credentials.enc")

@@ -35,7 +35,7 @@ def load_config(path=None, project_root=None):
     ):
         if key in config:
             config[key] = _path(config[key], root)
-    config.setdefault("allowed_roots", [])
+    config.setdefault("allowed_roots", [str(Path.home() / "Desktop")])
     if not isinstance(config["allowed_roots"], list):
         raise ValueError("allowed_roots debe ser una lista de carpetas.")
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]

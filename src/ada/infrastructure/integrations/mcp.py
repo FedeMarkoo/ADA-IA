@@ -18,8 +18,8 @@ class MCPClient:
             payload["params"] = params
         proc.stdin.write((json.dumps(payload) + "\n").encode("utf-8"))
         proc.stdin.flush()
+        deadline = time.monotonic() + self.timeout
         while True:
-            deadline = time.monotonic() + self.timeout
             selector = selectors.DefaultSelector()
             selector.register(proc.stdout, selectors.EVENT_READ)
             try:
@@ -65,4 +65,11 @@ class MCPClient:
             }
         finally:
             proc.terminate()
-            proc.wait(timeout=3)
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=3)
+            for stream in (proc.stdin, proc.stdout, proc.stderr):
+                if stream is not None:
+                    stream.close()
