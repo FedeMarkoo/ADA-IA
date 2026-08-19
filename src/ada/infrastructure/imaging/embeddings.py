@@ -8,11 +8,12 @@ import json
 _CONFIG = None
 _IMAGE_MODEL = None
 _TEXT_MODEL = None
+_FALLBACK_MODEL = None
 def _load_config():
     global _CONFIG
     if _CONFIG is None:
         try:
-            cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
+            cfg_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'config.json')
             with open(cfg_path, 'r') as f:
                 _CONFIG = json.load(f)
         except Exception:
@@ -29,6 +30,9 @@ def _configure_torch():
             pass
     except Exception:
         pass
+
+
+_configure_torch()
 def _load_image(path):
     return Image.open(path).convert('RGB')
 
@@ -41,7 +45,7 @@ def embed_image_sentence_transformers(model, path):
         return None
 
 def get_image_embedding(path):
-    global _IMAGE_MODEL
+    global _IMAGE_MODEL, _FALLBACK_MODEL
     try:
         from sentence_transformers import SentenceTransformer
         if _IMAGE_MODEL is None:
@@ -57,9 +61,11 @@ def get_image_embedding(path):
             img = _load_image(path)
             preprocess = T.Compose([T.Resize(256), T.CenterCrop(224), T.ToTensor()])
             x = preprocess(img).unsqueeze(0)
-            model = resnet18(pretrained=True)
-            model.eval()
+            if _FALLBACK_MODEL is None:
+                _FALLBACK_MODEL = resnet18(pretrained=True)
+                _FALLBACK_MODEL.eval()
             with torch.no_grad():
+                model = _FALLBACK_MODEL
                 feat = model.avgpool(model.layer4(model.layer3(model.layer2(model.layer1(model.relu(model.bn1(model.conv1(x))))))))
                 vec = feat.squeeze().numpy()
             return vec
