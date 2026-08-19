@@ -67,6 +67,10 @@ rutas locales; `config.json` no se versiona.
 
 La interfaz queda disponible en `http://127.0.0.1:5005/`.
 
+Para usar el servidor ASGI desde el CLI: `python3 ada.py serve --asgi`.
+También podés definir `web_framework: "asgi"` en la configuración; Flask queda
+disponible como fallback con `ADA_WEB_FRAMEWORK=flask`.
+
 El proveedor activo y los modelos se configuran en `config.json`. Por ejemplo,
 la configuración inicial usa un proveedor local con estos modelos:
 

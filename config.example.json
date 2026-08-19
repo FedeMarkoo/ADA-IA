@@ -1,5 +1,6 @@
 {
   "name": "ADA",
+  "web_framework": "asgi",
   "ollama_url": "http://127.0.0.1:11434",
   "engine_provider": "ollama",
   "models": {"chat": "llama3.2:3b", "vision": "qwen2.5vl:3b", "router": "llama3.2:3b"},
