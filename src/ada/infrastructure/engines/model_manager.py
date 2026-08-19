@@ -87,6 +87,12 @@ class ModelManager:
             minimum = item.get("min_ram_gb", 0)
             if profile["ram_gb"] and profile["ram_gb"] < float(minimum):
                 continue
+            minimum_vram = float(item.get("min_vram_gb", 0) or 0)
+            if minimum_vram and profile["vram_gb"] < minimum_vram:
+                continue
+            minimum_disk = float(item.get("min_disk_free_gb", 0) or 0)
+            if minimum_disk and profile["disk_free_gb"] < minimum_disk:
+                continue
             result.append(dict(item, hardware_tier=profile["tier"]))
         return result
 
@@ -206,6 +212,7 @@ class ModelManager:
                 "temperature": kwargs.get("temperature", 0.2),
                 "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
             },
+            "keep_alive": kwargs.get("keep_alive", self.config.get("ollama_keep_alive", "5m")),
         }
         # Ollama accepts a JSON schema here and constrains the model output.
         # This is stronger than asking for JSON in the natural-language prompt.
@@ -238,6 +245,7 @@ class ModelManager:
                     "temperature": kwargs.get("temperature", 0.1),
                     "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
                 },
+                "keep_alive": kwargs.get("keep_alive", self.config.get("ollama_keep_alive", "5m")),
             }
         ).encode("utf-8")
         request = urllib.request.Request(

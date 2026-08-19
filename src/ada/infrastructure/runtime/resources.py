@@ -1,7 +1,9 @@
 """Lightweight resource policy used before starting expensive local work."""
 
 import os
+import shutil
 import time
+from pathlib import Path
 
 try:
     import psutil
@@ -55,15 +57,38 @@ def wait_for_cpu_budget(config=None):
 
 
 def hardware_profile():
-    """Return a small, portable hardware profile for model selection."""
+    """Return a portable hardware profile for model selection and diagnostics."""
     cores = os.cpu_count() or 1
     ram_gb = 0.0
+    vram_gb = 0.0
+    gpu_backend = "cpu"
     if psutil is not None:
         ram_gb = round(psutil.virtual_memory().total / (1024**3), 1)
+    try:
+        import torch
+
+        if bool(getattr(torch, "cuda", None)) and torch.cuda.is_available():
+            gpu_backend = "cuda"
+            vram_gb = round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 1)
+        elif getattr(torch, "backends", None) and torch.backends.mps.is_available():
+            gpu_backend = "mps"
+    except Exception:
+        pass
+    try:
+        disk_free_gb = round(shutil.disk_usage(Path.home()).free / (1024**3), 1)
+    except OSError:
+        disk_free_gb = 0.0
     if ram_gb >= 32 and cores >= 8:
         tier = "high"
     elif ram_gb >= 16 and cores >= 4:
         tier = "mid"
     else:
         tier = "low"
-    return {"tier": tier, "cpu_cores": cores, "ram_gb": ram_gb}
+    return {
+        "tier": tier,
+        "cpu_cores": cores,
+        "ram_gb": ram_gb,
+        "vram_gb": vram_gb,
+        "gpu_backend": gpu_backend,
+        "disk_free_gb": disk_free_gb,
+    }

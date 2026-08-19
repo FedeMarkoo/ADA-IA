@@ -10,6 +10,8 @@ class RuntimeTests(unittest.TestCase):
         profile = hardware_profile()
         self.assertIn(profile["tier"], {"low", "mid", "high"})
         self.assertGreaterEqual(profile["cpu_cores"], 1)
+        self.assertIn("gpu_backend", profile)
+        self.assertIn("disk_free_gb", profile)
 
     def test_model_policy_can_choose_without_code_changes(self):
         manager = ModelManager(
