@@ -5,11 +5,11 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from src.ada.capabilities.registry import load_capabilities
-from src.ada.capabilities.photography.analyze_photo import _noise_score, run, technical_analysis
-from src.ada.agents import MultiAgentCoordinator
-from src.ada.agents.photo_agents import PhotoReviewAgent
-from src.ada.capabilities.photography.select_photo_batch import run as select_photo_batch
+from ada.capabilities.registry import load_capabilities
+from ada.capabilities.photography.analyze_photo import _noise_score, run, technical_analysis
+from ada.agents import MultiAgentCoordinator
+from ada.agents.photo_agents import PhotoReviewAgent
+from ada.capabilities.photography.select_photo_batch import run as select_photo_batch
 
 
 class PhotoAnalysisTests(unittest.TestCase):
@@ -145,7 +145,7 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertIn('xmp:Label="Amarillo"', (folder / "_DSC4740.xmp").read_text(encoding="utf-8"))
 
     def test_repair_keeps_user_labeled_winner_in_burst(self):
-        from src.ada.capabilities.photography.xmp import write_photo_xmp
+        from ada.capabilities.photography.xmp import write_photo_xmp
 
         folder = Path(self.tempdir.name) / "burst_repair"
         folder.mkdir()

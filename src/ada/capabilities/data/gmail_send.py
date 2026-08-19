@@ -1,6 +1,6 @@
 """Send Gmail only after an explicit confirmation, returning a preview otherwise."""
 
-from src.ada.infrastructure.integrations.gmail import send
+from ada.infrastructure.integrations.gmail import send
 
 
 def run(args):

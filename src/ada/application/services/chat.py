@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 import threading
 
-from src.ada.interfaces.i18n import tr
+from ada.interfaces.i18n import tr
 
 
 @dataclass

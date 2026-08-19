@@ -6,15 +6,15 @@ import secrets
 import time
 from pathlib import Path
 
-from src.ada.infrastructure.engines.model_manager import ModelManager
-from src.ada.infrastructure.persistence.sqlite import Memory
-from src.ada.capabilities.registry import capability_catalog, load_capabilities
-from src.ada.agents import MultiAgentCoordinator
-from src.ada.application.router import IntentRouter
-from src.ada.domain.policy import PolicyEngine, PolicyViolation
-from src.ada.application.planner import Planner
-from src.ada.domain.tasks import Action
-from src.ada.infrastructure.observability import Metrics
+from ada.infrastructure.engines.model_manager import ModelManager
+from ada.infrastructure.persistence.sqlite import Memory
+from ada.capabilities.registry import capability_catalog, load_capabilities
+from ada.agents import MultiAgentCoordinator
+from ada.application.router import IntentRouter
+from ada.domain.policy import PolicyEngine, PolicyViolation
+from ada.application.planner import Planner
+from ada.domain.tasks import Action
+from ada.infrastructure.observability import Metrics
 
 
 logger = logging.getLogger("ada.agent")

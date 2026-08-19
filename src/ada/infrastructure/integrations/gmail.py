@@ -16,7 +16,7 @@ def _service(config, scopes):
     credential_name = config.get("gmail_credential_name")
     token_path = None
     if credential_name:
-        from src.ada.infrastructure.credentials import CredentialStore
+        from ada.infrastructure.credentials import CredentialStore
 
         token = CredentialStore().get(credential_name)
         if not token:
@@ -33,7 +33,7 @@ def _service(config, scopes):
         credentials.refresh(Request())
         refreshed_token = json.loads(credentials.to_json())
         if credential_name:
-            from src.ada.infrastructure.credentials import CredentialStore
+            from ada.infrastructure.credentials import CredentialStore
 
             CredentialStore().set(credential_name, refreshed_token)
         else:
@@ -60,7 +60,7 @@ def authenticate(config, scopes=None):
     token = json.loads(credentials.to_json())
     credential_name = config.get("gmail_credential_name")
     if credential_name and os.environ.get("ADA_CREDENTIAL_KEY"):
-        from src.ada.infrastructure.credentials import CredentialStore
+        from ada.infrastructure.credentials import CredentialStore
 
         CredentialStore().set(credential_name, token)
     else:

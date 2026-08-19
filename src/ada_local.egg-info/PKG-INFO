@@ -1,0 +1,39 @@
+Metadata-Version: 2.4
+Name: ada-local
+Version: 0.1.0
+Summary: Local multi-agent assistant
+Requires-Python: >=3.9
+Requires-Dist: Flask<4,>=2.3
+Requires-Dist: numpy<3,>=1.24
+Requires-Dist: Pillow<12,>=9
+Requires-Dist: rawpy<0.28,>=0.27
+Requires-Dist: psutil<8,>=5.9
+Provides-Extra: vision
+Requires-Dist: sentence-transformers<6,>=2.2; extra == "vision"
+Requires-Dist: torch<3,>=2; extra == "vision"
+Provides-Extra: gpt4all
+Requires-Dist: gpt4all<3,>=2.8; extra == "gpt4all"
+Provides-Extra: web-search
+Requires-Dist: ddgs<10,>=9; extra == "web-search"
+Provides-Extra: remote-llm
+Requires-Dist: openai<3,>=1; extra == "remote-llm"
+Requires-Dist: anthropic<1,>=0.30; extra == "remote-llm"
+Provides-Extra: gmail
+Requires-Dist: google-api-python-client<3,>=2; extra == "gmail"
+Requires-Dist: google-auth<3,>=2; extra == "gmail"
+Requires-Dist: google-auth-oauthlib<3,>=1; extra == "gmail"
+Provides-Extra: web
+Requires-Dist: fastapi<1,>=0.110; extra == "web"
+Requires-Dist: uvicorn<1,>=0.29; extra == "web"
+Provides-Extra: credentials
+Requires-Dist: cryptography<46,>=42; extra == "credentials"
+Provides-Extra: voice
+Requires-Dist: faster-whisper<2,>=1; extra == "voice"
+Provides-Extra: desktop
+Requires-Dist: plyer<3,>=2; extra == "desktop"
+Provides-Extra: dev
+Requires-Dist: black<26,>=25; extra == "dev"
+Requires-Dist: mypy<2,>=1.10; extra == "dev"
+Requires-Dist: pre-commit<5,>=3; extra == "dev"
+Requires-Dist: pytest<9,>=8; extra == "dev"
+Requires-Dist: ruff<1,>=0.6; extra == "dev"

@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.ada.application.services.autonomy import AutonomyService
-from src.ada.infrastructure.persistence.sqlite import Memory
+from ada.application.services.autonomy import AutonomyService
+from ada.infrastructure.persistence.sqlite import Memory
 
 
 class AutonomyTests(unittest.TestCase):

@@ -10,11 +10,11 @@ import urllib.error
 import urllib.request
 import time
 
-from src.ada.infrastructure.runtime.resources import recommended_threads
-from src.ada.infrastructure.runtime.resources import hardware_profile
+from ada.infrastructure.runtime.resources import recommended_threads
+from ada.infrastructure.runtime.resources import hardware_profile
 
-from src.ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
-from src.ada.infrastructure.observability import Metrics
+from ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
+from ada.infrastructure.observability import Metrics
 
 try:
     from openai import OpenAI

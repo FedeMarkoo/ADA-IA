@@ -4,7 +4,7 @@ import logging
 import threading
 import uuid
 
-from src.ada.infrastructure.runtime.event_bus import EventBus
+from ada.infrastructure.runtime.event_bus import EventBus
 
 logger = logging.getLogger("ada.scheduler")
 

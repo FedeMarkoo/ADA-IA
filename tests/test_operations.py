@@ -1,8 +1,8 @@
 import unittest
 
-from src.ada.application.evaluation import EvaluationCase, evaluate
-from src.ada.infrastructure.notifications import CompositeNotifier
-from src.ada.infrastructure.runtime.supervisor import ServiceSupervisor
+from ada.application.evaluation import EvaluationCase, evaluate
+from ada.infrastructure.notifications import CompositeNotifier
+from ada.infrastructure.runtime.supervisor import ServiceSupervisor
 
 
 def noop():

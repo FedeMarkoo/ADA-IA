@@ -1,6 +1,6 @@
 import unittest
 
-from src.ada.interfaces.i18n import normalize_language, tr
+from ada.interfaces.i18n import normalize_language, tr
 
 
 class I18nTests(unittest.TestCase):

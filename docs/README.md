@@ -19,7 +19,7 @@
 ```bash
 cd /Users/home/Desktop/ADA
 .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python ada.py serve
+.venv/bin/ada serve
 ```
 
 La interfaz web queda disponible en `http://127.0.0.1:5005/`.

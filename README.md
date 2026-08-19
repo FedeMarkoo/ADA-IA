@@ -58,7 +58,7 @@ ADA/
 ```bash
 python3 -m venv .venv
 python3 -m pip install -e '.[dev]'
-python3 ada.py serve
+ada serve
 ```
 
 En Windows usá `.venv\\Scripts\\python.exe` y `.venv\\Scripts\\pip.exe` en lugar
@@ -67,7 +67,7 @@ rutas locales; `config.json` no se versiona.
 
 La interfaz queda disponible en `http://127.0.0.1:5005/`.
 
-Para usar el servidor ASGI desde el CLI: `python3 ada.py serve --asgi`.
+Para usar el servidor ASGI desde el CLI: `ada serve --asgi`.
 También podés definir `web_framework: "asgi"` en la configuración; Flask queda
 disponible como fallback con `ADA_WEB_FRAMEWORK=flask`.
 
@@ -85,7 +85,7 @@ fotos necesita un modelo con visión.
 La interfaz ASGI opcional se inicia con:
 
 ```bash
-python3 -m uvicorn src.ada.interfaces.web.asgi:create_app --factory --host 127.0.0.1 --port 5006
+python3 -m uvicorn ada.interfaces.web.asgi:create_app --factory --host 127.0.0.1 --port 5006
 ```
 
 Para cambiar el proveedor conversacional, modificá `engine_provider` y la
@@ -102,7 +102,7 @@ y el router no necesitan cambios.
 La memoria se puede respaldar sin copiar manualmente el archivo WAL:
 
 ```bash
-.venv/bin/python ada.py backup --path ~/Desktop/ada-backups/memory.db
+.venv/bin/ada backup --path ~/Desktop/ada-backups/memory.db
 ```
 
 ## Seguridad y datos

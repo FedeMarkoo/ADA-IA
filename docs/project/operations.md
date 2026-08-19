@@ -3,11 +3,11 @@
 ## Ejecutar
 
 ```bash
-python3 ada.py serve
+ada serve
 ```
 
 Ese entrypoint mantiene compatibilidad con Flask. Para ASGI, instalá la extra
-`web` y ejecutá `uvicorn src.ada.interfaces.web.asgi:create_app --factory`.
+`web` y ejecutá `uvicorn ada.interfaces.web.asgi:create_app --factory`.
 Para el worker autónomo, ejecutá `ada-autonomous`; usa SQLite como event store,
 watchers de carpetas y scheduler con reintentos.
 

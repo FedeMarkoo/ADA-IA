@@ -25,10 +25,6 @@ web = ["fastapi>=0.110,<1", "uvicorn>=0.29,<1"]
 credentials = ["cryptography>=42,<46"]
 voice = ["faster-whisper>=1,<2"]
 desktop = ["plyer>=2,<3"]
-
-[project.scripts]
-ada = "src.ada.interfaces.cli:main"
-ada-autonomous = "src.ada.infrastructure.runtime.daemon:run"
 dev = [
     "black>=25,<26",
     "mypy>=1.10,<2",
@@ -36,6 +32,10 @@ dev = [
     "pytest>=8,<9",
     "ruff>=0.6,<1",
 ]
+
+[project.scripts]
+ada = "ada.interfaces.cli:main"
+ada-autonomous = "ada.infrastructure.runtime.daemon:run"
 
 [tool.ruff]
 line-length = 120

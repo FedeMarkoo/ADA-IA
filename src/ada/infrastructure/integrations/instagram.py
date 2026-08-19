@@ -7,7 +7,7 @@ from pathlib import Path
 
 def publish(config, image, caption, confirm=False):
     if config.get("instagram_provider") == "graph":
-        from src.ada.infrastructure.integrations.instagram_graph import publish as graph_publish
+        from ada.infrastructure.integrations.instagram_graph import publish as graph_publish
 
         return graph_publish(config, image, caption, confirm=confirm)
     preview = {"image": str(image), "caption": str(caption)}

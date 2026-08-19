@@ -2,9 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.ada.application.agent import Agent
-from src.ada.capabilities.data.food import run
-from src.ada.infrastructure.persistence.sqlite import Memory
+from ada.application.agent import Agent
+from ada.capabilities.data.food import run
+from ada.infrastructure.persistence.sqlite import Memory
 
 
 class FoodTests(unittest.TestCase):

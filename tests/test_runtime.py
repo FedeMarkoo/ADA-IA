@@ -1,8 +1,8 @@
 import unittest
 
-from src.ada.infrastructure.engines.model_manager import ModelManager
-from src.ada.infrastructure.runtime.ollama import LocalModelRuntime
-from src.ada.infrastructure.runtime.resources import hardware_profile
+from ada.infrastructure.engines.model_manager import ModelManager
+from ada.infrastructure.runtime.ollama import LocalModelRuntime
+from ada.infrastructure.runtime.resources import hardware_profile
 
 
 class RuntimeTests(unittest.TestCase):

@@ -1,6 +1,6 @@
 """Read Gmail metadata with the least-privilege read scope."""
 
-from src.ada.infrastructure.integrations.gmail import read
+from ada.infrastructure.integrations.gmail import read
 
 
 def run(args):

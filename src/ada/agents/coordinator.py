@@ -5,8 +5,8 @@ from pathlib import Path
 
 from .base import AgentRegistry
 from .photo_agents import ContextPhotoAgent, PhotoReviewAgent, TechnicalPhotoAgent
-from src.ada.capabilities.photography.xmp import write_photo_xmp
-from src.ada.infrastructure.runtime.resources import wait_for_cpu_budget
+from ada.capabilities.photography.xmp import write_photo_xmp
+from ada.infrastructure.runtime.resources import wait_for_cpu_budget
 
 
 class MultiAgentCoordinator:
