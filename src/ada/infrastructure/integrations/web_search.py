@@ -1,3 +1,6 @@
+from typing import Any, Dict, List
+
+
 try:
     from ddgs import DDGS
 except Exception:  # Web search is optional; the core agent must work offline.
@@ -14,7 +17,7 @@ def search_web(query, max_results=5):
     try:
         with DDGS() as ddgs:
             results = ddgs.text(query, max_results=max_results)
-        out = []
+        out: List[Dict[str, Any]] = []
         if not results:
             return out
         for r in results:

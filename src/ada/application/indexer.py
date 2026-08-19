@@ -15,7 +15,7 @@ def index_folder(folder, mem: Memory):
 def suggest_organization(folder, mem: Memory):
     from collections import Counter
     p = Path(folder)
-    suggestions = Counter()
+    suggestions: Counter[str] = Counter()
     for img in p.rglob('*'):
         if img.suffix.lower() in ('.jpg', '.jpeg', '.png', '.webp'):
             tokens = img.stem.replace('_', ' ').replace('-', ' ').split()

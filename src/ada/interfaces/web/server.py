@@ -4,6 +4,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from src.ada.application.agent import Agent
 from src.ada.config import load_config
@@ -81,7 +82,7 @@ class PersistentConversation(list):
 
 
 conversation = PersistentConversation(agent.mem)
-pending_action = None
+pending_action: Optional[Dict[str, Any]] = None
 state_lock = threading.RLock()
 chat_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='ada-chat')
 
@@ -154,7 +155,7 @@ def _resolve_photo_reference(text, previous, parsed):
         except OSError:
             continue
     # RAW wins over a rendered JPG, and files in Originales win over exports.
-    unique = []
+    unique: List[Path] = []
     for candidate in candidates:
         if any(candidate.samefile(existing) for existing in unique):
             continue
@@ -324,7 +325,7 @@ def chat():
         conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
         return jsonify({'reply': reply, 'model': 'ADA · agente'})
 
-    parsed = agent.parse_prompt(text)
+    parsed: Dict[str, Any] = agent.parse_prompt(text)
     if parsed.get('action') in {'food', 'ask'}:
         app.logger.info('ADA intent action=%s food_action=%s confidence=%s', parsed.get('action'), parsed.get('food_action'), parsed.get('confidence'))
     if parsed.get('action') == 'food':
@@ -419,7 +420,7 @@ def chat():
                          "Estados:\n" + '\n'.join(f"- {item['estado']}: {item['cantidad']}" for item in out['estados']) +
                          "\n\nFormatos:\n" + '\n'.join(f"- {item['formato']}: {item['colecciones']} colecciones" for item in out['formatos']))
             elif isinstance(out, dict) and out.get('action') == 'structure' and out.get('ok'):
-                groups = {}
+                groups: Dict[str, List[Dict[str, Any]]] = {}
                 for item in out['collections']:
                     groups.setdefault(item['formato'] or 'Sin formato', []).append(item)
                 lines = [f"Estructura registrada en SQLite ({out['count']} colecciones):"]
@@ -622,7 +623,7 @@ def chat():
         'mode': 'agent',
     }
     res = agent.decide_and_run(task)
-    model = res.get('model') if isinstance(res, dict) else None
+    response_model: Optional[str] = res.get('model') if isinstance(res, dict) and isinstance(res.get('model'), str) else None
     # Normalize output
     out = res.get('result') if isinstance(res, dict) else res
     if isinstance(out, dict):
@@ -665,7 +666,7 @@ def chat():
             # retry once with a stronger non-roleplay instruction
             retry_task = {'type': None, 'prompt': f"Respuesta breve en {lang if lang!='auto' else 'español'} al mensaje: {text}. No roleplay. Contesta sólo un saludo y pregunta cómo puedo ayudar.", 'complexity': 1, 'use_memory': False}
             retry_res = agent.decide_and_run(retry_task)
-            model = retry_res.get('model') if isinstance(retry_res, dict) else model
+            response_model = retry_res.get('model') if isinstance(retry_res, dict) and isinstance(retry_res.get('model'), str) else response_model
             out = retry_res.get('result') if isinstance(retry_res, dict) else retry_res
             out_text = out if isinstance(out, str) else str(out)
             out_text = re.sub(r"I(?:'m| am) a \d{1,3}[- ]?year[- ]?old [a-zA-Z]+[\.,]?", '', out_text, flags=re.I)
@@ -674,7 +675,7 @@ def chat():
     except Exception:
         pass
     conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': out_text}])
-    return jsonify({'reply': out_text, 'model': model or 'sin modelo'})
+    return jsonify({'reply': out_text, 'model': response_model or 'sin modelo'})
 
 
 def _sse(event, payload):

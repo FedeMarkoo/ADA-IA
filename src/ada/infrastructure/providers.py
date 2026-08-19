@@ -1,5 +1,5 @@
 """Protocols that keep model providers replaceable."""
-from typing import Any, Protocol
+from typing import Any, Optional, Protocol
 
 
 class ModelProvider(Protocol):
@@ -9,7 +9,9 @@ class ModelProvider(Protocol):
 
 class MemoryStore(Protocol):
     def add_text(self, text: str, **kwargs: Any) -> None: ...
-    def search_text(self, query: str, k: int = 5) -> list: ...
+    def search_text(self, query: str, k: int = 5, kind: Optional[str] = None) -> list: ...
+    def knowledge(self, query: str, limit: int = 3) -> list: ...
+    def purge_tasks(self, keep: int = 1000) -> int: ...
 
 
 class Notifier(Protocol):

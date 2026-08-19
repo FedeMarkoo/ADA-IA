@@ -23,7 +23,8 @@ def _stored_review(path):
     score = re.search(r'ada:Score="([^"]+)"', content)
     rating = re.search(r'xmp:Rating="([^"]+)"', content)
     try:
-        numeric_score = float(score.group(1)) if score else float(rating.group(1) or 0) * 2
+        rating_value = rating.group(1) if rating else '0'
+        numeric_score = float(score.group(1)) if score else float(rating_value) * 2
     except (TypeError, ValueError):
         numeric_score = 0.0
     return {
