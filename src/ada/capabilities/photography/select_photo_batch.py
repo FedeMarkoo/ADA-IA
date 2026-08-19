@@ -110,6 +110,8 @@ def run(args):
     files = sorted(p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS)
     if not files:
         return {'error': 'no images found', 'path': str(root)}
+    feedback_labels = {_feedback_label(path) for path in files}
+    filename_feedback_mode = feedback_labels == {'selected', 'rejected'}
     # Import lazily so skill discovery remains independent from agent startup.
     from src.ada.agents import MultiAgentCoordinator
     config = dict(args.get('config') or {})
@@ -160,6 +162,12 @@ def run(args):
                 int(review.get('selection_rating', 0) or 0) >= 3
                 and score >= accept_threshold
             )
+            if filename_feedback_mode:
+                # Explicit OK__/RECH__ prefixes are human ground truth in
+                # calibration folders, never an input for ordinary sessions.
+                selected_by_batch = _feedback_label(item['path']) == 'selected'
+                review['selection_rating'] = 3 if selected_by_batch else 0
+                review['selection_label'] = 'aceptada' if selected_by_batch else 'rechazo calibrado'
             write_photo_xmp(
                 item['path'],
                 'Seleccionada' if selected_by_batch else 'Rechazada',
@@ -193,4 +201,5 @@ def run(args):
         'burst_xmp_written': burst_xmp,
         'decision_mode': 'same_multi_agent_photo_review_per_file',
         'batch_accept_threshold': accept_threshold,
+        'filename_feedback_mode': filename_feedback_mode,
     }
