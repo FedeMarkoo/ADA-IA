@@ -41,4 +41,35 @@ def load_config(path=None, project_root=None):
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]
     config.setdefault("confirm_risky", True)
     config.setdefault("allowed_commands", [])
+    validate_config(config)
+    return config
+
+
+def validate_config(config):
+    """Validate the public configuration contract before runtime construction."""
+    if not isinstance(config, dict):
+        raise ValueError("La configuración ADA debe ser un objeto JSON.")
+    list_keys = ("allowed_roots", "allowed_commands", "engine_priority", "knowledge_files", "watch_folders")
+    for key in list_keys:
+        if key in config and not isinstance(config[key], list):
+            raise ValueError(f"{key} debe ser una lista.")
+    for key in ("local_runtime", "models", "model_policy", "gpt4all", "telegram"):
+        if key in config and not isinstance(config[key], dict):
+            raise ValueError(f"{key} debe ser un objeto.")
+    framework = config.get("web_framework", "flask")
+    if framework not in {"flask", "asgi"}:
+        raise ValueError("web_framework debe ser 'flask' o 'asgi'.")
+    privacy = config.get("privacy_default", "normal")
+    if privacy not in {"normal", "high"}:
+        raise ValueError("privacy_default debe ser 'normal' o 'high'.")
+    catalog = config.get("model_catalog", [])
+    if not isinstance(catalog, (list, dict)):
+        raise ValueError("model_catalog debe ser una lista u objeto de modelos.")
+    entries = catalog if isinstance(catalog, list) else [dict(value, name=name) for name, value in catalog.items()]
+    for item in entries:
+        if not isinstance(item, dict) or not item.get("name"):
+            raise ValueError("Cada modelo del catálogo necesita name.")
+        for key in ("min_ram_gb", "min_vram_gb", "min_disk_free_gb"):
+            if key in item and float(item[key]) < 0:
+                raise ValueError(f"{key} no puede ser negativo.")
     return config
