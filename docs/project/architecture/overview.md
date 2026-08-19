@@ -21,7 +21,10 @@ memoria y auditoría
 
 ## Componentes
 
-- `src/ada/application/agent.py`: interpreta solicitudes y selecciona acciones.
+- `src/ada/application/agent.py`: compatibilidad/orquestación existente.
+- `src/ada/application/services/chat.py`: caso de uso de chat con sesiones aisladas.
+- `src/ada/application/planner.py` y `src/ada/domain/`: planes, acciones y políticas
+  independientes de Flask/Ollama.
 - `src/ada/application/router.py`: clasifica intenciones, valida planes y usa
   un fallback determinístico cuando el motor no está disponible.
 - `src/ada/infrastructure/engines/`: abstrae Ollama y motores opcionales.
@@ -29,9 +32,11 @@ memoria y auditoría
 - `src/ada/infrastructure/persistence/sqlite.py`: memoria persistente SQLite.
 - `src/ada/agents/`: registro, coordinador y especialistas.
 - `src/ada/capabilities/`: capacidades ejecutables agrupadas por categoría.
-- `src/ada/interfaces/web/server.py`, `src/ada/interfaces/telegram.py` y `ui/`:
+- `src/ada/interfaces/web/server.py`, `src/ada/interfaces/web/asgi.py`, `src/ada/interfaces/telegram.py` y `ui/`:
   adapters de entrada/salida que llegan al mismo flujo de conversación.
 - `src/ada/infrastructure/runtime/resources.py`: presupuesto de CPU, concurrencia y throttling.
+- `src/ada/infrastructure/runtime/event_bus.py`, `scheduler.py`, `watchers.py`:
+  autonomía durable y eventos.
 
 ## Workflow de fotos
 
@@ -52,8 +57,10 @@ La evolución prevista es:
 watcher → evento → regla → tarea → agente → acción → auditoría
 ```
 
-El scheduler, los watchers y los adaptadores móviles todavía son trabajo
-pendiente. Las acciones autónomas deberán ser pausables, trazables y revocables.
+El scheduler, los watchers, el supervisor multiproceso, voz local y notifiers
+ya tienen contratos/implementaciones locales; las reglas de producto y los
+adaptadores móviles se agregan sobre el mismo event bus. Las acciones autónomas
+son pausables, trazables y revocables.
 
 ## Routing inteligente
 

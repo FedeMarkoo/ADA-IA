@@ -56,11 +56,14 @@ ADA/
 ## Instalación y ejecución
 
 ```bash
-cd /Users/home/Desktop/ADA
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python ada.py serve
+python3 -m pip install -e '.[dev]'
+python3 ada.py serve
 ```
+
+En Windows usá `.venv\\Scripts\\python.exe` y `.venv\\Scripts\\pip.exe` en lugar
+de los comandos POSIX. Copiá `config.example.json` a `config.json` y ajustá las
+rutas locales; `config.json` no se versiona.
 
 La interfaz queda disponible en `http://127.0.0.1:5005/`.
 
@@ -74,6 +77,12 @@ ollama pull qwen2.5vl:3b
 
 El análisis técnico puede ejecutarse sin modelo visual; el análisis semántico de
 fotos necesita un modelo con visión.
+
+La interfaz ASGI opcional se inicia con:
+
+```bash
+python3 -m uvicorn src.ada.interfaces.web.asgi:create_app --factory --host 127.0.0.1 --port 5006
+```
 
 Para cambiar el proveedor conversacional, modificá `engine_provider` y la
 sección correspondiente (`models` o `gpt4all`) en `config.json`. Las interfaces
@@ -95,3 +104,8 @@ exponerse directamente a internet.
 Las bases SQLite, modelos descargados, entornos virtuales y archivos de prueba
 locales están excluidos del repositorio mediante `.gitignore` cuando
 corresponde.
+
+Para autonomía controlada, configurá `watch_folders`, ejecutá
+`ada-autonomous` y revisá la auditoría mediante `/api/audit`. Las acciones
+externas requieren confirmación y las operaciones de archivos devuelven un
+manifiesto utilizable por la acción `undo`.

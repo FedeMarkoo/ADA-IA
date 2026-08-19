@@ -3,12 +3,13 @@
 ## Ejecutar
 
 ```bash
-cd /Users/home/Desktop/ADA
-.venv/bin/python ada.py serve
+python3 ada.py serve
 ```
 
-Ese es el entrypoint oficial: levanta la UI web y el agente ADA en el mismo
-proceso. La UI es una interfaz de `application/agent`, no un servicio separado.
+Ese entrypoint mantiene compatibilidad con Flask. Para ASGI, instalá la extra
+`web` y ejecutá `uvicorn src.ada.interfaces.web.asgi:create_app --factory`.
+Para el worker autónomo, ejecutá `ada-autonomous`; usa SQLite como event store,
+watchers de carpetas y scheduler con reintentos.
 
 ## Pruebas
 
@@ -30,4 +31,17 @@ Esto limita la concurrencia y los hilos solicitados a Ollama. Puede haber picos
 breves al decodificar un RAW; no es un límite duro impuesto por el kernel.
 
 Las operaciones de archivos que mueven, copian, crean o eliminan requieren
-confirmación. No se debe exponer Ollama ni la API de ADA directamente a internet.
+confirmación, ofrecen `dry_run` y conservan un manifiesto para `undo`. No se
+debe exponer Ollama ni la API de ADA directamente a internet.
+
+## Credenciales
+
+Gmail usa un token OAuth local y scopes separados para lectura/envío. El almacén
+cifrado opcional requiere `ADA_CREDENTIAL_KEY`; nunca se guarda un secreto en
+`config.json` o Git. Instagram sólo ejecuta el script Node configurado, con
+allowlist de rutas y confirmación explícita.
+
+## Servicio permanente
+
+En Linux, copiá `deploy/ada.service` a `~/.config/systemd/user/ada.service`,
+recargá `systemctl --user daemon-reload` y habilitá `systemctl --user enable --now ada`.
