@@ -120,11 +120,16 @@ def _visual_similarity(left, right):
 def detect_burst_groups(files):
     """Return groups with evidence and a short diagnostic summary."""
     files = sorted(Path(path) for path in files if Path(path).suffix.lower() in IMAGE_EXTENSIONS)
+    large_batch_fast = len(files) > 100
     maker = _exiftool_metadata(files)
     metadata = {}
     for path in files:
         row = maker.get(str(path), {})
-        metadata[path] = {'maker': row, 'raw': _raw_metadata(path)}
+        # Opening every RAW just to read MakerNotes makes a large batch stall
+        # after all photo XMPs were already written. For large batches, use
+        # the camera sequence/filename fallback and reserve full RAW metadata
+        # inspection for smaller, focused reviews.
+        metadata[path] = {'maker': row, 'raw': {} if large_batch_fast else _raw_metadata(path)}
 
     candidates = []
     numbered = [(path, _number(path)) for path in files]
@@ -132,7 +137,8 @@ def detect_burst_groups(files):
     numbered.sort(key=lambda item: (str(item[0].parent), item[1]))
     for index, (left, left_number) in enumerate(numbered):
         for right, right_number in numbered[index + 1:]:
-            if right.parent != left.parent or right_number - left_number > 4:
+            max_gap = 1 if large_batch_fast else 4
+            if right.parent != left.parent or right_number - left_number > max_gap:
                 break
             candidates.append((left, right))
 
@@ -160,7 +166,7 @@ def detect_burst_groups(files):
         # RAW visual decoding is expensive. Metadata and capture time are
         # stronger and cheaper signals, so only use visual fallback when they
         # cannot decide the pair.
-        similarity = _visual_similarity(left, right) if not metadata_signal else None
+        similarity = _visual_similarity(left, right) if not metadata_signal and not large_batch_fast else None
         visual_signal = similarity is not None and similarity >= 0.985
         if metadata_signal or visual_signal:
             groups.append({left, right})
