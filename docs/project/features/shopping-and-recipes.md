@@ -39,9 +39,9 @@ Los contratos JSON que Ollama debe respetar viven en `json_schemas` (`router`,
 código mediante `Memory.upsert_json_schema()`.
 
 Al iniciar, ADA crea los valores predeterminados solo si no existen. Esto
-permite editar un prompt o desactivar una acción sin modificar el código. Las
-validaciones de seguridad y el conjunto máximo de acciones siguen siendo
-inmutables en código.
+permite editar un prompt o desactivar una acción sin modificar el código. El
+router valida contra las acciones habilitadas en `router_catalog`; una acción
+ausente o desactivada no puede ser ejecutada.
 
 ### Ejemplos por Telegram
 
