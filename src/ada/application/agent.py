@@ -221,7 +221,7 @@ class Agent:
                     decoded = None
             reply = decoded.get("reply") if isinstance(decoded, dict) else None
             reply = reply or (result if isinstance(result, str) else "")
-            logger.info("food advisor provider=%s response=%s", provider, str(reply)[:1000])
+            logger.info("food advisor provider=%s response_chars=%d", provider, len(str(reply)))
             return reply
         except Exception as exc:
             logger.warning("food advisor failed: %s", exc)

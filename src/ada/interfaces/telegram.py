@@ -125,7 +125,7 @@ class TelegramListener:
 
         text = (message.get("text") or message.get("caption") or "").strip()
         photos = message.get("photo") or []
-        logger.info("chat_id=%s mensaje=%r", chat_id, text[:500])
+        logger.info("chat_id=%s mensaje_recibido", chat_id)
         if photos:
             path = self._download_photo(photos[-1])
             text = f"{text}\nAnalizá la imagen descargada: {path}".strip()
