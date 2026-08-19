@@ -66,32 +66,53 @@ class TelegramListener:
                 self.stop_event.wait(max(self.poll_seconds, 3))
 
     def _api(self, method, payload=None):
-        data = None
-        url = f"{self.api_url}/{method}"
-        if payload:
-            data = json.dumps(payload).encode("utf-8")
-        request = urllib.request.Request(
-            url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST" if data else "GET",
-        )
-        with urllib.request.urlopen(request, timeout=35) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        if not result.get("ok"):
-            raise RuntimeError(result.get("description", "Telegram API error"))
-        return result.get("result")
+        def call():
+            data = None
+            url = f"{self.api_url}/{method}"
+            if payload:
+                data = json.dumps(payload).encode("utf-8")
+            request = urllib.request.Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST" if data else "GET",
+            )
+            with urllib.request.urlopen(request, timeout=35) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            if not result.get("ok"):
+                raise RuntimeError(result.get("description", "Telegram API error"))
+            return result.get("result")
+
+        return self._retry(call, f"telegram_api method={method}")
+
+    def _retry(self, function, operation, attempts=3):
+        last_error = None
+        for attempt in range(attempts):
+            try:
+                return function()
+            except (OSError, ValueError, RuntimeError) as exc:
+                last_error = exc
+                if attempt + 1 == attempts:
+                    logger.exception("%s failed after %d attempts", operation, attempts)
+                    break
+                delay = min(30.0, max(1.0, self.poll_seconds) * (2**attempt))
+                logger.warning("%s retry=%d delay=%.1fs", operation, attempt + 1, delay)
+                self.stop_event.wait(delay)
+        raise RuntimeError(f"{operation} failed") from last_error
 
     def _get_updates(self, offset):
-        query = {"timeout": 25, "allowed_updates": json.dumps(["message"])}
-        if offset is not None:
-            query["offset"] = offset
-        url = f"{self.api_url}/getUpdates?{urllib.parse.urlencode(query)}"
-        with urllib.request.urlopen(url, timeout=35) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        if not result.get("ok"):
-            raise RuntimeError(result.get("description", "Telegram API error"))
-        return result.get("result", [])
+        def call():
+            query = {"timeout": 25, "allowed_updates": json.dumps(["message"])}
+            if offset is not None:
+                query["offset"] = offset
+            url = f"{self.api_url}/getUpdates?{urllib.parse.urlencode(query)}"
+            with urllib.request.urlopen(url, timeout=35) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            if not result.get("ok"):
+                raise RuntimeError(result.get("description", "Telegram API error"))
+            return result.get("result", [])
+
+        return self._retry(call, "telegram_get_updates")
 
     def handle_update(self, update):
         message = update.get("message") or {}
@@ -119,16 +140,19 @@ class TelegramListener:
         self.send_message(chat_id, reply)
 
     def _invoke_internal_chat(self, text):
-        payload = json.dumps({"message": text, "lang": "es", "source": "telegram"}).encode("utf-8")
-        request = urllib.request.Request(
-            f"{self.base_url}/api/chat",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=300) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
+        def call():
+            payload = json.dumps({"message": text, "lang": "es", "source": "telegram"}).encode("utf-8")
+            request = urllib.request.Request(
+                f"{self.base_url}/api/chat",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=300) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
+
+        return self._retry(call, "telegram_internal_chat")
 
     def send_message(self, chat_id, text):
         text = str(text)
