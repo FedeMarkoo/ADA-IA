@@ -1,17 +1,18 @@
 """Minimal MCP-compatible stdio server exposing ADA capabilities."""
 import json
 import sys
+from typing import Any, Dict, List
 
 
 def serve(capabilities, descriptions=None):
     descriptions = descriptions or {}
-    tools = [{'name': name, 'description': descriptions.get(name, f'ADA capability {name}'),
-              'inputSchema': {'type': 'object'}} for name in sorted(capabilities)]
+    tools: List[Dict[str, Any]] = [{'name': name, 'description': descriptions.get(name, f'ADA capability {name}'),
+                                    'inputSchema': {'type': 'object'}} for name in sorted(capabilities)]
     for line in sys.stdin:
         try:
             request = json.loads(line)
             method = request.get('method')
-            result = {}
+            result: Dict[str, Any] = {}
             if method == 'initialize':
                 result = {'protocolVersion': '2024-11-05', 'capabilities': {'tools': {}},
                           'serverInfo': {'name': 'ADA', 'version': '0.1.0'}}

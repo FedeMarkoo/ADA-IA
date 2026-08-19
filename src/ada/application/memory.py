@@ -1,10 +1,11 @@
 """Layered memory facade over the persistent store."""
 from dataclasses import dataclass
+from src.ada.infrastructure.providers import MemoryStore
 
 
 @dataclass
 class MemoryLayers:
-    store: object
+    store: MemoryStore
 
     def remember(self, content, layer='episodic', meta=None):
         allowed = {'short_term', 'episodic', 'semantic', 'profile'}

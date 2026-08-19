@@ -80,7 +80,7 @@ def _exiftool_metadata(files):
 
 
 def _raw_metadata(path):
-    data = {}
+    data: dict = {}
     if path.suffix.lower() not in RAW_EXTENSIONS:
         return data
     try:
@@ -177,7 +177,7 @@ def detect_burst_groups(files):
                                  ('capture_time', time_signal), ('visual_similarity', visual_signal)) if value],
                              'similarity': round(similarity, 4) if similarity is not None else None})
 
-    merged = []
+    merged: list[set] = []
     for group in groups:
         for existing in merged:
             if group & existing:

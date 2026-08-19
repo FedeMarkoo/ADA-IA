@@ -11,6 +11,7 @@ class MCPClient:
         self.timeout = timeout
 
     def _request(self, proc, request_id, method, params=None):
+        assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
         payload = {'jsonrpc': '2.0', 'id': request_id, 'method': method}
         if params is not None:
             payload['params'] = params
@@ -38,6 +39,7 @@ class MCPClient:
 
     def call(self, tool=None, arguments=None, list_only=False):
         proc = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        assert proc.stdin is not None
         try:
             self._request(proc, 1, 'initialize', {'protocolVersion': '2024-11-05', 'capabilities': {}, 'clientInfo': {'name': 'ADA', 'version': '0.1.0'}})
             proc.stdin.write(b'{"jsonrpc":"2.0","method":"notifications/initialized"}\n')

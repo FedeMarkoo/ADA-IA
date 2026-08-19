@@ -11,7 +11,7 @@ import urllib.request
 from src.ada.infrastructure.runtime.resources import recommended_threads
 from src.ada.infrastructure.runtime.resources import hardware_profile
 
-from src.ada.infrastructure.runtime.ollama import LocalModelRuntime
+from src.ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
 
 try:
     from openai import OpenAI
@@ -123,20 +123,28 @@ class ModelManager:
             "reason": "ready" if self.available().get(self.provider, False) else "provider_unavailable",
         }
         if self.provider == "ollama":
+            status_available = status.available if isinstance(status, RuntimeStatus) else bool(status.get('available'))
             models = self.local_runtime.ensure_models([
                 self._model("chat", "ollama_model", "llama3.2:3b"),
                 self._model("vision", "vision_model", "qwen2.5vl:3b"),
                 self._model("router", "router_model", "llama3.2:3b"),
-            ]) if status.available else {"ready": False, "installed": [], "missing": []}
+            ]) if status_available else {"ready": False, "installed": [], "missing": []}
         else:
             models = {"ready": self.available().get(self.provider, False), "installed": [], "missing": []}
-        return {"status": status.as_dict() if hasattr(status, "as_dict") else status, "models": models}
+        status_payload = status.as_dict() if hasattr(status, "as_dict") else status
+        return {"status": status_payload, "models": models}
 
     def choose(self, task):
         """Choose a provider using complexity, privacy and explicit preferences."""
         available = self.available()
-        requested = task.get("model") or task.get("model_hint") or self.config.get("model_hint")
-        requested = {"local": "ollama", "ollama": "ollama", "chatgpt": "openai", "claude": "anthropic"}.get(requested, requested)
+        requested_value = task.get("model") or task.get("model_hint") or self.config.get("model_hint")
+        requested = str(requested_value) if requested_value else None
+        if requested == "local":
+            requested = "ollama"
+        elif requested == "chatgpt":
+            requested = "openai"
+        elif requested == "claude":
+            requested = "anthropic"
         if requested in available and available[requested]:
             return requested
 
@@ -192,9 +200,9 @@ class ModelManager:
         # This is stronger than asking for JSON in the natural-language prompt.
         if kwargs.get('format'):
             payload['format'] = kwargs['format']
-        payload = json.dumps(payload).encode("utf-8")
+        request_body = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
-            self.ollama_url + "/api/chat", data=payload,
+            self.ollama_url + "/api/chat", data=request_body,
             headers={"Content-Type": "application/json"}, method="POST"
         )
         try:
