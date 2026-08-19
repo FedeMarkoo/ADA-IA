@@ -11,6 +11,7 @@ from src.ada.config import load_config
 from src.ada.infrastructure.runtime.resources import hardware_profile
 from src.ada.capabilities.files.filesystem import IMAGE_EXTENSIONS
 from src.ada.interfaces.telegram import TelegramListener
+from src.ada.interfaces.i18n import tr
 import re
 import secrets
 import threading
@@ -389,11 +390,7 @@ def chat():
         and len(text.strip().split()) <= 3
         and re.match(r"^(hola|hi|hello|buenas|buenos d[ií]as|hey)$", text.strip(), flags=re.I)
     ):
-        canned = (
-            "Hola, ¿en qué puedo ayudarte?"
-            if lang and lang.startswith("es")
-            else ("Hello, how can I help you?" if lang and lang.startswith("en") else "Hola, ¿en qué puedo ayudarte?")
-        )
+        canned = tr("greeting", lang)
         conversation.extend([{"role": "user", "text": text}, {"role": "assistant", "text": canned}])
         return jsonify({"reply": canned, "model": "ADA · respuesta rápida"})
 
