@@ -85,8 +85,6 @@ class Memory:
             CREATE INDEX IF NOT EXISTS idx_memories_kind_id ON memories(kind, id DESC);
             CREATE INDEX IF NOT EXISTS idx_conversation_session_id ON conversation_messages(session, id DESC);
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(id DESC);
-            CREATE INDEX IF NOT EXISTS idx_events_ready ON events(status, cancelled, priority DESC, id);
-            CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key);
         """
         )
         columns = {row[1] for row in self.conn.execute("PRAGMA table_info(router_catalog)").fetchall()}

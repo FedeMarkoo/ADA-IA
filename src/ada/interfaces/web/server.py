@@ -339,8 +339,14 @@ def status():
             "agents": list(agent.coordinator.available_agents()),
             "hardware": hardware_profile(),
             "models": agent.model_manager.model_catalog(),
+            "metrics": {"agent": agent.metrics.snapshot(), "models": agent.model_manager.metrics.snapshot()},
         }
     )
+
+
+@app.route("/api/metrics")
+def metrics_api():
+    return jsonify({"agent": agent.metrics.snapshot(), "models": agent.model_manager.metrics.snapshot()})
 
 
 @app.route("/api/audit")

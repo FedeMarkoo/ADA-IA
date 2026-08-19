@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import secrets
+import time
 from pathlib import Path
 
 from src.ada.infrastructure.engines.model_manager import ModelManager
@@ -13,6 +14,7 @@ from src.ada.application.router import IntentRouter
 from src.ada.domain.policy import PolicyEngine, PolicyViolation
 from src.ada.application.planner import Planner
 from src.ada.domain.tasks import Action
+from src.ada.infrastructure.observability import Metrics
 
 
 logger = logging.getLogger("ada.agent")
@@ -23,6 +25,7 @@ class Agent:
 
     def __init__(self, cfg=None):
         self.cfg = cfg or {}
+        self.metrics = Metrics("agent")
         self.model_manager = ModelManager(self.cfg)
         db_path = self.cfg.get("db_path", str(Path(__file__).parent / "memory.db"))
         self.mem = Memory(db_path)
@@ -248,18 +251,25 @@ class Agent:
         if name == "group_files" and "allowed_roots" not in args:
             args["allowed_roots"] = self.cfg.get("allowed_roots") or [os.path.expanduser("~/Desktop")]
         try:
+            self.metrics.increment("capability.calls", tags={"name": name})
+            started = time.monotonic()
             self.policy.authorize(name, args, confirmed=bool(confirm))
             result = self.skills[name](args)
+            self.metrics.observe("capability.duration", time.monotonic() - started, {"name": name})
+            if isinstance(result, dict) and result.get("error"):
+                self.metrics.increment("capability.errors", tags={"name": name})
             if isinstance(result, dict) and result.get("changed"):
                 self.mem.record_audit("operation", request={"skill": name, "args": args}, result=result)
             return result if isinstance(result, dict) else {"result": result}
         except PolicyViolation as exc:
+            self.metrics.increment("capability.policy_denials", tags={"name": name})
             if str(exc) == "confirmation_required" and confirm is None:
                 return {"error": "confirmation_required", "message": f"La skill '{name}' requiere confirmación."}
             if str(exc) == "confirmation_required" and not confirm:
                 return {"cancelled": True, "message": "Operación cancelada por el usuario."}
             return {"error": str(exc), "skill": name}
         except Exception as exc:
+            self.metrics.increment("capability.errors", tags={"name": name})
             return {**self._safe_error("La capability no pudo completar la operación.", exc), "skill": name}
 
     @staticmethod
