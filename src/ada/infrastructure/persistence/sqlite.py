@@ -262,20 +262,30 @@ class Memory:
         scored.sort(key=lambda item: item[0], reverse=True)
         return [content for score, content in scored[:limit] if score]
 
-    def search_text(self, vector_or_query, k=5):
+    def search_text(self, vector_or_query, k=5, kind=None):
         query = vector_or_query if isinstance(vector_or_query, str) else ""
         if not query:
             return []
         terms = [t for t in re.findall(r"[\wáéíóúñü]+", query.lower()) if len(t) > 2]
         if self._fts_available and terms:
             match = ' OR '.join('"' + term.replace('"', '') + '"' for term in terms)
-            rows = self.conn.execute(
-                "SELECT m.content FROM memory_search s JOIN memories m ON m.id=s.rowid "
-                "WHERE memory_search MATCH ? ORDER BY bm25(memory_search) LIMIT ?",
-                (match, k),
-            ).fetchall()
+            if kind:
+                rows = self.conn.execute(
+                    "SELECT m.content FROM memory_search s JOIN memories m ON m.id=s.rowid "
+                    "WHERE memory_search MATCH ? AND m.kind=? ORDER BY bm25(memory_search) LIMIT ?",
+                    (match, kind, k),
+                ).fetchall()
+            else:
+                rows = self.conn.execute(
+                    "SELECT m.content FROM memory_search s JOIN memories m ON m.id=s.rowid "
+                    "WHERE memory_search MATCH ? ORDER BY bm25(memory_search) LIMIT ?",
+                    (match, k),
+                ).fetchall()
             return [row['content'] for row in rows]
-        rows = self.conn.execute("SELECT content FROM memories ORDER BY id DESC LIMIT 10000").fetchall()
+        if kind:
+            rows = self.conn.execute("SELECT content FROM memories WHERE kind=? ORDER BY id DESC LIMIT 10000", (kind,)).fetchall()
+        else:
+            rows = self.conn.execute("SELECT content FROM memories ORDER BY id DESC LIMIT 10000").fetchall()
         scored = []
         for row in rows:
             content = row["content"]

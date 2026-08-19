@@ -13,10 +13,11 @@ class MemoryLayers:
         self.store.add_text(content, meta=meta, kind=layer)
 
     def recall(self, query, limit=5, layers=None):
-        results = self.store.search_text(query, k=max(limit * 3, limit))
         if not layers:
-            return results[:limit]
-        # The backing store returns content only; use its lexical search for compatibility.
+            return self.store.search_text(query, k=limit)
+        results = []
+        for layer in layers:
+            results.extend(self.store.search_text(query, k=limit, kind=layer))
         return results[:limit]
 
     def profile(self, query, limit=3):
