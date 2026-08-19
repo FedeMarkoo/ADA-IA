@@ -156,9 +156,13 @@ def detect_burst_groups(files):
         for item in (left_meta['raw'], right_meta['raw']):
             times.append(_parse_datetime(item.get('timestamp')))
         time_signal = bool(times[0] and times[1] and abs((times[1] - times[0]).total_seconds()) <= 1.0)
-        similarity = _visual_similarity(left, right)
+        metadata_signal = sequence_signal or mode_signal or time_signal
+        # RAW visual decoding is expensive. Metadata and capture time are
+        # stronger and cheaper signals, so only use visual fallback when they
+        # cannot decide the pair.
+        similarity = _visual_similarity(left, right) if not metadata_signal else None
         visual_signal = similarity is not None and similarity >= 0.985
-        if sequence_signal or mode_signal or time_signal or visual_signal:
+        if metadata_signal or visual_signal:
             groups.append({left, right})
             evidence.append({'files': [str(left), str(right)],
                              'signals': [name for name, value in (
