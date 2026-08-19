@@ -31,7 +31,22 @@ export TELEGRAM_ALLOWED_CHAT_IDS='123456789'
 .venv/bin/python ada.py serve
 ```
 
+Para diagnóstico detallado:
+
+```bash
+.venv/bin/python ada.py serve -debug
+```
+
+La ejecución escribe un log con el timestamp de inicio en
+`/Users/home/Desktop/logs/ada-debug-YYYYMMDD-HHMMSS.log`, además de mostrarlo
+en la terminal. El archivo registra `chat_id`, mensaje recibido, router,
+clasificador de comida, asesor, respuesta y errores; nunca registra el token.
+
 `TELEGRAM_ALLOWED_CHAT_IDS` es opcional, pero recomendado: si se informa,
 ADA solo responde a esos chats. Telegram queda desactivado si no hay token.
 
 WhatsApp requiere evaluar costos, límites y API oficial antes de implementarlo.
+
+Después de modificar el código hay que reiniciar el proceso. Si aparece
+`Address already in use`, hay otra instancia usando el puerto 5005; detenela
+con `Ctrl+C` antes de volver a iniciar ADA.

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import logging
+from datetime import datetime
 from pathlib import Path
 import os
 
@@ -31,7 +33,8 @@ def main():
     p_suggest = sub.add_parser('suggest')
     p_suggest.add_argument('--dir', required=True)
     p_run = sub.add_parser('run')
-    sub.add_parser('serve', help='Start the web UI and ADA agent in one process')
+    p_serve = sub.add_parser('serve', help='Start the web UI and ADA agent in one process')
+    p_serve.add_argument('-debug', '--debug', action='store_true', help='Enable detailed router and model logs')
     p_prompt = sub.add_parser('prompt')
     p_prompt.add_argument('text', help='Natural language prompt for ADA')
 
@@ -39,6 +42,20 @@ def main():
     cfg = load_config()
     print(f"Starting {cfg.get('name', 'ADA')}")
     if args.cmd == 'serve':
+        if args.debug:
+            started_at = datetime.now().strftime('%Y%m%d-%H%M%S')
+            log_dir = PROJECT_ROOT / 'logs'
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / f'ada-debug-{started_at}.log'
+            formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+            stream = logging.StreamHandler()
+            stream.setFormatter(formatter)
+            file_handler = logging.FileHandler(log_path, encoding='utf-8')
+            file_handler.setFormatter(formatter)
+            logging.basicConfig(level=logging.DEBUG, handlers=[stream, file_handler], force=True)
+            print(f'Debug log: {log_path}')
+        else:
+            logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(name)s: %(message)s')
         from src.ada.interfaces.web.server import main as serve_web
         serve_web()
         return

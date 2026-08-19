@@ -7,12 +7,16 @@ this module.
 """
 
 import json
+import logging
 import os
 import threading
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+
+logger = logging.getLogger('ada.telegram')
 
 
 class TelegramListener:
@@ -60,7 +64,7 @@ class TelegramListener:
                     offset = update.get("update_id", 0) + 1
                     self.handle_update(update)
             except Exception as exc:
-                print(f"Telegram adapter: {exc}")
+                logger.exception("adapter error: %s", exc)
                 self.stop_event.wait(max(self.poll_seconds, 3))
 
     def _api(self, method, payload=None):
@@ -95,11 +99,14 @@ class TelegramListener:
         message = update.get("message") or {}
         chat = message.get("chat") or {}
         chat_id = str(chat.get("id", ""))
+        if chat_id:
+            logger.info("chat_id=%s", chat_id)
         if not chat_id or (self.allowed_chat_ids and chat_id not in self.allowed_chat_ids):
             return
 
         text = (message.get("text") or message.get("caption") or "").strip()
         photos = message.get("photo") or []
+        logger.info("chat_id=%s mensaje=%r", chat_id, text[:500])
         if photos:
             path = self._download_photo(photos[-1])
             text = f"{text}\nAnalizá la imagen descargada: {path}".strip()
@@ -108,6 +115,7 @@ class TelegramListener:
             return
 
         reply = self._invoke_internal_chat(text)
+        logger.info("chat_id=%s respuesta=%r", chat_id, str(reply)[:500])
         self.send_message(chat_id, reply)
 
     def _invoke_internal_chat(self, text):

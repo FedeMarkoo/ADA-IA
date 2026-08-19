@@ -22,6 +22,14 @@ class TelegramAdapterTests(unittest.TestCase):
         self.assertEqual(sent[0][0], "7")
         self.assertIn("/tmp/photo.jpg", sent[0][1])
 
+    def test_logs_chat_id(self):
+        listener = TelegramListener({"telegram": {"enabled": False}})
+        listener._invoke_internal_chat = lambda text: text
+        listener.send_message = lambda chat_id, text: None
+        with self.assertLogs('ada.telegram', level='INFO') as logs:
+            listener.handle_update({"message": {"chat": {"id": 987654321}, "text": "hola"}})
+        self.assertIn("chat_id=987654321", "\n".join(logs.output))
+
 
 if __name__ == "__main__":
     unittest.main()

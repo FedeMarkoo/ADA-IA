@@ -134,7 +134,7 @@ class ModelManager:
 
     def _call_ollama(self, prompt, **kwargs):
         model = kwargs.get("ollama_model") or self._model("chat", "ollama_model", "llama3.2:3b")
-        payload = json.dumps({
+        payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
@@ -142,7 +142,12 @@ class ModelManager:
                 "temperature": kwargs.get("temperature", 0.2),
                 "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
             },
-        }).encode("utf-8")
+        }
+        # Ollama accepts a JSON schema here and constrains the model output.
+        # This is stronger than asking for JSON in the natural-language prompt.
+        if kwargs.get('format'):
+            payload['format'] = kwargs['format']
+        payload = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             self.ollama_url + "/api/chat", data=payload,
             headers={"Content-Type": "application/json"}, method="POST"

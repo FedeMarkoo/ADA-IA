@@ -31,6 +31,18 @@ class IntentRouterTests(unittest.TestCase):
         self.assertEqual(len(result["steps"]), 1)
         self.assertEqual(manager.calls[0][2]["temperature"], 0)
 
+    def test_model_routes_food_semantically(self):
+        manager = FakeModelManager('{"action":"food","domain":"recipes","food_action":"advise","advisor":true,"confidence":0.97}')
+        result = IntentRouter(manager).route('¿Qué puedo comer mañana según mis gustos?')
+        self.assertEqual(result['action'], 'food')
+        self.assertEqual(result['food_action'], 'advise')
+
+    def test_normalizes_model_food_compound_action(self):
+        manager = FakeModelManager('{"action":"food/advise","needs_clarification":true}')
+        result = IntentRouter(manager).route('¿Qué puedo cocinar?')
+        self.assertEqual(result['action'], 'food')
+        self.assertEqual(result['food_action'], 'advise')
+
     def test_invalid_model_action_uses_fallback(self):
         result = IntentRouter(FakeModelManager('{"action":"delete_everything"}')).route("quiero ordenar los archivos")
         self.assertEqual(result["action"], "organize")

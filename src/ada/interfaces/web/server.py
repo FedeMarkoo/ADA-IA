@@ -278,6 +278,56 @@ def chat():
         return jsonify({'reply': reply, 'model': 'ADA · agente'})
 
     parsed = agent.parse_prompt(text)
+    if parsed.get('action') in {'food', 'ask'}:
+        app.logger.info('ADA intent action=%s food_action=%s confidence=%s', parsed.get('action'), parsed.get('food_action'), parsed.get('confidence'))
+    if parsed.get('action') == 'food':
+        if parsed.get('needs_clarification'):
+            reply = parsed.get('clarifying_question', 'Necesito un dato más para ayudarte.')
+            conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+            return jsonify({'reply': reply, 'model': 'food-router'})
+        if parsed.get('advisor') or parsed.get('food_action') in {'suggest', 'advise'}:
+            advice = agent.advise_food(text)
+            if advice:
+                conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': str(advice)}])
+                return jsonify({'reply': str(advice), 'model': 'food-advisor'})
+            # Ollama may be unavailable or time out. Use the local recipe
+            # catalog as a useful fallback; never query the shopping domain
+            # for recipe suggestions.
+            fallback_result = agent.decide_and_run({'type': 'food', 'payload': {
+                'domain': 'recipes', 'food_action': 'list', 'config': cfg,
+            }, 'complexity': 2})
+            recipes = (fallback_result.get('result') or {}).get('recipes', [])
+            reply = 'No pude consultar al asesor ahora. De tu recetario, probaría con:\n' + ('\n'.join(f"- {item['name']}" for item in recipes[:3]) if recipes else 'No hay recetas cargadas.')
+            conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+            return jsonify({'reply': reply, 'model': 'food-catalog-fallback'})
+        payload = {key: value for key, value in parsed.items() if key not in {'action', 'complexity'}}
+        result = agent.decide_and_run({'type': 'food', 'payload': payload, 'complexity': parsed.get('complexity', 2)})
+        out = result.get('result', {})
+        food_action = parsed.get('food_action')
+        if out.get('error') == 'item_not_found':
+            reply = f"No encontré “{out.get('item', '')}” en la lista."
+        elif out.get('error') == 'recipe_not_found':
+            reply = f"No encontré esa receta: {parsed.get('name', '')}."
+        elif parsed.get('domain') == 'shopping' and food_action == 'list':
+            items = out.get('items', [])
+            reply = '🛒 Lista de compras:\n' + ('\n'.join(f"- {i.get('quantity') + ' ' if i.get('quantity') else ''}{i['item']}" for i in items) if items else 'Está vacía.')
+        elif parsed.get('domain') == 'shopping' and food_action == 'add':
+            reply = f"Agregué {parsed.get('item')} a la lista de compras."
+        elif food_action == 'check':
+            reply = f"Marqué {parsed.get('item')} como comprado."
+        elif food_action == 'remove':
+            reply = f"Saqué {parsed.get('item')} de la lista."
+        elif food_action == 'recipe_to_shopping':
+            reply = f"Agregué {out.get('added', 0)} ingredientes de {out.get('name', parsed.get('name'))} a la lista."
+        elif food_action == 'save':
+            reply = f"Guardé la receta “{out.get('name', parsed.get('name'))}” con {len(out.get('ingredients', []))} ingredientes."
+        elif food_action in {'suggest', 'list'}:
+            recipes = out.get('recipes', [])
+            reply = ('🍲 Recetas sugeridas:\n' if food_action == 'suggest' else '📖 Recetas guardadas:\n') + ('\n'.join(f"- {r['name']}" for r in recipes[:5]) if recipes else 'Todavía no tengo recetas guardadas.')
+        else:
+            reply = json.dumps(out, ensure_ascii=False, indent=2)
+        conversation.extend([{'role': 'user', 'text': text}, {'role': 'assistant', 'text': reply}])
+        return jsonify({'reply': reply, 'model': result.get('model', 'food')})
     previous_text = ' '.join(item['text'] for item in conversation[-4:])
     previous = previous_text.lower()
     contextual_photo = _resolve_contextual_photo(text, previous_text)
