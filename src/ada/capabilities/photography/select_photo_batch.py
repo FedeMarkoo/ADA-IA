@@ -95,14 +95,14 @@ def run(args):
         burst_duplicates = _demote_burst_duplicates(
             burst_groups,
             [{'path': str(path), 'review': {
-                'selection_rating': 3 if _stored_review(path)['score'] >= float(args.get('batch_accept_threshold', 4.8)) else 0,
+                'selection_rating': 3 if _stored_review(path)['score'] >= float(args.get('batch_accept_threshold', 3.5)) else 0,
                 'selection_score': _stored_review(path)['score'],
             }} for path in raw_files],
             write_xmp=True,
-            accept_threshold=float(args.get('batch_accept_threshold', 4.8)),
+            accept_threshold=float(args.get('batch_accept_threshold', 3.5)),
         )
         duplicate_paths = set(burst_duplicates)
-        repair_threshold = float(args.get('batch_accept_threshold', 4.8))
+        repair_threshold = float(args.get('batch_accept_threshold', 3.5))
         for path in raw_files:
             stored = _stored_review(path)
             selected = stored['score'] >= repair_threshold and str(path) not in duplicate_paths
@@ -136,7 +136,7 @@ def run(args):
     # configured CPU policy; this only bounds admission latency.
     config.setdefault('cpu_throttle_max_wait_seconds', 2.0)
     config.setdefault('agent_max_workers', int(args.get('workers', config.get('photo_workers', 1))))
-    accept_threshold = float(args.get('batch_accept_threshold', config.get('batch_accept_threshold', 4.8)))
+    accept_threshold = float(args.get('batch_accept_threshold', config.get('batch_accept_threshold', 3.5)))
     coordinator = MultiAgentCoordinator(config)
     records, failures, xmp_written = [], [], []
 
