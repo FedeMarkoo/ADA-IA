@@ -127,7 +127,10 @@ def run(args):
     if not files:
         return {'error': 'no images found', 'path': str(root)}
     feedback_labels = {_feedback_label(path) for path in files}
-    filename_feedback_mode = feedback_labels == {'selected', 'rejected'}
+    filename_feedback_mode = (
+        'calibration' in str(root).lower()
+        and feedback_labels == {'selected', 'rejected'}
+    )
     # Import lazily so skill discovery remains independent from agent startup.
     from src.ada.agents import MultiAgentCoordinator
     config = dict(args.get('config') or {})
