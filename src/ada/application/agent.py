@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -8,6 +9,15 @@ from src.ada.infrastructure.persistence.sqlite import Memory
 from src.ada.capabilities.registry import load_capabilities
 from src.ada.agents import MultiAgentCoordinator
 from src.ada.application.router import IntentRouter
+
+
+logger = logging.getLogger('ada.agent')
+
+FOOD_REPLY_FORMAT = {
+    'type': 'object',
+    'properties': {'reply': {'type': 'string'}},
+    'required': ['reply'], 'additionalProperties': False,
+}
 
 
 class Agent:
@@ -55,6 +65,14 @@ class Agent:
         self.history.append({"task": task, "chosen_model": provider})
 
         skill_name = task.get("type")
+        if skill_name == 'food':
+            payload = dict(task.get('payload', {}))
+            payload.setdefault('config', self.cfg)
+            payload.setdefault('db_path', self.mem.db_path)
+            payload['action'] = payload.pop('food_action', payload.get('action', 'list'))
+            result = self.run_skill('food', payload)
+            self.mem.record_task(task, result, provider='food', success=not bool(result.get('error')))
+            return {'model': 'food', 'result': result}
         if skill_name == 'analyze_photo':
             payload = dict(task.get('payload', {}))
             payload.setdefault('config', self.cfg)
@@ -106,6 +124,58 @@ class Agent:
             self.mem.record_task(task, result, provider=provider, success=False)
             return {"model": provider, "result": result}
 
+    def advise_food(self, request):
+        """Use the configured model as a culinary advisor with profile context."""
+        provider = self.model_manager.choose({'complexity': 4, 'privacy': 'normal'})
+        if not provider:
+            return None
+        profile = self.mem.knowledge('comidas recetas gustos freezer', limit=2)
+        recipes = self.skills.get('food', lambda _: {'recipes': []})({
+            'db_path': self.mem.db_path, 'domain': 'recipes', 'action': 'list',
+            'config': self.cfg,
+        }).get('recipes', [])
+        context = '\n'.join(profile)
+        catalog = '\n'.join(f"- {item['name']}: {', '.join(item['ingredients'])}" for item in recipes[:30])
+        recent = self.mem.conversation(limit=12)
+        # Previous assistant answers can contain hallucinated steps or menus;
+        # only user turns are reliable conversational constraints.
+        conversation = '\n'.join(f"usuario: {item['text']}" for item in recent if item['role'] == 'user')
+        prompt = (
+            'Sos el asesor culinario personal de Fede dentro de ADA. Respondé en español rioplatense, '
+            'con criterio práctico y sin inventar preferencias. Usá este perfil y catálogo como contexto. '
+            'Podés proponer recetas nuevas, combinaciones, sustituciones y planes. Priorizá comidas rendidoras, '
+            'simples, reutilizables y aptas para freezer; evitá lentejas, supremas y repetir variaciones de pizza. '
+            'Interpretá también el hilo reciente: restricciones como "sin congelar", "para un día" o '
+            '"no me listes todo" siguen vigentes hasta que el usuario las cambie. '
+            'Si el usuario pide una idea abierta, elegí vos: respondé con UNA recomendación principal y, como máximo, '
+            'UNA alternativa. No hagas un cuestionario ni enumeres el catálogo completo. '
+            'Para la recomendación incluí ingredientes, pasos breves, tiempo, porciones, conservación y por qué encaja. '
+            'Solo preguntá algo si bloquea realmente la respuesta, y después de dar una propuesta útil. '
+            'No muestres razonamiento, análisis, pasos internos ni encabezados como "Paso 1". '
+            'Devolvé una respuesta final breve dentro del campo JSON reply. No devuelvas ningún otro campo.\n\n'
+            f'PERFIL:\n{context}\n\nCATÁLOGO INTERNO (no lo listes completo):\n{catalog}\n\n'
+            f'HILO RECIENTE:\n{conversation}\n\nPEDIDO ACTUAL:\n{request}'
+        )
+        logger.debug('food advisor request=%r profile_chars=%d catalog_items=%d history_items=%d', request, len(context), len(recipes), len(recent))
+        try:
+            result = self.model_manager.call(
+                provider, prompt, complexity=4, temperature=0.25, max_tokens=900,
+                timeout=self.cfg.get('food_advisor_timeout', 45), format=FOOD_REPLY_FORMAT,
+            )
+            decoded = result
+            if isinstance(result, str):
+                try:
+                    decoded = json.loads(result)
+                except (TypeError, ValueError):
+                    decoded = None
+            reply = decoded.get('reply') if isinstance(decoded, dict) else None
+            reply = reply or (result if isinstance(result, str) else '')
+            logger.info('food advisor provider=%s response=%s', provider, str(reply)[:1000])
+            return reply
+        except Exception as exc:
+            logger.warning('food advisor failed: %s', exc)
+            return None
+
     def run_skill(self, name, args, confirm=None):
         if name not in self.skills:
             return {"error": f"Skill no disponible: {name}"}
@@ -113,6 +183,9 @@ class Agent:
             args = dict(args)
             args['servers'] = self.cfg.get('mcp_servers', {})
         if name == 'analyze_photo' and 'config' not in args:
+            args = dict(args)
+            args['config'] = self.cfg
+        if name == 'food' and 'config' not in args:
             args = dict(args)
             args['config'] = self.cfg
         risky_filesystem = name == 'filesystem' and args.get('action') in {'move_files', 'copy_files', 'mkdir'}
@@ -224,7 +297,8 @@ class Agent:
         parsed = self._parse_prompt_rules(text)
         if parsed.get("action") != "ask":
             return parsed
-        return self.router.route(text, history=" ".join(item.get("text", "") for item in self.mem.conversation(limit=6)))
+        history = " ".join(item.get("text", "") for item in self.mem.conversation(limit=6))
+        return self.router.route(text, history=history[-3500:])
 
     def interactive_loop(self):
         print('ADA activa. Escribí "exit" para salir. Usá /help para ayuda.')

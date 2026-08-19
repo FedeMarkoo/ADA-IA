@@ -16,9 +16,53 @@ opcional, recetas y planificación de comidas.
 
 ## Estado actual
 
-La conversación y la memoria de ADA pueden recibir texto sobre compras y
-recetas, pero todavía no existen skills estructuradas de lista, inventario ni
-recetario. Tampoco está implementado el detector de ubicación.
+La primera versión implementada incluye una capability local persistente para
+lista de compras y recetario. Desde la web o Telegram se pueden agregar,
+listar, marcar como comprados y quitar productos; guardar recetas simples,
+listarlas, sugerirlas por ingredientes y convertir sus ingredientes en una
+lista de compras. Los datos viven en las tablas `food_shopping` y
+`food_recipes` de la misma SQLite de ADA.
+
+El inventario, el presupuesto, la planificación semanal y el detector de
+ubicación siguen pendientes. Tampoco se realizan pedidos ni pagos externos.
+
+### Ejemplos por Telegram
+
+```text
+agregá 2 litros de leche a la lista
+mostrame la lista de compras
+marcá leche como comprada
+guardá receta tortilla: huevo, papa, cebolla; dorar todo
+qué puedo cocinar con papa, huevo
+pasá los ingredientes de tortilla a la lista
+```
+
+## Diseño inteligente
+
+Las solicitudes abiertas se interpretan con Ollama y un JSON Schema cerrado,
+no con un diccionario de frases. Si la clasificación general es ambigua, ADA
+ejecuta una segunda clasificación semántica específica de comida.
+
+El asesor recibe el perfil de gustos, el catálogo local y los últimos mensajes
+del usuario. Su respuesta se solicita dentro de un objeto JSON con un único
+campo `reply`, para evitar razonamientos internos visibles. Las mutaciones de
+compras (`add`, `check` y `remove`) pasan además por una verificación semántica;
+una recomendación como “dame otra opción” no debe modificar la lista.
+
+Si Ollama no responde, ADA usa el recetario local como fallback. Los timeouts
+son `router_timeout` y `food_advisor_timeout` (45 segundos por defecto).
+
+## Diagnóstico
+
+Con `serve -debug`, ADA crea un log con el timestamp de inicio en
+`/Users/home/Desktop/logs/ada-debug-YYYYMMDD-HHMMSS.log`. Incluye el mensaje de
+Telegram, la intención, la respuesta cruda del router, la verificación de
+mutaciones, la respuesta del asesor y los errores.
+
+- `ADA intent action=food food_action=advise`: llegó al asesor culinario.
+- `food mutation verification ... allow=False`: bloqueó una compra ambigua.
+- `food advisor failed: timed out`: se usó el catálogo local.
+- `task type=null`: cayó al chat general, fuera del flujo culinario.
 
 ## Dirección técnica
 
