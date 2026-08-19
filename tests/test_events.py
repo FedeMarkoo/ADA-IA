@@ -32,6 +32,19 @@ class EventTests(unittest.TestCase):
             self.assertEqual(watcher.scan(), 1)
             self.assertEqual(next(bus.consume())["payload"]["path"], str((folder / "one.jpg").resolve()))
 
+    def test_priority_deduplication_and_cancellation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            memory = Memory(str(Path(directory) / "events.db"))
+            scheduler = Scheduler(memory, {"test": lambda payload: None})
+            low = scheduler.schedule("test", {"name": "low"}, priority=1)
+            high = scheduler.schedule("test", {"name": "high"}, priority=10)
+            self.assertIsInstance(high, int)
+            duplicate = scheduler.schedule("test", {"name": "ignored"}, dedupe_key="same")
+            self.assertEqual(scheduler.schedule("test", {"name": "ignored"}, dedupe_key="same"), duplicate)
+            self.assertTrue(scheduler.cancel(low))
+            claimed = list(scheduler.bus.consume(limit=2))
+            self.assertEqual([item["payload"]["name"] for item in claimed], ["high", "ignored"])
+
 
 if __name__ == "__main__":
     unittest.main()
