@@ -77,6 +77,7 @@ class Agent:
             if task.get("confirm") is not None:
                 skill_args["confirm"] = task.get("confirm")
             result = self.run_skill(skill_name, skill_args, confirm=task.get("confirm"))
+            self.mem.record_audit(skill_name, request=task, result=result, success=not bool(result.get('error')) if isinstance(result, dict) else True)
             self.mem.record_task(task, result, provider=provider, success=not bool(result.get("error")) if isinstance(result, dict) else True)
             return {"model": provider or "tool", "result": result}
 
@@ -104,6 +105,7 @@ class Agent:
             )
             return {"model": provider, "result": result}
         except Exception as exc:
+            self.mem.record_audit(skill_name or 'agent', request=task, result={'error': str(exc)}, success=False)
             # A remote provider can be temporarily unavailable. Fall back to
             # the local model before returning an error to the user.
             if provider != "ollama" and self.model_manager.available().get("ollama"):

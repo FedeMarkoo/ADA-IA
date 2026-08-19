@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from src.ada.application.agent import Agent
+from src.ada.config import load_config
 from src.ada.capabilities.files.filesystem import IMAGE_EXTENSIONS
 from src.ada.interfaces.telegram import TelegramListener
 import re
@@ -59,14 +60,7 @@ def hide_provider_metadata(response):
     return response
 
 cfg_path = PROJECT_ROOT / 'config.json'
-if os.path.exists(cfg_path):
-    cfg = json.loads(cfg_path.read_text(encoding='utf-8'))
-else:
-    cfg = {}
-for key in ('db_path', 'local_model_path', 'gpt4all_model_path'):
-    value = cfg.get(key)
-    if isinstance(value, str) and not os.path.isabs(value):
-        cfg[key] = str((PROJECT_ROOT / value).resolve())
+cfg = load_config(cfg_path, PROJECT_ROOT)
 
 agent = Agent(cfg)
 class PersistentConversation(list):
