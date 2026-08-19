@@ -41,7 +41,7 @@ def _feedback_label(path):
     return None
 
 
-def _demote_burst_duplicates(burst_groups, records, write_xmp=False):
+def _demote_burst_duplicates(burst_groups, records, write_xmp=False, accept_threshold=5.0):
     duplicates = []
     for group in burst_groups:
         paths = {str(path) for path in group}
@@ -49,13 +49,15 @@ def _demote_burst_duplicates(burst_groups, records, write_xmp=False):
         accepted = []
         for item in candidates:
             review = item.get('review') or {}
-            if int(review.get('selection_rating', 0) or 0) >= 3:
+            if (int(review.get('selection_rating', 0) or 0) >= 3
+                    and float(review.get('selection_score', 0) or 0) >= accept_threshold):
                 accepted.append((item, float(review.get('selection_score', 0) or 0)))
         if not accepted:
             accepted = [
                 (item, _stored_review(item.get('path'))['score'])
                 for item in candidates
-                if _stored_review(item.get('path'))['status'] == 'Seleccionada'
+                if (_stored_review(item.get('path'))['status'] == 'Seleccionada'
+                    and _stored_review(item.get('path'))['score'] >= accept_threshold)
             ]
         if len(accepted) <= 1:
             continue
@@ -83,7 +85,8 @@ def run(args):
     root = Path(args.get('path') or args.get('folder') or '').expanduser()
     if not root.is_dir():
         return {'error': 'folder not found', 'path': str(root)}
-    if args.get('repair_xmp') or args.get('mark_bursts'):
+    repair_only = (args.get('repair_xmp') or args.get('mark_bursts')) and not args.get('write_xmp')
+    if repair_only:
         sidecars = sorted(root.rglob('*.xmp'))
         repaired = [repair_photo_xmp(path) for path in sidecars] if args.get('repair_xmp') else []
         raw_files = [path for path in root.rglob('*') if path.is_file() and path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}]
@@ -96,6 +99,7 @@ def run(args):
                 'selection_score': _stored_review(path)['score'],
             }} for path in raw_files],
             write_xmp=True,
+            accept_threshold=float(args.get('batch_accept_threshold', 5.6)),
         )
         burst_xmp = [mark_xmp_label(path, 'Amarillo') for path in raw_files if str(path) in burst_paths]
         return {'ok': True, 'workflow': 'photo_xmp_repair', 'path': str(root),
@@ -114,6 +118,7 @@ def run(args):
     # configured CPU policy; this only bounds admission latency.
     config.setdefault('cpu_throttle_max_wait_seconds', 2.0)
     config.setdefault('agent_max_workers', int(args.get('workers', config.get('photo_workers', 1))))
+    accept_threshold = float(args.get('batch_accept_threshold', config.get('batch_accept_threshold', 5.6)))
     coordinator = MultiAgentCoordinator(config)
     records, failures, xmp_written = [], [], []
 
@@ -142,8 +147,11 @@ def run(args):
                 failures.append({'path': str(path), 'error': str(exc)})
     burst_groups, burst_detection = detect_burst_groups(files)
     burst_paths = {str(path) for group in burst_groups for path in group}
-    burst_duplicates = _demote_burst_duplicates(burst_groups, records, write_xmp=args.get('write_xmp', False))
-    selected = [item for item in records if int((item.get('review') or {}).get('selection_rating', 0) or 0) >= 3]
+    burst_duplicates = _demote_burst_duplicates(
+        burst_groups, records, write_xmp=args.get('write_xmp', False), accept_threshold=accept_threshold)
+    selected = [item for item in records if (
+        int((item.get('review') or {}).get('selection_rating', 0) or 0) >= 3
+        and float((item.get('review') or {}).get('selection_score', 0) or 0) >= accept_threshold)]
     rejected = [item for item in records if item not in selected]
     burst_xmp = []
     if args.get('write_xmp'):
@@ -165,4 +173,5 @@ def run(args):
         'burst_detection': burst_detection,
         'burst_xmp_written': burst_xmp,
         'decision_mode': 'same_multi_agent_photo_review_per_file',
+        'batch_accept_threshold': accept_threshold,
     }
