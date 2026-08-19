@@ -13,7 +13,8 @@ class MemoryCredentialTests(unittest.TestCase):
             memory = Memory(str(Path(directory) / 'memory.db'))
             layers = MemoryLayers(memory)
             layers.remember('preferencias del usuario', 'profile')
-            self.assertTrue(memory.search_text('preferencias'))
+            self.assertTrue(memory.search_text('preferencias', kind='profile'))
+            self.assertFalse(memory.search_text('preferencias', kind='episodic'))
             for index in range(3):
                 memory.record_task({'n': index}, 'result')
             self.assertEqual(memory.purge_tasks(1), 2)
