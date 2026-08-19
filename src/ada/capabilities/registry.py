@@ -4,6 +4,7 @@ from pathlib import Path
 import importlib.util
 from dataclasses import dataclass
 import logging
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("ada.capabilities")
 
@@ -14,6 +15,9 @@ class CapabilitySpec:
     description: str
     risk_level: str = "low"
     permissions: tuple = ()
+    argument_schema: Optional[Dict[str, Any]] = None
+    requires_confirmation: bool = False
+    version: str = "1.0"
 
 
 _RISKY = {
@@ -27,9 +31,12 @@ _RISKY = {
     "instagram_publish",
 }
 
+_LOADED_SPECS: Dict[str, Dict[str, Any]] = {}
+
 
 def load_capabilities():
     capabilities = {}
+    _LOADED_SPECS.clear()
     base = Path(__file__).parent
     for path in sorted(base.rglob("*.py")):
         if path.name in {"__init__.py", "registry.py"}:
@@ -46,6 +53,8 @@ def load_capabilities():
             continue
         if hasattr(module, "run"):
             capabilities[name] = module.run
+            declared = getattr(module, "CAPABILITY_SPEC", {})
+            _LOADED_SPECS[name] = declared if isinstance(declared, dict) else {}
     return capabilities
 
 
@@ -55,9 +64,32 @@ def capability_specs():
     return {
         name: CapabilitySpec(
             name=name,
-            description=getattr(function, "__doc__", None) or f"Capability ADA: {name}",
+            description=_LOADED_SPECS.get(name, {}).get("description")
+            or getattr(function, "__doc__", None)
+            or f"Capability ADA: {name}",
             risk_level="high" if name in _RISKY else "low",
             permissions=("filesystem.write",) if name in _RISKY else (),
+            argument_schema=_LOADED_SPECS.get(name, {}).get(
+                "argument_schema", {"type": "object", "additionalProperties": True}
+            ),
+            requires_confirmation=name in _RISKY,
+            version=str(_LOADED_SPECS.get(name, {}).get("version", "1.0")),
         )
         for name, function in capabilities.items()
+    }
+
+
+def capability_catalog():
+    """Return a JSON-serializable catalog for planners, UIs and MCP clients."""
+    return {
+        name: {
+            "name": spec.name,
+            "description": spec.description,
+            "risk_level": spec.risk_level,
+            "permissions": list(spec.permissions),
+            "argument_schema": spec.argument_schema,
+            "requires_confirmation": spec.requires_confirmation,
+            "version": spec.version,
+        }
+        for name, spec in capability_specs().items()
     }
