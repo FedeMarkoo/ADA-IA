@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import secrets
 from pathlib import Path
 
 from src.ada.infrastructure.engines.model_manager import ModelManager
@@ -34,6 +35,12 @@ class Agent:
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
         self.running = True
+
+    @staticmethod
+    def _safe_error(message, exc):
+        error_id = secrets.token_hex(8)
+        logger.exception("agent_operation_failed error_id=%s", error_id)
+        return {"error": message, "error_id": error_id}
 
     def plan_request(self, text):
         """Turn a routed request into a validated, non-executing plan."""
@@ -151,7 +158,8 @@ class Agent:
                 except Exception as fallback_exc:
                     logger.warning("provider_fallback_failed provider=ollama error=%s", fallback_exc)
                     pass
-            result = {"error": str(exc), "provider": provider}
+            result = self._safe_error("El proveedor no pudo completar la solicitud.", exc)
+            result["provider"] = provider
             self.mem.record_task(task, result, provider=provider, success=False)
             return {"model": provider, "result": result}
 
@@ -249,7 +257,7 @@ class Agent:
                 return {"cancelled": True, "message": "Operación cancelada por el usuario."}
             return {"error": str(exc), "skill": name}
         except Exception as exc:
-            return {"error": str(exc), "skill": name}
+            return {**self._safe_error("La capability no pudo completar la operación.", exc), "skill": name}
 
     @staticmethod
     def estimate_complexity(text):
