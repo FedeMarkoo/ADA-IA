@@ -169,6 +169,9 @@ class Agent:
         if name == 'food' and 'config' not in args:
             args = dict(args)
             args['config'] = self.cfg
+        if name in {'gmail_read', 'gmail_send', 'instagram_publish'} and 'config' not in args:
+            args = dict(args)
+            args['config'] = self.cfg
         if name == 'filesystem' and 'allowed_roots' not in args:
             configured = self.cfg.get('allowed_roots') or []
             args['allowed_roots'] = configured + [
@@ -182,7 +185,8 @@ class Agent:
         risky_filesystem = name == 'filesystem' and args.get('action') in {'move_files', 'copy_files', 'mkdir'}
         risky_lightroom = name == 'lightroom' and args.get('action') in {'organize', 'organizar', 'mover', 'limpiar', 'recuperar'}
         risky_mcp = name == 'mcp' and not args.get('list_tools')
-        if (name in {"organize_photos", "run_script", "group_files"} or risky_filesystem or risky_lightroom or risky_mcp) and self.cfg.get("confirm_risky", True):
+        risky_external = name in {'gmail_send', 'instagram_publish'}
+        if (name in {"organize_photos", "run_script", "group_files"} or risky_filesystem or risky_lightroom or risky_mcp or risky_external) and self.cfg.get("confirm_risky", True):
             if confirm is None:
                 return {"error": "confirmation_required", "message": f"La skill '{name}' requiere confirmación."}
             if not confirm:

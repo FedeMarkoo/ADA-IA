@@ -15,7 +15,7 @@ class CapabilitySpec:
     permissions: tuple = ()
 
 
-_RISKY = {'run_script', 'group_files', 'organize_photos', 'filesystem', 'mcp', 'lightroom'}
+_RISKY = {'run_script', 'group_files', 'organize_photos', 'filesystem', 'mcp', 'lightroom', 'gmail_send', 'instagram_publish'}
 
 
 def load_capabilities():
