@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context, g
 import json
 import os
 import time
@@ -80,31 +80,61 @@ agent = Agent(cfg)
 class PersistentConversation(list):
     """List-compatible history that survives UI and server restarts."""
 
-    def __init__(self, memory):
+    def __init__(self, memory, session="main"):
         self.memory = memory
-        super().__init__(memory.conversation(limit=1000))
+        self.session = session
+        super().__init__(memory.conversation(session=session, limit=1000))
 
     def extend(self, items):
         items = list(items)
         super().extend(items)
-        self.memory.append_conversation(items)
+        self.memory.append_conversation(items, session=self.session)
 
     def clear(self):
         super().clear()
-        self.memory.clear_conversation()
+        self.memory.clear_conversation(session=self.session)
+
+
+class WebSessionState:
+    def __init__(self, memory, session_id):
+        self.session_id = session_id
+        self.conversation = PersistentConversation(memory, session=session_id)
+        self.pending_action: Optional[Dict[str, Any]] = None
+        self.lock = threading.RLock()
 
 
 conversation = PersistentConversation(agent.mem)
 pending_action: Optional[Dict[str, Any]] = None
-state_lock = threading.RLock()
+session_states: Dict[str, WebSessionState] = {}
+session_states_lock = threading.RLock()
 chat_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ada-chat")
+
+
+def _session_state():
+    session_id = request.cookies.get("ada_session") or getattr(g, "ada_session_id", None)
+    if not session_id:
+        session_id = secrets.token_urlsafe(24)
+        g.ada_session_id = session_id
+    with session_states_lock:
+        return session_states.setdefault(session_id, WebSessionState(agent.mem, session_id))
 
 
 def serialize_state(function):
     @wraps(function)
     def wrapped(*args, **kwargs):
-        with state_lock:
-            return function(*args, **kwargs)
+        state = _session_state()
+        global conversation, pending_action
+        with state.lock:
+            previous_conversation = conversation
+            previous_pending_action = pending_action
+            conversation = state.conversation
+            pending_action = state.pending_action
+            try:
+                return function(*args, **kwargs)
+            finally:
+                state.pending_action = pending_action
+                conversation = previous_conversation
+                pending_action = previous_pending_action
 
     return wrapped
 
@@ -115,6 +145,14 @@ def _context_prompt(text):
         return text
     history = "\n".join(f"{item['role']}: {item['text']}" for item in recent)
     return "Conversación reciente:\n" + history + "\n\nMensaje actual del usuario:\n" + text
+
+
+@app.after_request
+def set_session_cookie(response):
+    session_id = getattr(g, "ada_session_id", None)
+    if session_id and not request.cookies.get("ada_session"):
+        response.set_cookie("ada_session", session_id, samesite="Strict", secure=False, httponly=True)
+    return response
 
 
 def _desktop_path():
@@ -319,10 +357,13 @@ def warmup():
 
 @app.route("/api/conversation", methods=["GET", "DELETE"])
 def conversation_api():
-    if request.method == "DELETE":
-        conversation.clear()
-        return jsonify({"ok": True, "messages": []})
-    return jsonify({"messages": list(conversation), "count": len(conversation)})
+    state = _session_state()
+    with state.lock:
+        if request.method == "DELETE":
+            state.conversation.clear()
+            state.pending_action = None
+            return jsonify({"ok": True, "messages": []})
+        return jsonify({"messages": list(state.conversation), "count": len(state.conversation)})
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -873,9 +914,11 @@ def _sse(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _run_chat_in_worker(data):
+def _run_chat_in_worker(data, session_id):
     """Run the existing JSON chat action in an isolated request context."""
-    with app.test_request_context("/api/chat", method="POST", json=data):
+    with app.test_request_context(
+        "/api/chat", method="POST", json=data, headers={"Cookie": f"ada_session={session_id}"}
+    ):
         response = chat()
         return response.get_json(silent=True) or {}
 
@@ -892,25 +935,26 @@ def chat_stream():
     text = data.get("message", "")
     if not text:
         return jsonify({"error": "empty message"}), 400
+    state = _session_state()
 
     @stream_with_context
     def events():
         received = "Recibí tu pedido. Estoy entendiendo qué tarea corresponde."
-        conversation.extend([{"role": "assistant", "text": received, "kind": "status"}])
+        state.conversation.extend([{"role": "assistant", "text": received, "kind": "status"}])
         yield _sse("status", {"text": received})
 
         processing = (
             "Estoy procesando la información y preparando la respuesta. Las tareas largas continúan en segundo plano."
         )
-        conversation.extend([{"role": "assistant", "text": processing, "kind": "status"}])
+        state.conversation.extend([{"role": "assistant", "text": processing, "kind": "status"}])
         yield _sse("status", {"text": processing})
-        future = chat_executor.submit(_run_chat_in_worker, data)
+        future = chat_executor.submit(_run_chat_in_worker, data, state.session_id)
         try:
             last_update = time.monotonic()
             while not future.done():
                 if time.monotonic() - last_update >= 5:
                     update = "La tarea sigue en ejecución. ADA continúa trabajando y guardará los resultados progresivamente."
-                    conversation.extend([{"role": "assistant", "text": update, "kind": "status"}])
+                    state.conversation.extend([{"role": "assistant", "text": update, "kind": "status"}])
                     yield _sse("status", {"text": update})
                     last_update = time.monotonic()
                 time.sleep(0.25)
@@ -922,12 +966,13 @@ def chat_stream():
         except Exception as error:
             app.logger.exception("Streaming chat failed")
             failure = f"La tarea terminó con un error: {error}"
-            conversation.extend([{"role": "assistant", "text": failure, "kind": "error"}])
+            state.conversation.extend([{"role": "assistant", "text": failure, "kind": "error"}])
             yield _sse("error", {"text": failure})
         yield _sse("done", {"ok": True})
 
+    response_stream = events()  # type: ignore[call-arg]
     return Response(
-        events(),
+        response_stream,
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
