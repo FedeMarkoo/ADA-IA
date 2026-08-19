@@ -13,6 +13,8 @@ from pathlib import Path
 
 
 class Memory:
+    SCHEMA_VERSION = 1
+
     def __init__(self, db_path):
         self.db_path = ":memory:" if str(db_path) == ":memory:" else str(Path(db_path).expanduser().resolve())
         if self.db_path != ":memory:":
@@ -86,6 +88,7 @@ class Memory:
         columns = {row[1] for row in self.conn.execute("PRAGMA table_info(router_catalog)").fetchall()}
         if "keywords" not in columns:
             self.conn.execute("ALTER TABLE router_catalog ADD COLUMN keywords TEXT")
+        self._apply_migrations()
         self.conn.commit()
         try:
             self.conn.executescript(
@@ -111,6 +114,16 @@ class Memory:
             # Some minimal Python builds omit SQLite FTS5; lexical fallback remains available.
             self._fts_available = False
         self._seed_dynamic_ai_defaults()
+
+    def _apply_migrations(self):
+        """Record schema changes explicitly so future upgrades stay ordered."""
+        version = int(self.conn.execute("PRAGMA user_version").fetchone()[0])
+        if version < 1:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)",
+                (self.SCHEMA_VERSION,),
+            )
+            self.conn.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
 
     def _seed_dynamic_ai_defaults(self):
         actions = {
@@ -403,13 +416,14 @@ class Memory:
         return [content for _, content in scored[:k]]
 
     def add_procedure(self, name, instructions, meta=None):
-        self.conn.execute(
-            """INSERT INTO procedures(name, instructions, meta) VALUES (?, ?, ?)
-               ON CONFLICT(name) DO UPDATE SET instructions=excluded.instructions,
-               updated_at=CURRENT_TIMESTAMP, meta=excluded.meta""",
-            (name.strip(), instructions.strip(), json.dumps(meta or {}, ensure_ascii=False)),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                """INSERT INTO procedures(name, instructions, meta) VALUES (?, ?, ?)
+                   ON CONFLICT(name) DO UPDATE SET instructions=excluded.instructions,
+                   updated_at=CURRENT_TIMESTAMP, meta=excluded.meta""",
+                (name.strip(), instructions.strip(), json.dumps(meta or {}, ensure_ascii=False)),
+            )
+            self.conn.commit()
 
     def list_procedures(self):
         return [

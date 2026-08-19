@@ -1,11 +1,18 @@
 import unittest
+import sys
 
 from src.ada.infrastructure.integrations.gmail import send as gmail_send
+from src.ada.infrastructure.integrations.mcp import MCPClient
 from src.ada.infrastructure.integrations.instagram_graph import publish as graph_publish
 from src.ada.interfaces.voice import FasterWhisperSTT, PiperTTS
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_mcp_timeout_does_not_wait_for_a_hung_server(self):
+        client = MCPClient([sys.executable, "-c", "import time; time.sleep(2)"], timeout=0.05)
+        with self.assertRaises(TimeoutError):
+            client.call(list_only=True)
+
     def test_graph_publisher_requires_configuration_and_confirmation(self):
         preview = graph_publish({}, "https://example.com/photo.jpg", "caption")
         self.assertEqual(preview["error"], "confirmation_required")
