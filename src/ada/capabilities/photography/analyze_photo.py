@@ -45,11 +45,13 @@ def _metadata(image):
     return exif
 
 
-def _capture_metadata(path, image):
+def _capture_metadata(path, image, raw_metadata=None):
     """Collect capture data from EXIF, RAW headers and an adjacent XMP sidecar."""
     metadata = _metadata(image)
     raw_path = Path(path)
-    if raw_path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}:
+    if raw_metadata is not None:
+        metadata.update(raw_metadata)
+    elif raw_path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}:
         try:
             import rawpy
             with rawpy.imread(str(raw_path)) as raw:
@@ -127,11 +129,35 @@ def _load_rgb(path):
     return Image.open(path).convert('RGB')
 
 
+def _load_raw_once(path):
+    import rawpy
+    metadata = {}
+    with rawpy.imread(str(path)) as raw:
+        other = raw.other
+        if getattr(other, 'iso_speed', None):
+            metadata['ISO'] = str(round(float(other.iso_speed)))
+        if getattr(other, 'shutter_speed', None):
+            metadata['ExposureTime'] = str(other.shutter_speed)
+        if getattr(other, 'aperture', None):
+            metadata['FNumber'] = str(other.aperture)
+        lens = getattr(raw, 'lens', None)
+        if lens and getattr(lens, 'model', None):
+            metadata['LensModel'] = str(lens.model)
+        rendered = raw.postprocess(use_camera_wb=True, no_auto_bright=True, output_bps=8)
+    return Image.fromarray(rendered, mode='RGB'), metadata
+
+
 def technical_analysis(path):
     """Return deterministic image-quality measurements in a compact report."""
-    image = ImageOps.exif_transpose(_load_rgb(Path(path)))
-    is_raw = Path(path).suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}
-    exif = _capture_metadata(path, image)
+    image_path = Path(path)
+    is_raw = image_path.suffix.lower() in {'.raw', '.cr2', '.nef', '.arw', '.dng', '.raf', '.orf'}
+    raw_metadata = {}
+    if is_raw:
+        image, raw_metadata = _load_raw_once(image_path)
+    else:
+        image = _load_rgb(image_path)
+    image = ImageOps.exif_transpose(image)
+    exif = _capture_metadata(path, image, raw_metadata)
     image.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
     array = np.asarray(image, dtype=np.float32) / 255.0
     gray = (0.299 * array[:, :, 0] + 0.587 * array[:, :, 1] + 0.114 * array[:, :, 2])
