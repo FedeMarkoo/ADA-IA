@@ -35,6 +35,8 @@ def main():
     p_serve.add_argument("--asgi", action="store_true", help="Use the FastAPI/ASGI interface")
     p_prompt = sub.add_parser("prompt")
     p_prompt.add_argument("text", help="Natural language prompt for ADA")
+    p_backup = sub.add_parser("backup", help="Create a consistent backup of ADA memory")
+    p_backup.add_argument("--path", required=True)
 
     args = parser.parse_args()
     cfg = load_config()
@@ -171,6 +173,8 @@ def main():
         task = {"type": None, "prompt": text, "complexity": parsed.get("complexity", 5)}
         res = agent.decide_and_run(task)
         print(res)
+    elif args.cmd == "backup":
+        print(mem.backup_to(args.path))
     else:
         parser.print_help()
 

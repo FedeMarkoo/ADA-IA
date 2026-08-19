@@ -28,6 +28,15 @@ class MemoryCredentialTests(unittest.TestCase):
                 memory.conn.execute("SELECT version FROM schema_migrations ORDER BY version DESC").fetchone()[0], 2
             )
 
+    def test_memory_backup_is_readable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Memory(str(Path(directory) / "memory.db"))
+            source.add_text("dato de backup", kind="note")
+            target = Path(directory) / "backups" / "memory-copy.db"
+            source.backup_to(target)
+            restored = Memory(str(target))
+            self.assertTrue(restored.search_text("backup", kind="note"))
+
     def test_credentials_require_encryption_key(self):
         with tempfile.TemporaryDirectory() as directory:
             store = CredentialStore(Path(directory) / "credentials.enc")
