@@ -49,6 +49,12 @@ class PlannerPolicyTests(unittest.TestCase):
         self.assertEqual([item['text'] for item in service.history('a')], ['uno', 'uno'])
         self.assertEqual([item['text'] for item in service.history('b')], ['dos', 'dos'])
 
+    def test_agent_plan_request_is_validated_before_execution(self):
+        from src.ada.application.agent import Agent
+        agent = Agent({'db_path': ':memory:', 'allowed_roots': ['/tmp'], 'local_runtime': {'auto_start': False}})
+        plan = agent.plan_request('listame los archivos')
+        self.assertTrue(plan.plan_id)
+
 
 if __name__ == '__main__':
     unittest.main()

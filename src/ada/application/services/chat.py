@@ -33,6 +33,7 @@ class ChatService:
         self._remember(state, 'user', text)
         parsed = self.agent.parse_prompt(text)
         action = parsed.get('action')
+        plan = self.agent.plan_request(text) if hasattr(self.agent, 'plan_request') else None
         payload = {key: value for key, value in parsed.items() if key not in {'action', 'complexity'}}
         task = {'type': action if action not in {'ask', 'suggest'} else None,
                 'payload': payload, 'prompt': text,
@@ -44,7 +45,7 @@ class ChatService:
             reply = str(output)
         self._remember(state, 'assistant', reply)
         return {'reply': reply, 'model': result.get('model') if isinstance(result, dict) else None,
-                'action': action, 'result': output}
+                'action': action, 'plan_id': plan.plan_id if plan else None, 'result': output}
 
     def history(self, session_id='main'):
         return list(self.session(session_id).messages)
