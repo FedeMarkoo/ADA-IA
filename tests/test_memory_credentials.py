@@ -35,6 +35,13 @@ class MemoryCredentialTests(unittest.TestCase):
             store.set('token', 'secret')
             self.assertEqual(store.get('token'), 'secret')
 
+    def test_credential_store_rejects_missing_key_even_for_reads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'credentials.enc'
+            path.write_bytes(b'not plaintext')
+            with self.assertRaises(RuntimeError):
+                CredentialStore(path).get('token')
+
 
 if __name__ == '__main__':
     unittest.main()
