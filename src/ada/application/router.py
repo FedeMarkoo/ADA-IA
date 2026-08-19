@@ -12,59 +12,24 @@ import re
 
 logger = logging.getLogger('ada.router')
 
-ROUTER_FORMAT = {
-    'type': 'object',
-    'properties': {
-        'action': {'type': 'string', 'enum': ['analyze_photo', 'select_photo_batch', 'lightroom', 'list_photos', 'list_files', 'list_dirs', 'group_files', 'organize', 'suggest', 'run', 'food', 'ask']},
-        'domain': {'type': 'string', 'enum': ['shopping', 'recipes']},
-        'food_action': {'type': 'string', 'enum': ['add', 'list', 'check', 'remove', 'save', 'suggest', 'recipe_to_shopping', 'advise']},
-        'item': {'type': 'string'}, 'quantity': {'type': 'string'}, 'unit': {'type': 'string'},
-        'name': {'type': 'string'}, 'ingredients': {'type': 'string'}, 'available': {'type': 'string'},
-        'confidence': {'type': 'number'}, 'reason': {'type': 'string'},
-        'needs_clarification': {'type': 'boolean'}, 'clarifying_question': {'type': 'string'},
-    },
-    'required': ['action'], 'additionalProperties': False,
-}
-
-FOOD_FORMAT = {
-    'type': 'object',
-    'properties': {
-        'is_food': {'type': 'boolean'},
-        'domain': {'type': 'string', 'enum': ['shopping', 'recipes']},
-        'food_action': {'type': 'string', 'enum': ['add', 'list', 'check', 'remove', 'save', 'recipe_to_shopping', 'advise']},
-        'item': {'type': 'string'}, 'quantity': {'type': 'string'}, 'unit': {'type': 'string'},
-        'name': {'type': 'string'}, 'ingredients': {'type': 'string'}, 'confidence': {'type': 'number'},
-    },
-    'required': ['is_food'], 'additionalProperties': False,
-}
-
-FOOD_VERIFY_FORMAT = {
-    'type': 'object',
-    'properties': {'allow': {'type': 'boolean'}, 'reason': {'type': 'string'}},
-    'required': ['allow'], 'additionalProperties': False,
-}
-
-
-ALLOWED_ACTIONS = {
-    "analyze_photo",
-    "select_photo_batch",
-    "lightroom",
-    "list_photos",
-    "list_files",
-    "list_dirs",
-    "group_files",
-    "organize",
-    "suggest",
-    "run",
-    "food",
-    "ask",
-}
-
-
 class IntentRouter:
-    def __init__(self, model_manager, config=None):
+    def __init__(self, model_manager, config=None, memory=None):
         self.model_manager = model_manager
         self.config = config or {}
+        from src.ada.infrastructure.persistence.sqlite import Memory
+        self.memory = memory or Memory(':memory:')
+
+    def _allowed_actions(self):
+        return {row['action'] for row in self.memory.router_actions()}
+
+    def _actions_text(self):
+        return ', '.join(f"{row['action']} ({row['description']})" for row in self.memory.router_actions())
+
+    def _template(self, name, fallback):
+        return self.memory.prompt_template(name, fallback)
+
+    def _schema(self, name):
+        return self.memory.json_schema(name)
 
     def route(self, text, history=""):
         fallback = self._fallback(text)
@@ -84,7 +49,7 @@ class IntentRouter:
                 temperature=0,
                 max_tokens=600,
                 timeout=self.config.get("router_timeout", 45),
-                format=ROUTER_FORMAT,
+                format=self._schema('router'),
             )
             logger.info('router raw=%s', str(raw)[:1000])
             normalized = self._normalize(self._decode(raw), fallback)
@@ -103,17 +68,11 @@ class IntentRouter:
             return fallback
 
     def _verify_food_mutation(self, provider, text, intent):
-        prompt = (
-            'Verificá si el usuario pidió explícitamente modificar una lista de compras. Devolvé SOLO JSON. '
-            'allow=true si pidió agregar, comprar, marcar como comprado o quitar un producto concreto. '
-            'Frases como "necesito comprar pollo", "me falta leche" o "agregá arroz" son órdenes explícitas. '
-            'Si pide una receta, una recomendación, otra opción o qué cocinar, allow=false. '
-            f'Intención propuesta: {intent}\nPedido: {text}\n'
-            '{"allow":false,"reason":""}'
-        )
+        template = self._template('food_mutation_verifier', 'Verificá la mutación y devolvé SOLO JSON. Intención: {intent}\nPedido: {text}')
+        prompt = template.replace('{intent}', str(intent)).replace('{text}', text)
         try:
             raw = self.model_manager.call(provider, prompt, temperature=0, max_tokens=180,
-                                          timeout=self.config.get('router_timeout', 45), format=FOOD_VERIFY_FORMAT)
+                                          timeout=self.config.get('router_timeout', 45), format=self._schema('food_verify'))
             result = self._decode(raw)
             logger.info('food mutation verification raw=%s allow=%s', str(raw)[:500], result.get('allow') if isinstance(result, dict) else None)
             return isinstance(result, dict) and result.get('allow') is True
@@ -127,18 +86,12 @@ class IntentRouter:
         This is intentionally model-based: it catches natural requests such
         as "no sé qué cocinar" without maintaining a phrase dictionary.
         """
-        prompt = (
-            'Clasificá si el pedido pertenece a comida, cocina, recetas o compras. Devolvé SOLO JSON válido. '
-            'No clasifiques como comida si habla de archivos, fotos, código o tareas generales. '
-            'Si es comida, elegí food_action: advise, add, list, check, remove, save o recipe_to_shopping. '
-            'Para una duda abierta como "qué puedo comer" o "no sé qué cocinar", usá advise. '
-            'Extraé domain, item, quantity, unit, name e ingredients cuando existan. '
-            f'Historial breve: {history[-1200:]}\nPedido: {text}\n'
-            '{"is_food":true,"domain":"recipes","food_action":"advise","confidence":0.0}'
-        )
+        template = self._template('food_classifier', 'Clasificá el pedido y devolvé SOLO JSON. Historial: {history}\nPedido: {text}')
+        prompt = (template.replace('{history}', history[-1200:]).replace('{text}', text)
+                  .replace('{food_actions}', 'advise, add, list, check, remove, save, recipe_to_shopping'))
         try:
             raw = self.model_manager.call(provider, prompt, temperature=0, max_tokens=400,
-                                          timeout=self.config.get('router_timeout', 45), format=FOOD_FORMAT)
+                                          timeout=self.config.get('router_timeout', 45), format=self._schema('food'))
             candidate = self._decode(raw)
             logger.info('food classifier raw=%s', str(raw)[:800])
             if not isinstance(candidate, dict):
@@ -173,26 +126,11 @@ class IntentRouter:
             logger.warning('food classifier failed: %s', exc)
             return None
 
-    @staticmethod
-    def _prompt(text, history):
-        return (
-            "Sos el router de ADA. Clasificá la solicitud y devolvé SOLO JSON válido. "
-            "No ejecutes acciones ni inventes rutas. Elegí una acción de esta lista: "
-            + ", ".join(sorted(ALLOWED_ACTIONS))
-            + ". Si hay varios pedidos, incluí steps con acciones en orden. "
-            + "Para compras y recetas elegí action=food y completá domain=shopping|recipes, "
-            + "food_action=add|list|check|remove|save|suggest|recipe_to_shopping|advise. "
-            + "Extraé item, quantity, unit, name, ingredients y available cuando correspondan. "
-            + "IMPORTANTE: cualquier pedido sobre qué comer, qué cocinar, recetas, gustos alimentarios, "
-            + "planificar comidas o compras de supermercado es action=food. No lo clasifiques como ask. "
-            + "Ejemplos: 'qué puedo comer mañana' => food/advise; 'qué cocino con pollo' => food/advise; "
-            + "'agregá leche a la lista' => food/shopping/add. "
-            "Si falta un dato imprescindible, usá needs_clarification=true y una pregunta breve.\n\n"
-            f"Historial reciente:\n{history[-2500:]}\n\nSolicitud:\n{text}\n\n"
-            'Formato: {"action":"...","confidence":0.0,"reason":"...",'
-            '"steps":[{"action":"...","reason":"..."}],'
-            '"needs_clarification":false,"clarifying_question":""}'
-        )
+    def _prompt(self, text, history):
+        template = self._template('router', 'Clasificá la solicitud y devolvé SOLO JSON. Acciones: {actions}. Historial: {history}\nPedido: {text}')
+        return (template.replace('{actions}', self._actions_text())
+                .replace('{food_actions}', 'advise, add, list, check, remove, save, recipe_to_shopping')
+                .replace('{history}', history[-2500:]).replace('{text}', text))
 
     @staticmethod
     def _decode(raw):
@@ -220,7 +158,7 @@ class IntentRouter:
             candidate.pop('needs_clarification', None)
             candidate.pop('clarifying_question', None)
             action = 'food'
-        if action not in ALLOWED_ACTIONS:
+        if action not in self._allowed_actions():
             return fallback
         result = dict(fallback)
         result.update({key: value for key, value in candidate.items() if value is not None})
@@ -230,7 +168,7 @@ class IntentRouter:
         if isinstance(steps, list):
             result["steps"] = [
                 item for item in steps
-                if isinstance(item, dict) and item.get("action") in ALLOWED_ACTIONS
+                if isinstance(item, dict) and item.get("action") in self._allowed_actions()
             ]
         if candidate.get("needs_clarification"):
             result["needs_clarification"] = True
@@ -244,8 +182,7 @@ class IntentRouter:
         except (TypeError, ValueError):
             return 0.0
 
-    @staticmethod
-    def _fallback(text):
+    def _fallback(self, text):
         value = text.lower()
         scores = {
             "analyze_photo": ("foto", "imagen", "raw", "jpg", "nef", "arw", "enfoque", "exposición", "iso"),
@@ -260,6 +197,8 @@ class IntentRouter:
             "run": ("ejecutar", "correr comando", "script"),
             "food": ("comida", "comidas", "receta", "recetas", "cocinar", "compras", "supermercado", "ingredientes", "comer"),
         }
+        if self.memory:
+            scores = {row['action']: tuple(row.get('keywords') or []) for row in self.memory.router_actions()}
         matches = {
             action: sum(1 for phrase in phrases if phrase in value)
             for action, phrases in scores.items()
