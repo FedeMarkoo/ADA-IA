@@ -3,6 +3,7 @@ import unittest
 from src.ada.application.planner import Planner
 from src.ada.domain.policy import PolicyEngine, PolicyViolation
 from src.ada.domain.tasks import Action
+from src.ada.application.services.chat import ChatService
 
 
 class PlannerPolicyTests(unittest.TestCase):
@@ -24,6 +25,29 @@ class PlannerPolicyTests(unittest.TestCase):
         self.assertTrue(plan.dry_run)
         with self.assertRaises(ValueError):
             planner.from_actions([Action('missing', {})])
+
+    def test_chat_service_keeps_sessions_isolated(self):
+        class FakeManager:
+            def choose(self, task):
+                return None
+
+        class FakeAgent:
+            lang = 'auto'
+            model_manager = FakeManager()
+
+            @staticmethod
+            def parse_prompt(text):
+                return {'action': 'ask', 'complexity': 1}
+
+            @staticmethod
+            def decide_and_run(task):
+                return {'model': None, 'result': {'text': task['prompt']}}
+
+        service = ChatService(FakeAgent())
+        service.handle('uno', 'a')
+        service.handle('dos', 'b')
+        self.assertEqual([item['text'] for item in service.history('a')], ['uno', 'uno'])
+        self.assertEqual([item['text'] for item in service.history('b')], ['dos', 'dos'])
 
 
 if __name__ == '__main__':
