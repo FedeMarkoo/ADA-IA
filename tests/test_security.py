@@ -6,6 +6,8 @@ from src.ada.capabilities.system.run_script import run as script_run
 from src.ada.infrastructure.runtime.resources import recommended_threads
 from src.ada.infrastructure.integrations.gmail import send as gmail_send
 from src.ada.capabilities.files.filesystem import run as filesystem_run
+from src.ada.capabilities.files.group_files import run as group_files_run
+from src.ada.capabilities.photography.organize_photos import run as organize_photos_run
 
 
 class SecurityTests(unittest.TestCase):
@@ -32,7 +34,14 @@ class SecurityTests(unittest.TestCase):
             source.mkdir()
             (source / "file.txt").write_text("data")
             result = filesystem_run(
-                {"action": "move_files", "source": source, "name": "target", "confirm": True, "dry_run": True}
+                {
+                    "action": "move_files",
+                    "source": source,
+                    "name": "target",
+                    "confirm": True,
+                    "dry_run": True,
+                    "allowed_roots": [directory],
+                }
             )
             self.assertTrue(result["dry_run"])
             self.assertTrue((source / "file.txt").exists())
@@ -49,11 +58,30 @@ class SecurityTests(unittest.TestCase):
             source.mkdir()
             item = source / "file.txt"
             item.write_text("data")
-            moved = filesystem_run({"action": "move_files", "source": source, "name": "target", "confirm": True})
+            moved = filesystem_run(
+                {
+                    "action": "move_files",
+                    "source": source,
+                    "name": "target",
+                    "confirm": True,
+                    "allowed_roots": [directory],
+                }
+            )
             self.assertFalse(item.exists())
-            result = filesystem_run({"action": "undo", "manifest": moved["changed"], "confirm": True})
+            result = filesystem_run(
+                {
+                    "action": "undo",
+                    "manifest": moved["changed"],
+                    "confirm": True,
+                    "allowed_roots": [directory],
+                }
+            )
             self.assertTrue(result["ok"])
             self.assertTrue(item.exists())
+
+    def test_mutating_file_capabilities_require_scope_and_confirmation(self):
+        self.assertEqual(group_files_run({"source": "/tmp", "name": "group"})["error"], "confirmation_required")
+        self.assertEqual(organize_photos_run({"dir": "/tmp", "confirm": True})["error"], "allowed_roots_required")
 
 
 if __name__ == "__main__":

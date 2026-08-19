@@ -1,5 +1,6 @@
 import os
 import shutil
+from pathlib import Path
 
 KEYWORDS = {
     "wedding": "Weddings",
@@ -27,8 +28,17 @@ def run(args):
     if not os.path.isdir(folder):
         return {"error": "dir not found", "dir": folder}
     dry_run = bool(args.get("dry_run", False))
+    if not dry_run and not args.get("confirm"):
+        return {"error": "confirmation_required", "action": "organize_photos"}
+    roots = [Path(os.path.expanduser(str(item))).resolve() for item in args.get("allowed_roots", []) if item]
+    folder_path = Path(folder).resolve()
+    if not roots:
+        return {"error": "allowed_roots_required", "dir": str(folder_path)}
+    if not any(folder_path == root or root in folder_path.parents for root in roots):
+        return {"error": "path_outside_allowed_roots", "dir": str(folder_path)}
     organized = os.path.join(folder, "organized")
-    os.makedirs(organized, exist_ok=True)
+    if not dry_run:
+        os.makedirs(organized, exist_ok=True)
     moved = []
     for fname in os.listdir(folder):
         if fname.lower().endswith((".jpg", ".jpeg", ".png")):

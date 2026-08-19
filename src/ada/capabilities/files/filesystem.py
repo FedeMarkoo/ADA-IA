@@ -20,7 +20,7 @@ def _path(value):
 def _allowed(path, args):
     roots = args.get("allowed_roots") or []
     if not roots:
-        return True
+        return False
     candidate = _path(path)
     allowed = [_path(root) for root in roots]
     return any(candidate == root or root in candidate.parents for root in allowed)
@@ -45,6 +45,8 @@ def run(args):
         for item in reversed(manifest):
             source = _path(item.get("from"))
             target = _path(item.get("to"))
+            if not _allowed(source, args) or not _allowed(target, args):
+                return {"error": "path_outside_allowed_roots", "path": str(source)}
             if not target.exists():
                 continue
             if source.exists():
