@@ -39,7 +39,6 @@ ada = "ada.interfaces.cli:main"
 ada-autonomous = "ada.infrastructure.runtime.daemon:run"
 ada-supervisor = "ada.infrastructure.runtime.supervisor:run"
 ada-mcp = "ada.interfaces.mcp_server:main"
-ada-lightroom-mcp = "ada.interfaces.lightroom_mcp_server:main"
 
 [tool.ruff]
 line-length = 120
@@ -56,10 +55,16 @@ select = ["E", "F", "W"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 ignore_missing_imports = true
-follow_imports = "skip"
 check_untyped_defs = true
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["ada*", "mcps*", "telegram*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+

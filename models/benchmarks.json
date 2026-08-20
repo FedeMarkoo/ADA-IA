@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "history": [
+    {
+      "model": "llama3.2:3b",
+      "timestamp": "2026-08-20T19:30:00Z",
+      "tokens_per_second": 48.5,
+      "ttft_ms": 120.4,
+      "total_tokens": 128,
+      "duration_seconds": 2.64
+    }
+  ]
+}

@@ -1,4 +1,5 @@
-config.json
+/config.json
+!mcps/config.json
 memory.db
 memory.db-shm
 memory.db-wal
@@ -19,4 +20,6 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 logs/

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ADA Hub · Centro de Control y Gestor del Asistente</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <!-- React 19 Engine -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+</head>
+<body class="dark-theme">
+  <!-- React Root Container -->
+  <div id="root">
+    <!-- Initial Loading Fallback -->
+    <div class="initial-loader">
+      <div class="brand-orb" style="width: 50px; height: 50px;">
+        <span class="orb-glow"></span>
+        <span class="orb-letter">A</span>
+      </div>
+      <p style="margin-top: 16px; color: #94a3b8; font-size: 0.9rem;">Cargando ADA Hub (React)...</p>
+    </div>
+  </div>
+
+  <!-- React Application Controller -->
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

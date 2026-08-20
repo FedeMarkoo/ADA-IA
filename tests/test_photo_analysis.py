@@ -5,11 +5,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from ada.capabilities.registry import load_capabilities
-from ada.capabilities.photography.analyze_photo import _noise_score, run, technical_analysis
-from ada.agents import MultiAgentCoordinator
+from mcps.photography.analyzer import _noise_score, run, technical_analysis
+from ada.agents.coordinator import MultiAgentCoordinator
 from ada.agents.photo_agents import PhotoReviewAgent
-from ada.capabilities.photography.select_photo_batch import run as select_photo_batch
+from mcps.photography.batch import run as select_photo_batch
 
 
 class PhotoAnalysisTests(unittest.TestCase):
@@ -43,8 +42,9 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertEqual(result["error"], "image not found")
 
     def test_all_skills_are_loaded_recursively(self):
-        capabilities = load_capabilities()
-        self.assertIn("analyze_photo", capabilities)
+        from ada.mcps.manager import MCPManager
+        tools = [t["name"] for t in MCPManager().list_tools()]
+        self.assertIn("photography.analyze_photo", tools)
 
     def test_multi_agent_photo_workflow(self):
         coordinator = MultiAgentCoordinator({"agent_max_workers": 2})
@@ -145,7 +145,7 @@ class PhotoAnalysisTests(unittest.TestCase):
         self.assertIn('xmp:Label="Amarillo"', (folder / "_DSC4740.xmp").read_text(encoding="utf-8"))
 
     def test_repair_keeps_user_labeled_winner_in_burst(self):
-        from ada.capabilities.photography.xmp import write_photo_xmp
+        from mcps.photography.xmp import write_photo_xmp
 
         folder = Path(self.tempdir.name) / "burst_repair"
         folder.mkdir()

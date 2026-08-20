@@ -9,45 +9,15 @@
   "photo_root": "~/Desktop/Fotos",
   "photo_executor": "thread",
   "allowed_roots": ["~/Desktop"],
-  "lightroom_allowed_scripts": [],
-  "lightroom_mcp_max_timeout": 3600,
   "allowed_commands": [],
   "gmail_token_path": "~/.config/ada/gmail-token.json",
   "gmail_credential_name": "gmail_oauth",
   "gmail_client_secret_path": "~/.config/ada/google-client.json",
-  "gmail_backend": "mcp",
-  "gmail_mcp_server": "gmail",
-  "gmail_mcp_allowed_hosts": ["gmailmcp.googleapis.com"],
-  "gmail_mcp_timeout": 60,
-  "gmail_scopes": [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/gmail.send"
-  ],
   "instagram_provider": "puppeteer",
   "instagram_user_id": "",
   "instagram_access_token": "",
   "instagram_publish_script": "",
   "instagram_profile_dir": "~/.config/ada/instagram-profile",
-  "trust_workspace_mcp": false,
-  "mcp_servers": {
-    "gmail": {
-      "type": "http",
-      "url": "https://gmailmcp.googleapis.com/mcp/v1"
-    },
-    "example-local": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Desktop"],
-      "env": {},
-      "cwd": "~"
-    },
-    "example-remote": {
-      "type": "http",
-      "url": "https://example.com/mcp",
-      "headers": {"Authorization": "Bearer ${env:MCP_TOKEN}"}
-    }
-  },
   "model_catalog": [
     {"name": "llama3.2:3b", "roles": ["chat", "router"], "quality_tier": "small", "min_ram_gb": 4},
     {"name": "qwen2.5vl:3b", "roles": ["vision"], "quality_tier": "small", "min_ram_gb": 6}
@@ -60,8 +30,8 @@
   "confirm_risky": true,
   "privacy_default": "normal",
   "local_runtime": {"provider": "ollama", "auto_start": true, "auto_pull": false},
-  "telegram": {"enabled": false, "allowed_chat_ids": []},
-  "event_rules": {
+  "telegram": {"enabled": false, "allowed_chat_ids": []}
+  ,"event_rules": {
     "filesystem.file_created": {
       "action": "analyze_photo",
       "extensions": [".jpg", ".jpeg", ".png", ".nef", ".arw", ".cr2", ".dng"],
