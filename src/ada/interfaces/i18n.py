@@ -5,11 +5,19 @@ MESSAGES = {
         "greeting": "Hola, ¿en qué puedo ayudarte?",
         "empty_message": "El mensaje no puede estar vacío.",
         "processing": "ADA está procesando el pedido.",
+        "status_received": "Recibí tu pedido. Estoy entendiendo qué tarea corresponde.",
+        "status_progress": "La tarea sigue en ejecución. ADA continúa trabajando.",
+        "path_required": "Necesito la ruta o carpeta para ejecutar esa tarea.",
+        "confirmation_required": "Preparé la operación. Es una acción sensible; respondé 'confirmo' para ejecutarla.",
     },
     "en": {
         "greeting": "Hi, how can I help you?",
         "empty_message": "The message cannot be empty.",
         "processing": "ADA is processing your request.",
+        "status_received": "I received your request and am identifying the task.",
+        "status_progress": "The task is still running. ADA continues working.",
+        "path_required": "I need the path or folder to execute that task.",
+        "confirmation_required": "The operation is ready. It is sensitive; reply 'confirm' to execute it.",
     },
 }
 

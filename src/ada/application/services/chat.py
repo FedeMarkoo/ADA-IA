@@ -3,18 +3,24 @@
 from dataclasses import dataclass, field
 import threading
 
-from ada.interfaces.i18n import tr
+from ada.application.services.web_chat import WebChatService
 
 
 @dataclass
 class SessionState:
     messages: list = field(default_factory=list)
     pending_action: object = None
+    lock: object = field(default_factory=threading.RLock)
+
+    @property
+    def conversation(self):
+        return self.messages
 
 
 class ChatService:
     def __init__(self, agent):
         self.agent = agent
+        self.web_chat = WebChatService(agent)
         self._sessions = {}
         self._lock = threading.RLock()
 
@@ -27,37 +33,12 @@ class ChatService:
         state.messages[:] = state.messages[-1000:]
 
     def handle(self, message, session_id="main", lang=None, confirm=None):
-        text = str(message or "").strip()
-        if not text:
-            return {"error": "empty_message", "message": tr("empty_message", lang)}
         state = self.session(session_id)
-        if lang:
-            self.agent.lang = lang
-        self._remember(state, "user", text)
-        parsed = self.agent.parse_prompt(text)
-        action = parsed.get("action")
-        plan = self.agent.plan_request(text) if hasattr(self.agent, "plan_request") else None
-        payload = {key: value for key, value in parsed.items() if key not in {"action", "complexity"}}
-        task = {
-            "type": action if action not in {"ask", "suggest"} else None,
-            "payload": payload,
-            "prompt": text,
-            "complexity": parsed.get("complexity", 3),
-            "confirm": confirm,
-        }
-        result = self.agent.decide_and_run(task)
-        output = result.get("result", result) if isinstance(result, dict) else result
-        reply = output.get("text") if isinstance(output, dict) else str(output)
-        if isinstance(output, dict) and not reply:
-            reply = str(output)
-        self._remember(state, "assistant", reply)
-        return {
-            "reply": reply,
-            "model": result.get("model") if isinstance(result, dict) else None,
-            "action": action,
-            "plan_id": plan.plan_id if plan else None,
-            "result": output,
-        }
+        with state.lock:
+            result, _status = self.web_chat.handle(message, state, lang)
+            if confirm is not None and state.pending_action and confirm:
+                result, _status = self.web_chat.handle("confirmo", state, lang)
+            return result
 
     def history(self, session_id="main"):
         return list(self.session(session_id).messages)

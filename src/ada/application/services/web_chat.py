@@ -92,11 +92,14 @@ class WebChatService:
         parsed = self.agent.parse_prompt(text)
         action_name = parsed.get("action")
         if action_name in {None, "ask", "suggest"}:
+            complexity = parsed.get("complexity")
+            if complexity is None:
+                complexity = self.agent.estimate_complexity(text)
             result = self.agent.decide_and_run(
                 {
                     "type": None,
                     "prompt": text,
-                    "complexity": parsed.get("complexity", self.agent.estimate_complexity(text)),
+                    "complexity": complexity,
                     "use_memory": True,
                     "mode": "agent",
                 }
@@ -107,7 +110,7 @@ class WebChatService:
 
         action, payload = self._task(parsed, text)
         if self._needs_path(action, payload):
-            reply = "Necesito la ruta o carpeta para ejecutar esa tarea."
+            reply = tr("path_required", lang)
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · agente"}, 200
         task = {
@@ -120,7 +123,7 @@ class WebChatService:
         output = result.get("result", result)
         if isinstance(output, dict) and output.get("error") == "confirmation_required":
             state.pending_action = task
-            reply = "Preparé la operación. Es una acción sensible; respondé 'confirmo' para ejecutarla."
+            reply = tr("confirmation_required", lang)
         else:
             reply = text_from_result(output)
         self._remember(state, text, reply)
