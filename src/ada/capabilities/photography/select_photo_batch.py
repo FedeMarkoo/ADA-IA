@@ -1,6 +1,6 @@
 """Batch orchestration built on the same single-photo multi-agent workflow."""
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 import re
 
@@ -41,6 +41,22 @@ def _feedback_label(path):
     if name.startswith("RECH__"):
         return "rejected"
     return None
+
+
+def _analyze_one(path, root, folder_context, config, vision, write_xmp):
+    """Process-safe batch worker for CPU-heavy photo analysis."""
+    from ada.agents import MultiAgentCoordinator
+
+    wait_for_cpu_budget(config)
+    return MultiAgentCoordinator(config).analyze_photo(
+        {
+            "path": str(path),
+            "folder": str(root),
+            "folder_context": folder_context,
+            "vision": vision,
+            "write_xmp": write_xmp,
+        }
+    )
 
 
 def _demote_burst_duplicates(burst_groups, records, write_xmp=False, accept_threshold=5.0):
@@ -203,8 +219,24 @@ def run(args):
         )
 
     max_workers = max(1, int(args.get("workers", config.get("photo_workers", 1))))
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(analyze, path): path for path in files}
+    use_processes = args.get("executor", config.get("photo_executor", "thread")) == "process"
+    executor_class = ProcessPoolExecutor if use_processes else ThreadPoolExecutor
+    with executor_class(max_workers=max_workers) as pool:
+        if use_processes:
+            futures = {
+                pool.submit(
+                    _analyze_one,
+                    path,
+                    root,
+                    folder_context,
+                    config,
+                    args.get("vision", True),
+                    args.get("write_xmp", False),
+                ): path
+                for path in files
+            }
+        else:
+            futures = {pool.submit(analyze, path): path for path in files}
         for future in as_completed(futures):
             path = futures[future]
             try:

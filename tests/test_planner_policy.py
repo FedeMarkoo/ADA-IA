@@ -62,6 +62,8 @@ class PlannerPolicyTests(unittest.TestCase):
         self.assertIn("filesystem", catalog)
         self.assertIn("argument_schema", catalog["filesystem"])
         self.assertTrue(catalog["filesystem"]["requires_confirmation"])
+        self.assertEqual(catalog["gmail_draft"]["risk_level"], "medium")
+        self.assertEqual(catalog["gmail_draft"]["permissions"], ["gmail.compose"])
 
 
 if __name__ == "__main__":
