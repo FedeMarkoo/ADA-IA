@@ -20,6 +20,10 @@ class CapabilitySpec:
     version: str = "1.0"
 
 
+class CapabilityLoadError(RuntimeError):
+    """Raised when strict capability discovery finds a broken module."""
+
+
 _RISKY = {
     "run_script",
     "group_files",
@@ -34,15 +38,15 @@ _RISKY = {
 _LOADED_SPECS: Dict[str, Dict[str, Any]] = {}
 
 
-def load_capabilities():
+def load_capabilities(strict=False):
     capabilities = {}
     _LOADED_SPECS.clear()
     base = Path(__file__).parent
     for path in sorted(base.rglob("*.py")):
         if path.name in {"__init__.py", "registry.py"}:
             continue
-        name = path.stem
-        spec = importlib.util.spec_from_file_location(f"ada_capability_{name}", str(path))
+        relative_name = path.relative_to(base).with_suffix("").as_posix().replace("/", "_")
+        spec = importlib.util.spec_from_file_location(f"ada_capability_{relative_name}", str(path))
         if not spec or not spec.loader:
             continue
         module = importlib.util.module_from_spec(spec)
@@ -50,10 +54,15 @@ def load_capabilities():
             spec.loader.exec_module(module)
         except Exception as exc:
             logger.warning("capability_load_failed path=%s error=%s", path, exc)
+            if strict:
+                raise CapabilityLoadError(f"Capability rota: {path}") from exc
             continue
         if hasattr(module, "run"):
-            capabilities[name] = module.run
             declared = getattr(module, "CAPABILITY_SPEC", {})
+            name = str(declared.get("name") or path.stem) if isinstance(declared, dict) else path.stem
+            if name in capabilities:
+                raise CapabilityLoadError(f"Nombre de capability duplicado: {name}")
+            capabilities[name] = module.run
             _LOADED_SPECS[name] = declared if isinstance(declared, dict) else {}
     return capabilities
 

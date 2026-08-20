@@ -11,6 +11,10 @@ Ese entrypoint mantiene compatibilidad con Flask. Para ASGI, instalá la extra
 Para el worker autónomo, ejecutá `ada-autonomous`; usa SQLite como event store,
 watchers de carpetas y scheduler con reintentos.
 
+Para instalaciones reproducibles del runtime base, ejecutá
+`python -m pip install -r requirements.lock`. Las extras opcionales siguen
+declaradas en `pyproject.toml`.
+
 ## Pruebas
 
 ```bash
@@ -45,3 +49,11 @@ allowlist de rutas y confirmación explícita.
 
 En Linux, copiá `deploy/ada.service` a `~/.config/systemd/user/ada.service`,
 recargá `systemctl --user daemon-reload` y habilitá `systemctl --user enable --now ada`.
+En Windows, desde PowerShell ejecutá
+`./deploy/windows/install-ada-task.ps1 -AdaRoot (Get-Location).Path`; esto registra
+el worker con el Programador de tareas y reinicia tras fallos.
+
+El backup periódico del daemon se activa con `backup_interval_seconds` y
+opcionalmente `backup_path` en la configuración. Las reglas de autonomía pueden
+filtrar por `path_prefix`, `location`, `geofence` (`lat`, `lon`, `radius_m`) e
+`inventory_max` para proactividad controlada.
