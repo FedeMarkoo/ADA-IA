@@ -71,22 +71,28 @@ def load_capabilities(strict=False):
 def capability_specs():
     """Discover declarative metadata while preserving the callable registry API."""
     capabilities = load_capabilities()
-    return {
-        name: CapabilitySpec(
+    result = {}
+    for name, function in capabilities.items():
+        declared = _LOADED_SPECS.get(name, {})
+        schema = declared.get("argument_schema", {"type": "object", "additionalProperties": True})
+        if not isinstance(schema, dict):
+            raise CapabilityLoadError(f"Schema de argumentos inválido para capability: {name}")
+        risk = declared.get("risk_level", "high" if name in _RISKY else "low")
+        if risk not in {"low", "medium", "high"}:
+            raise CapabilityLoadError(f"risk_level inválido para capability: {name}")
+        permissions = declared.get("permissions", ("filesystem.write",) if name in _RISKY else ())
+        if isinstance(permissions, str):
+            permissions = (permissions,)
+        result[name] = CapabilitySpec(
             name=name,
-            description=_LOADED_SPECS.get(name, {}).get("description")
-            or getattr(function, "__doc__", None)
-            or f"Capability ADA: {name}",
-            risk_level="high" if name in _RISKY else "low",
-            permissions=("filesystem.write",) if name in _RISKY else (),
-            argument_schema=_LOADED_SPECS.get(name, {}).get(
-                "argument_schema", {"type": "object", "additionalProperties": True}
-            ),
-            requires_confirmation=name in _RISKY,
-            version=str(_LOADED_SPECS.get(name, {}).get("version", "1.0")),
+            description=declared.get("description") or getattr(function, "__doc__", None) or f"Capability ADA: {name}",
+            risk_level=risk,
+            permissions=tuple(permissions),
+            argument_schema=schema,
+            requires_confirmation=bool(declared.get("requires_confirmation", name in _RISKY)),
+            version=str(declared.get("version", "1.0")),
         )
-        for name, function in capabilities.items()
-    }
+    return result
 
 
 def capability_catalog():

@@ -66,3 +66,8 @@ El backup periódico del daemon se activa con `backup_interval_seconds` y
 opcionalmente `backup_path` en la configuración. Las reglas de autonomía pueden
 filtrar por `path_prefix`, `location`, `geofence` (`lat`, `lon`, `radius_m`) e
 `inventory_max` para proactividad controlada.
+
+Para lotes fotográficos CPU-bound se puede seleccionar el aislamiento por
+procesos con `photo_executor: "process"` (o `executor: "process"` en la acción);
+el valor predeterminado conserva threads para evitar el costo de crear procesos
+cuando el lote es pequeño.
