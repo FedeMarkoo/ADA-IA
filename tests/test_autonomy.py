@@ -27,6 +27,14 @@ class AutonomyTests(unittest.TestCase):
             self.assertEqual(filtered["status"], "filtered")
             self.assertEqual(proposed["status"], "proposed")
 
+    def test_geofence_and_inventory_filters(self):
+        inside = {"coordinates": {"lat": -34.6037, "lon": -58.3816}, "quantity": 1}
+        rule = {"geofence": {"lat": -34.6037, "lon": -58.3816, "radius_m": 100}, "inventory_max": 2}
+        self.assertTrue(AutonomyService._matches(rule, inside))
+        outside = {"coordinates": {"lat": -34.7, "lon": -58.5}, "quantity": 1}
+        self.assertFalse(AutonomyService._matches(rule, outside))
+        self.assertFalse(AutonomyService._matches(rule, {"coordinates": inside["coordinates"], "quantity": 3}))
+
 
 if __name__ == "__main__":
     unittest.main()

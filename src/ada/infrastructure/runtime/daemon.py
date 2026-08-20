@@ -27,8 +27,18 @@ def run(config=None):
         agent.mem, {"filesystem.file_created": file_created}, interval=config.get("scheduler_interval", 2)
     )
     watchers = [FolderWatcher(folder, bus) for folder in config.get("watch_folders", [])]
+    backup_interval = max(0.0, float(config.get("backup_interval_seconds", 0)))
+    next_backup = time.monotonic() + backup_interval if backup_interval else None
     while True:
         for watcher in watchers:
             watcher.scan()
         scheduler.run_once()
+        if next_backup is not None and time.monotonic() >= next_backup:
+            backup_path = config.get("backup_path") or str(agent.mem.db_path) + ".backup"
+            try:
+                agent.mem.backup_to(backup_path)
+                logger.info("memory_backup_created path=%s", backup_path)
+            except Exception:
+                logger.exception("memory_backup_failed path=%s", backup_path)
+            next_backup = time.monotonic() + backup_interval
         time.sleep(max(0.1, float(config.get("watch_interval", 5))))

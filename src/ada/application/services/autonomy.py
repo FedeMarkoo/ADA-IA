@@ -1,6 +1,7 @@
 """Event-to-task bridge for controlled, auditable autonomy."""
 
 import logging
+import math
 from pathlib import Path
 
 from ada.domain.tasks import Action
@@ -52,10 +53,55 @@ class AutonomyService:
 
     @staticmethod
     def _matches(rule, payload):
+        payload = payload or {}
         extensions = rule.get("extensions") or []
-        if not extensions:
-            return True
-        path = Path(str((payload or {}).get("path", "")))
-        return path.suffix.lower() in {
-            str(item).lower() if str(item).startswith(".") else f".{str(item).lower()}" for item in extensions
-        }
+        if extensions:
+            path = Path(str(payload.get("path", "")))
+            allowed = {
+                str(item).lower() if str(item).startswith(".") else f".{str(item).lower()}" for item in extensions
+            }
+            if path.suffix.lower() not in allowed:
+                return False
+        prefix = rule.get("path_prefix")
+        if prefix and not str(payload.get("path", "")).startswith(str(prefix)):
+            return False
+        expected_event = rule.get("event_value")
+        if expected_event is not None and payload.get("value") != expected_event:
+            return False
+        required_location = rule.get("location")
+        if required_location and payload.get("location") != required_location:
+            return False
+        geofence = rule.get("geofence")
+        if geofence:
+            if not AutonomyService._inside_geofence(payload.get("coordinates"), geofence):
+                return False
+        inventory_max = rule.get("inventory_max")
+        if inventory_max is not None:
+            quantity = payload.get("quantity")
+            try:
+                if quantity is None or float(quantity) > float(inventory_max):
+                    return False
+            except (TypeError, ValueError):
+                return False
+        return True
+
+    @staticmethod
+    def _inside_geofence(coordinates, geofence):
+        """Match GPS coordinates against a circular rule without a GIS dependency."""
+        if not isinstance(coordinates, dict) or not isinstance(geofence, dict):
+            return False
+        try:
+            lat = float(coordinates["lat"])
+            lon = float(coordinates["lon"])
+            center_lat = float(geofence["lat"])
+            center_lon = float(geofence["lon"])
+            radius = float(geofence.get("radius_m", 100))
+        except (KeyError, TypeError, ValueError):
+            return False
+        earth_radius_m = 6_371_000
+        lat1, lat2 = math.radians(lat), math.radians(center_lat)
+        dlat = lat2 - lat1
+        dlon = math.radians(center_lon - lon)
+        haversine = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        distance = 2 * earth_radius_m * math.asin(math.sqrt(haversine))
+        return distance <= max(0, radius)
