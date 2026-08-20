@@ -19,6 +19,11 @@
   "instagram_publish_script": "",
   "instagram_profile_dir": "~/.config/ada/instagram-profile",
   "mcp_servers": {
+    "gmail": {
+      "type": "http",
+      "url": "https://gmailmcp.googleapis.com/mcp/v1",
+      "headers": {"Authorization": "Bearer ${env:GMAIL_MCP_ACCESS_TOKEN}"}
+    },
     "example-local": {
       "type": "stdio",
       "command": "npx",
