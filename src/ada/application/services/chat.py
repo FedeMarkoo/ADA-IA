@@ -35,6 +35,10 @@ class ChatService:
     def handle(self, message, session_id="main", lang=None, confirm=None):
         state = self.session(session_id)
         with state.lock:
+            if confirm is False and state.pending_action:
+                state.pending_action = None
+                result, _status = self.web_chat.handle("cancelar", state, lang)
+                return result
             result, _status = self.web_chat.handle(message, state, lang)
             if confirm is not None and state.pending_action and confirm:
                 result, _status = self.web_chat.handle("confirmo", state, lang)

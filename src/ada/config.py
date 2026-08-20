@@ -60,6 +60,32 @@ def validate_config(config):
     for key in ("local_runtime", "models", "model_policy", "gpt4all", "telegram"):
         if key in config and not isinstance(config[key], dict):
             raise ValueError(f"{key} debe ser un objeto.")
+    bool_keys = ("confirm_risky", "adaptive_models", "auto_pull_models")
+    for key in bool_keys:
+        if key in config and not isinstance(config[key], bool):
+            raise ValueError(f"{key} debe ser booleano.")
+    string_keys = ("db_path", "photo_root", "food_profile", "instagram_profile_dir", "web_framework")
+    for key in string_keys:
+        if key in config and config[key] is not None and not isinstance(config[key], str):
+            raise ValueError(f"{key} debe ser texto.")
+    if "photo_executor" in config and config["photo_executor"] not in {"thread", "process"}:
+        raise ValueError("photo_executor debe ser 'thread' o 'process'.")
+    for key in ("backup_interval_seconds", "cpu_throttle_seconds", "cpu_throttle_max_wait_seconds"):
+        if key in config:
+            try:
+                if float(config[key]) < 0:
+                    raise ValueError(f"{key} no puede ser negativo.")
+            except (TypeError, ValueError) as exc:
+                if isinstance(exc, ValueError) and str(exc).startswith(key):
+                    raise
+                raise ValueError(f"{key} debe ser numérico.") from exc
+    if "cpu_limit_percent" in config:
+        try:
+            cpu_limit = float(config["cpu_limit_percent"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("cpu_limit_percent debe ser numérico.") from exc
+        if not 0 < cpu_limit <= 100:
+            raise ValueError("cpu_limit_percent debe estar entre 0 y 100.")
     framework = config.get("web_framework", "flask")
     if framework not in {"flask", "asgi"}:
         raise ValueError("web_framework debe ser 'flask' o 'asgi'.")
