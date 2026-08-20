@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from ada.infrastructure.engines.model_manager import ModelManager
 from ada.infrastructure.runtime.ollama import LocalModelRuntime
@@ -50,6 +51,22 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(available["local"])
         self.assertEqual(manager.choose({"complexity": 3}), None)
         self.assertIn("status", manager.runtime_status())
+
+    def test_adaptive_models_use_observed_latency_and_errors(self):
+        manager = ModelManager(
+            {
+                "adaptive_models": True,
+                "model_policy": {"chat": {"preferred": "slow", "fallbacks": ["fast"]}},
+                "model_catalog": [{"name": "slow"}, {"name": "fast"}],
+            }
+        )
+        with patch.object(manager, "_call_ollama", return_value="ok"):
+            for _ in range(2):
+                manager.call("ollama", "test", ollama_model="slow")
+            manager._record_model_stat("slow", 10.0, error=True)
+            manager._record_model_stat("fast", 0.1)
+        self.assertEqual(manager.select_model("chat"), "fast")
+        self.assertTrue(manager.model_recommendations()["model_stats"])
 
 
 if __name__ == "__main__":

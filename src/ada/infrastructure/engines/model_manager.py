@@ -9,6 +9,7 @@ import os
 import urllib.error
 import urllib.request
 import time
+import threading
 
 from ada.infrastructure.runtime.resources import recommended_threads
 from ada.infrastructure.runtime.resources import hardware_profile
@@ -48,13 +49,25 @@ class ModelManager:
         self.models = self.config.get("models", {})
         self._gpt4all = None
         self.metrics = Metrics("models")
+        self._model_stats = {}
+        self._model_stats_lock = threading.RLock()
 
     def reload(self, config=None):
         """Reload model policy at runtime without recreating the agent."""
         if config is not None:
             self.config = dict(config)
+        self.ollama_url = os.environ.get(
+            "ADA_OLLAMA_URL", self.config.get("ollama_url", "http://127.0.0.1:11434")
+        ).rstrip("/")
+        self.openai_key = os.environ.get("OPENAI_API_KEY")
+        self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        self.provider = self.config.get(
+            "engine_provider",
+            self.config.get("local_runtime", {}).get("provider", "ollama"),
+        )
         self.models = self.config.get("models", {})
         self.local_runtime.config = self.config
+        self._gpt4all = None
 
     def available(self):
         local_available = self._ollama_available() if self.provider == "ollama" else False
@@ -115,11 +128,44 @@ class ModelManager:
     def select_model(self, task, role="chat"):
         """Select a hardware-compatible model name from the runtime policy."""
         names = self._model_candidates(task, role)
+        names = self._adaptive_order(names)
         available = {item["name"] for item in self.model_catalog()}
         for name in names:
             if name and (not available or name in available):
                 return name
         return names[0] if names else ""
+
+    def _adaptive_order(self, names):
+        """Rank models with observed performance while preserving cold-start order."""
+        if not self.config.get("adaptive_models") or len(names) < 2:
+            return names
+        with self._model_stats_lock:
+            stats = {name: dict(self._model_stats.get(name, {})) for name in names}
+        measured = [item for item in stats.values() if item.get("calls")]
+        if not measured:
+            return names
+        best_average = min(item["seconds"] / item["calls"] for item in measured)
+
+        def score(index_name):
+            index, name = index_name
+            item = stats[name]
+            calls = item.get("calls", 0)
+            if not calls:
+                # A cold candidate gets a small exploration allowance instead
+                # of permanently losing to the first configured model.
+                return best_average * 1.25, index
+            error_rate = item.get("errors", 0) / calls
+            return (item["seconds"] / calls) * (1.0 + error_rate * 3.0), index
+
+        return [name for _, name in sorted(enumerate(names), key=score)]
+
+    def _record_model_stat(self, model_tag, duration, error=False):
+        with self._model_stats_lock:
+            item = self._model_stats.setdefault(model_tag, {"calls": 0, "errors": 0, "seconds": 0.0})
+            item["calls"] += 1
+            item["seconds"] += duration
+            if error:
+                item["errors"] += 1
 
     def ensure_model(self, task, role="chat"):
         """Ensure the selected local model is installed or use an installed fallback."""
@@ -141,8 +187,13 @@ class ModelManager:
         return {
             "adaptive": bool(self.config.get("adaptive_models", False)),
             "roles": {role: self.select_model(role, role=role) for role in sorted(roles)},
+            "model_stats": self.model_stats(),
             "telemetry": self.metrics.snapshot(),
         }
+
+    def model_stats(self):
+        with self._model_stats_lock:
+            return {name: dict(values) for name, values in self._model_stats.items()}
 
     def _gpt4all_available(self):
         if GPT4All is None:
@@ -224,6 +275,7 @@ class ModelManager:
         model_tag = kwargs.get("ollama_model") or kwargs.get(f"{provider}_model") or "default"
         tags = {"provider": provider, "model": model_tag}
         self.metrics.increment("provider.calls", tags=tags)
+        failed = False
         try:
             if provider == "ollama":
                 return self._call_ollama(prompt, **kwargs)
@@ -235,10 +287,13 @@ class ModelManager:
                 return self._call_gpt4all(prompt, **kwargs)
             raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
         except Exception:
+            failed = True
             self.metrics.increment("provider.errors", tags=tags)
             raise
         finally:
-            self.metrics.observe("provider.duration", time.monotonic() - started, tags)
+            duration = time.monotonic() - started
+            self._record_model_stat(model_tag, duration, error=failed)
+            self.metrics.observe("provider.duration", duration, tags)
 
     def call_vision(self, provider, prompt, image_base64, **kwargs):
         if provider != "ollama":
