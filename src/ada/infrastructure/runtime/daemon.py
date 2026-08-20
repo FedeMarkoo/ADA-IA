@@ -19,13 +19,14 @@ def run(config=None):
     autonomy = AutonomyService(agent, config)
     bus = EventBus(agent.mem)
 
-    def file_created(payload):
-        logger.info("new_file path=%s", payload.get("path"))
-        return autonomy.handle("filesystem.file_created", payload)
+    def handle_event(topic, payload):
+        if topic == "filesystem.file_created":
+            logger.info("new_file path=%s", payload.get("path"))
+        return autonomy.handle(topic, payload)
 
-    scheduler = Scheduler(
-        agent.mem, {"filesystem.file_created": file_created}, interval=config.get("scheduler_interval", 2)
-    )
+    topics = set((config.get("event_rules") or {})) | {"filesystem.file_created"}
+    handlers = {topic: (lambda payload, topic=topic: handle_event(topic, payload)) for topic in topics}
+    scheduler = Scheduler(agent.mem, handlers, interval=config.get("scheduler_interval", 2))
     watchers = [FolderWatcher(folder, bus) for folder in config.get("watch_folders", [])]
     backup_interval = max(0.0, float(config.get("backup_interval_seconds", 0)))
     next_backup = time.monotonic() + backup_interval if backup_interval else None

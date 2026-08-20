@@ -1,7 +1,9 @@
 import unittest
+import os
 
 try:
     from ada.interfaces.web.server import app, create_app
+    from ada.infrastructure.persistence.sqlite import Memory
 except ImportError:
     app = None
     create_app = None
@@ -70,6 +72,30 @@ class WebSessionTests(unittest.TestCase):
         self.assertEqual(styles.status_code, 200)
         javascript.close()
         styles.close()
+
+    def test_mobile_event_webhook_requires_token_and_persists_event(self):
+        previous = os.environ.get("ADA_EVENT_TOKEN")
+        os.environ["ADA_EVENT_TOKEN"] = "test-event-token"
+        try:
+            fake = type("Agent", (), {})()
+            fake.mem = Memory(":memory:")
+            fake.cfg = {}
+            event_app = create_app({"db_path": ":memory:"}, agent_instance=fake)
+            client = event_app.test_client()
+            denied = client.post("/api/events", json={"topic": "entered_zone", "payload": {}})
+            self.assertEqual(denied.status_code, 403)
+            response = client.post(
+                "/api/events",
+                json={"topic": "entered_zone", "payload": {"location": "supermercado"}},
+                headers={"X-ADA-Event-Token": "test-event-token"},
+            )
+            self.assertEqual(response.status_code, 202)
+            self.assertTrue(response.get_json()["event_id"])
+        finally:
+            if previous is None:
+                os.environ.pop("ADA_EVENT_TOKEN", None)
+            else:
+                os.environ["ADA_EVENT_TOKEN"] = previous
 
 
 if __name__ == "__main__":

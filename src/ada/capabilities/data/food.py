@@ -266,7 +266,7 @@ def _meal_plan(conn, args):
         conn.commit()
     else:
         query = "SELECT id,plan_date,meal,recipe_name,servings,estimated_cost,notes FROM food_meal_plan"
-        values = ()
+        values: tuple = ()
         if args.get("week"):
             query += " WHERE plan_date BETWEEN ? AND date(?, '+6 day')"
             values = (args["week"], args["week"])
