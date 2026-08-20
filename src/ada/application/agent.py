@@ -349,6 +349,25 @@ class Agent:
             return {"action": "run", "command": command, "complexity": 2}
         if any(w in lowered for w in ("index", "indexar", "scan", "escanear")):
             return {"action": "index", "path": path, "complexity": 2}
+        if any(w in lowered for w in ("inventario", "stock", "despensa")):
+            action = "inventory_list"
+            if any(w in lowered for w in ("agreg", "sumá", "suma", "cargá", "anotá")):
+                action = "inventory_add"
+            elif any(w in lowered for w in ("usá", "usa", "consum", "gast")):
+                action = "inventory_use"
+            return {"action": "food", "domain": "inventory", "food_action": action, "complexity": 3}
+        if any(w in lowered for w in ("presupuesto de comida", "presupuesto semanal", "presupuesto mensual")):
+            action = (
+                "budget_list"
+                if any(w in lowered for w in ("cuánto", "cuanto", "ver", "mostrá", "lista"))
+                else "budget_set"
+            )
+            return {"action": "food", "domain": "budget", "food_action": action, "complexity": 3}
+        if any(
+            w in lowered for w in ("plan semanal", "planificá las comidas", "planifica las comidas", "plan de comidas")
+        ):
+            action = "plan_list" if any(w in lowered for w in ("ver", "mostrá", "lista")) else "plan_set"
+            return {"action": "food", "domain": "planning", "food_action": action, "complexity": 3}
         if any(
             w in lowered
             for w in (

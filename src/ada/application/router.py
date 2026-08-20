@@ -12,6 +12,27 @@ import re
 
 logger = logging.getLogger("ada.router")
 
+FOOD_ACTIONS = {
+    "advise",
+    "add",
+    "list",
+    "check",
+    "remove",
+    "save",
+    "recipe_to_shopping",
+    "inventory_add",
+    "inventory_list",
+    "inventory_use",
+    "inventory_remove",
+    "budget_set",
+    "budget_spend",
+    "budget_list",
+    "plan_set",
+    "plan_list",
+    "plan_remove",
+}
+FOOD_MUTATIONS = FOOD_ACTIONS - {"advise", "list", "inventory_list", "budget_list", "plan_list"}
+
 
 class IntentRouter:
     def __init__(self, model_manager, config=None, memory=None):
@@ -57,7 +78,7 @@ class IntentRouter:
             )
             logger.info("router raw=%s", str(raw)[:1000])
             normalized = self._normalize(self._decode(raw), fallback)
-            if normalized.get("action") == "food" and normalized.get("food_action") in {"add", "check", "remove"}:
+            if normalized.get("action") == "food" and normalized.get("food_action") in FOOD_MUTATIONS:
                 verified = self._verify_food_mutation(provider, text, normalized)
                 if not verified:
                     normalized = {
@@ -120,7 +141,7 @@ class IntentRouter:
         prompt = (
             template.replace("{history}", history[-1200:])
             .replace("{text}", text)
-            .replace("{food_actions}", "advise, add, list, check, remove, save, recipe_to_shopping")
+            .replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))
         )
         try:
             raw = self.model_manager.call(
@@ -140,25 +161,37 @@ class IntentRouter:
             is_food = (
                 candidate.get("is_food") is True
                 or raw_action.startswith("food")
-                or domain in {"food", "comida", "comidas", "shopping", "compras", "recipes", "recetas"}
-                or candidate.get("food_action")
-                in {"advise", "add", "list", "check", "remove", "save", "recipe_to_shopping"}
+                or domain
+                in {
+                    "food",
+                    "comida",
+                    "comidas",
+                    "shopping",
+                    "compras",
+                    "recipes",
+                    "recetas",
+                    "inventory",
+                    "budget",
+                    "planning",
+                }
+                or candidate.get("food_action") in FOOD_ACTIONS
             )
             if not is_food:
                 return None
             result = dict(candidate)
             if raw_action.startswith("food/"):
                 result["food_action"] = raw_action.split("/", 1)[1]
-            result["food_action"] = (
-                result.get("food_action")
-                if result.get("food_action")
-                in {"advise", "add", "list", "check", "remove", "save", "recipe_to_shopping"}
-                else "advise"
-            )
+            result["food_action"] = result.get("food_action") if result.get("food_action") in FOOD_ACTIONS else "advise"
             if domain in {"compras", "shopping"}:
                 result["domain"] = "shopping"
             elif domain in {"recetas", "recipes", "comida", "comidas", "food"}:
                 result["domain"] = "recipes"
+            elif domain in {"inventory", "inventario", "stock", "despensa"}:
+                result["domain"] = "inventory"
+            elif domain in {"budget", "presupuesto"}:
+                result["domain"] = "budget"
+            elif domain in {"planning", "plan", "meal_plan", "comidas_semanales"}:
+                result["domain"] = "planning"
             result.update(
                 {
                     "action": "food",
@@ -182,7 +215,7 @@ class IntentRouter:
         )
         return (
             template.replace("{actions}", self._actions_text())
-            .replace("{food_actions}", "advise, add, list, check, remove, save, recipe_to_shopping")
+            .replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))
             .replace("{history}", history[-2500:])
             .replace("{text}", text)
         )
