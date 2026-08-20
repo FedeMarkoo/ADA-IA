@@ -45,6 +45,14 @@ def _csrf_token():
 def protect_mutating_requests():
     if request.method not in {"POST", "DELETE", "PUT", "PATCH"}:
         return None
+    if request.path == "/api/events":
+        if (request.content_type or "").split(";", 1)[0].lower() != "application/json":
+            return jsonify({"error": "content_type_must_be_json"}), 415
+        expected = os.environ.get("ADA_EVENT_TOKEN") or _runtime()["cfg"].get("event_token")
+        supplied = request.headers.get("X-ADA-Event-Token", "")
+        if not expected or not supplied or not secrets.compare_digest(str(expected), supplied):
+            return jsonify({"error": "event_token_required"}), 403
+        return None
     if request.host.split(":", 1)[0].lower() not in {"127.0.0.1", "localhost"}:
         return jsonify({"error": "invalid_host"}), 403
     origin = request.headers.get("Origin")
@@ -244,6 +252,25 @@ def reload_models():
         active_agent.model_manager.reload(previous)
         raise
     return jsonify({"ok": True, "model": selected, "adaptive": bool(candidate.get("adaptive_models", False))})
+
+
+@app.route("/api/events", methods=["POST"])
+def publish_event_api():
+    """Receive authenticated Tasker/mobile events into the durable event bus."""
+    data = request.get_json(silent=True) or {}
+    topic = str(data.get("topic") or "").strip()
+    payload = data.get("payload")
+    if not topic or len(topic) > 128 or not isinstance(payload, dict):
+        return jsonify({"error": "invalid_event"}), 400
+    runtime = _runtime()
+    event_id = runtime["agent"].mem.publish_event(
+        topic,
+        payload,
+        priority=int(data.get("priority", 0)),
+        dedupe_key=data.get("dedupe_key"),
+        delay_seconds=max(0, int(data.get("delay_seconds", 0))),
+    )
+    return jsonify({"ok": True, "event_id": event_id, "topic": topic}), 202
 
 
 @app.route("/api/conversation", methods=["GET", "DELETE"])
