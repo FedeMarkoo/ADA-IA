@@ -4,9 +4,9 @@
 
 - [x] Compatibilidad con definiciones de servidores estilo VS Code para MCP `stdio`.
 - [x] Soporte de `command`, `args`, `env` y `cwd` en servidores locales.
-- [x] Resolución de variables `${env:NAME}` desde el entorno de ADA.
+- [x] Resolución de variables `${env:NAME}` completas o incrustadas desde el entorno de ADA.
 - [x] Compatibilidad inicial con MCP remoto mediante Streamable HTTP.
-- [ ] Importar automáticamente `.vscode/mcp.json` sin copiar la configuración a `config.json`.
+- [x] Importar `.vscode/mcp.json` sólo con opt-in explícito del workspace.
 - [ ] Resolver de forma segura `${input:NAME}` con un mecanismo de configuración/secretos de ADA.
 - [ ] Mantener procesos MCP persistentes para evitar arrancar un proceso nuevo por cada llamada.
 - [ ] Exponer las tools MCP descubiertas al planner/router como capabilities dinámicas, con schemas y nivel de riesgo.
