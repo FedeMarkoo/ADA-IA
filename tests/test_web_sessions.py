@@ -61,6 +61,16 @@ class WebSessionTests(unittest.TestCase):
         )
         self.assertEqual(rejected.status_code, 400)
 
+    def test_spa_assets_are_served_by_flask(self):
+        client = app.test_client()
+        javascript = client.get("/static/app.js")
+        self.assertEqual(javascript.status_code, 200)
+        self.assertIn("markdownToHtml", javascript.get_data(as_text=True))
+        styles = client.get("/static/styles.css")
+        self.assertEqual(styles.status_code, 200)
+        javascript.close()
+        styles.close()
+
 
 if __name__ == "__main__":
     unittest.main()
