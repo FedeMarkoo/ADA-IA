@@ -12,6 +12,7 @@ from ada.infrastructure.runtime.resources import hardware_profile
 from ada.capabilities.files.filesystem import IMAGE_EXTENSIONS
 from ada.interfaces.telegram import TelegramListener
 from ada.interfaces.i18n import tr
+from ada.application.services.responses import text_from_result
 import re
 import secrets
 import threading
@@ -843,71 +844,11 @@ def chat():
     )
     # Normalize output
     out = res.get("result") if isinstance(res, dict) else res
-    if isinstance(out, dict):
-        # try to get text in common fields
-        out_text = out.get("text") or out.get("result") or str(out)
-    else:
-        out_text = str(out)
+    out_text = text_from_result(out)
 
-    # sanitize output: remove persona statements (age/gender) and trim auto-inserted language blocks
-    # remove explicit age/gender roleplay lines
-    out_text = re.sub(r"I(?:'m| am) a \d{1,3}[- ]?year[- ]?old [a-zA-Z]+[\.,]?", "", out_text, flags=re.I)
-    out_text = re.sub(r"My name is [A-Za-z ]{1,30}\.?", "", out_text)
-    # remove common auto-questions and assistant self-introductions
-    out_text = re.sub(r"What is your name\??", "", out_text, flags=re.I)
-    out_text = re.sub(r"What is your purpose\??", "", out_text, flags=re.I)
-    out_text = re.sub(r"ADA:.*?", "", out_text, flags=re.I)
-    out_text = re.sub(r"user prompt:.*", "", out_text, flags=re.I | re.S)
-    # remove leading 'English:' / 'Spanish:' blocks if lang specified
-    if lang == "es":
-        # keep Spanish block after 'Spanish:' or 'Spanish' marker
-        m = re.search(r"Spanish:\s*(.*?)$", out_text, flags=re.I | re.S)
-        if m:
-            out_text = m.group(1).strip()
-        else:
-            # remove any English: ... Spanish: markers and keep whole text
-            out_text = re.sub(r"English:.*?Spanish:\s*", "", out_text, flags=re.I | re.S)
-    elif lang == "en":
-        m = re.search(r"English:\s*(.*?)($|Spanish:)", out_text, flags=re.I | re.S)
-        if m:
-            out_text = m.group(1).strip()
-        else:
-            out_text = re.sub(r"Spanish:.*?English:\s*", "", out_text, flags=re.I | re.S)
-    # strip repeated whitespace and odd characters
+    # The system prompt and structured provider output define the response contract.
+    # The interface does not rewrite provider text with regexes.
     out_text = out_text.strip()
-
-    # detect roleplay/storytelling outputs and retry with stricter instruction
-    roleplay_patterns = [
-        r"Your Character",
-        r"The Environment",
-        r"What do you want to do",
-        r"I'll describe",
-        r"you are a skilled",
-        r"adventurer",
-        r"text-based adventure",
-    ]
-    try:
-        if any(re.search(pat, out_text, flags=re.I) for pat in roleplay_patterns):
-            # retry once with a stronger non-roleplay instruction
-            retry_task = {
-                "type": None,
-                "prompt": f"Respuesta breve en {lang if lang!='auto' else 'español'} al mensaje: {text}. No roleplay. Contesta sólo un saludo y pregunta cómo puedo ayudar.",
-                "complexity": 1,
-                "use_memory": False,
-            }
-            retry_res = agent.decide_and_run(retry_task)
-            response_model = (
-                retry_res.get("model")
-                if isinstance(retry_res, dict) and isinstance(retry_res.get("model"), str)
-                else response_model
-            )
-            out = retry_res.get("result") if isinstance(retry_res, dict) else retry_res
-            out_text = out if isinstance(out, str) else str(out)
-            out_text = re.sub(r"I(?:'m| am) a \d{1,3}[- ]?year[- ]?old [a-zA-Z]+[\.,]?", "", out_text, flags=re.I)
-            out_text = re.sub(r"My name is [A-Za-z ]{1,30}\.?", "", out_text)
-            out_text = out_text.strip()
-    except Exception:
-        pass
     conversation.extend([{"role": "user", "text": text}, {"role": "assistant", "text": out_text}])
     return jsonify({"reply": out_text, "model": response_model or "sin modelo"})
 
