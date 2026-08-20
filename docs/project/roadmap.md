@@ -34,9 +34,9 @@ revocar tareas.
 ### Compras y recetas
 
 - lista de compras con cantidades, categorías y estados: implementada;
-- inventario doméstico opcional;
+- inventario doméstico: implementado;
 - recetario y sugerencias según ingredientes: implementados;
-- planificación semanal y presupuesto;
+- planificación semanal y presupuesto: implementados;
 - convertir recetas en listas de supermercado: implementado;
 - recordatorios por horario o entrada a una zona autorizada.
 

@@ -12,6 +12,20 @@ Para el worker autónomo, ejecutá `ada-autonomous`; usa SQLite como event store
 watchers de carpetas y scheduler con reintentos.
 Para separar API y autonomía en procesos del sistema, ejecutá `ada-supervisor`.
 
+Diagnóstico y configuración local:
+
+```bash
+ada doctor
+ada models
+ada models --pull
+ada auth-gmail --scope https://www.googleapis.com/auth/gmail.readonly
+ada setup-instagram
+```
+
+El pull de modelos es siempre explícito. Para preparar o validar datos de
+fine-tuning usá `ada finetune prepare|validate`; el entrenamiento LoRA se
+ejecuta con `ada finetune train` y la extra `fine-tuning` instalada.
+
 Para instalaciones reproducibles del runtime base, ejecutá
 `python -m pip install -r requirements.lock`. Las extras opcionales siguen
 declaradas en `pyproject.toml`.
@@ -74,7 +88,8 @@ el worker con el Programador de tareas y reinicia tras fallos.
 El backup periódico del daemon se activa con `backup_interval_seconds` y
 opcionalmente `backup_path` en la configuración. Las reglas de autonomía pueden
 filtrar por `path_prefix`, `location`, `geofence` (`lat`, `lon`, `radius_m`) e
-`inventory_max` para proactividad controlada.
+`inventory_max` para proactividad controlada. La capability de comida también
+mantiene inventario, presupuestos por período y planificación semanal.
 
 Para lotes fotográficos CPU-bound se puede seleccionar el aislamiento por
 procesos con `photo_executor: "process"` (o `executor: "process"` en la acción);
