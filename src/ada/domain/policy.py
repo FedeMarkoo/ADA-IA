@@ -44,7 +44,6 @@ class PolicyEngine:
         arguments = arguments or {}
         if action in {
             "gmail_send",
-            "gmail_draft",
             "instagram_publish",
             "run_script",
             "group_files",

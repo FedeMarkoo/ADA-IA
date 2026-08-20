@@ -12,6 +12,10 @@ def _path(value, base):
     return str(path if path.is_absolute() else (base / path).resolve())
 
 
+def _env_flag(name):
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _load_vscode_mcp(root):
     path = root / ".vscode" / "mcp.json"
     if not path.exists():
@@ -35,7 +39,8 @@ def load_config(path=None, project_root=None):
         return {
             "db_path": str(root / "memory.db"),
             "allowed_roots": [str(Path.home() / "Desktop")],
-            "mcp_servers": _load_vscode_mcp(root),
+            "trust_workspace_mcp": _env_flag("ADA_TRUST_WORKSPACE_MCP"),
+            "mcp_servers": _load_vscode_mcp(root) if _env_flag("ADA_TRUST_WORKSPACE_MCP") else {},
         }
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -60,8 +65,14 @@ def load_config(path=None, project_root=None):
     if not isinstance(config["allowed_roots"], list):
         raise ValueError("allowed_roots debe ser una lista de carpetas.")
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]
+    config.setdefault("trust_workspace_mcp", _env_flag("ADA_TRUST_WORKSPACE_MCP"))
     if "mcp_servers" not in config:
-        config["mcp_servers"] = config.get("mcpServers") or _load_vscode_mcp(root)
+        if "mcpServers" in config:
+            config["mcp_servers"] = config["mcpServers"]
+        elif config["trust_workspace_mcp"]:
+            config["mcp_servers"] = _load_vscode_mcp(root)
+        else:
+            config["mcp_servers"] = {}
     config.setdefault("confirm_risky", True)
     config.setdefault("memory_encryption", False)
     config.setdefault("allowed_commands", [])
@@ -73,7 +84,15 @@ def validate_config(config):
     """Validate the public configuration contract before runtime construction."""
     if not isinstance(config, dict):
         raise ValueError("La configuración ADA debe ser un objeto JSON.")
-    list_keys = ("allowed_roots", "allowed_commands", "engine_priority", "knowledge_files", "watch_folders")
+    list_keys = (
+        "allowed_roots",
+        "allowed_commands",
+        "engine_priority",
+        "knowledge_files",
+        "watch_folders",
+        "gmail_scopes",
+        "gmail_mcp_allowed_hosts",
+    )
     if "memory_encryption" in config and not isinstance(config["memory_encryption"], bool):
         raise ValueError("memory_encryption debe ser booleano.")
     for key in list_keys:
@@ -82,17 +101,32 @@ def validate_config(config):
     for key in ("local_runtime", "models", "model_policy", "gpt4all", "telegram", "mcp_servers"):
         if key in config and not isinstance(config[key], dict):
             raise ValueError(f"{key} debe ser un objeto.")
-    bool_keys = ("confirm_risky", "adaptive_models", "auto_pull_models")
+    bool_keys = ("confirm_risky", "adaptive_models", "auto_pull_models", "trust_workspace_mcp")
     for key in bool_keys:
         if key in config and not isinstance(config[key], bool):
             raise ValueError(f"{key} debe ser booleano.")
-    string_keys = ("db_path", "photo_root", "food_profile", "instagram_profile_dir", "web_framework")
+    string_keys = (
+        "db_path",
+        "photo_root",
+        "food_profile",
+        "instagram_profile_dir",
+        "web_framework",
+        "gmail_backend",
+        "gmail_mcp_server",
+    )
     for key in string_keys:
         if key in config and config[key] is not None and not isinstance(config[key], str):
             raise ValueError(f"{key} debe ser texto.")
     if "photo_executor" in config and config["photo_executor"] not in {"thread", "process"}:
         raise ValueError("photo_executor debe ser 'thread' o 'process'.")
-    for key in ("backup_interval_seconds", "cpu_throttle_seconds", "cpu_throttle_max_wait_seconds"):
+    if config.get("gmail_backend", "api") not in {"api", "mcp"}:
+        raise ValueError("gmail_backend debe ser 'api' o 'mcp'.")
+    for key in (
+        "backup_interval_seconds",
+        "cpu_throttle_seconds",
+        "cpu_throttle_max_wait_seconds",
+        "gmail_mcp_timeout",
+    ):
         if key in config:
             try:
                 if float(config[key]) < 0:
@@ -101,6 +135,8 @@ def validate_config(config):
                 if isinstance(exc, ValueError) and str(exc).startswith(key):
                     raise
                 raise ValueError(f"{key} debe ser numérico.") from exc
+    if "gmail_mcp_timeout" in config and float(config["gmail_mcp_timeout"]) <= 0:
+        raise ValueError("gmail_mcp_timeout debe ser mayor que cero.")
     if "cpu_limit_percent" in config:
         try:
             cpu_limit = float(config["cpu_limit_percent"])

@@ -3,11 +3,23 @@
 from ada.infrastructure.integrations.mcp import MCPClient
 
 
+CAPABILITY_SPEC = {
+    "name": "mcp",
+    "description": "Descubrir o ejecutar tools de un servidor MCP configurado",
+    "risk_level": "high",
+    "permissions": ["mcp.execute"],
+    "requires_confirmation": True,
+}
+
+
 def run(args):
     servers = args.get("servers") or args.get("mcpServers") or args.get("mcp_servers") or {}
     name = args.get("server")
     if not servers:
-        return {"error": "no_mcp_servers_configured", "message": "Agregá servidores MCP en config.json o .vscode/mcp.json."}
+        return {
+            "error": "no_mcp_servers_configured",
+            "message": "Agregá servidores MCP en config.json o .vscode/mcp.json.",
+        }
     if name not in servers:
         return {"error": "mcp_server_not_found", "server": name, "available": sorted(servers)}
     server = servers[name]
