@@ -67,6 +67,8 @@ class Memory:
         if not self._encrypted:
             return
         columns = (
+            ("images", "path"),
+            ("images", "meta"),
             ("memories", "content"),
             ("memories", "meta"),
             ("tasks", "task"),
@@ -429,7 +431,7 @@ class Memory:
         with self._lock:
             self.conn.execute(
                 "INSERT OR REPLACE INTO images(path, meta) VALUES (?, ?)",
-                (str(path), json.dumps(meta or {}, ensure_ascii=False)),
+                (self._seal(path), self._seal(json.dumps(meta or {}, ensure_ascii=False))),
             )
             self.conn.commit()
 

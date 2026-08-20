@@ -63,9 +63,13 @@ class MemoryCredentialTests(unittest.TestCase):
             path = Path(directory) / "memory.db"
             memory = Memory(path, encrypted=True, encryption_key=Fernet.generate_key())
             memory.add_text("secreto de memoria", kind="profile")
+            memory.add("/private/photo.jpg", meta={"camera": "secret"})
             memory.append_conversation([{"role": "user", "text": "conversación privada"}])
             raw = memory.conn.execute("SELECT content FROM memories").fetchone()[0]
             self.assertTrue(raw.startswith("ada:v1:"))
+            image = memory.conn.execute("SELECT path, meta FROM images").fetchone()
+            self.assertTrue(image["path"].startswith("ada:v1:"))
+            self.assertTrue(image["meta"].startswith("ada:v1:"))
             self.assertTrue(memory.search_text("secreto", kind="profile"))
             self.assertEqual(memory.conversation()[0]["text"], "conversación privada")
 

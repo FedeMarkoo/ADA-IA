@@ -23,6 +23,8 @@ class ConfigTests(unittest.TestCase):
             validate_config({"photo_executor": "fork"})
         with self.assertRaises(ValueError):
             validate_config({"cpu_limit_percent": 0})
+        with self.assertRaises(ValueError):
+            validate_config({"chat_workers": 0})
 
 
 if __name__ == "__main__":
