@@ -9,6 +9,7 @@ MESSAGES = {
         "status_progress": "La tarea sigue en ejecución. ADA continúa trabajando.",
         "path_required": "Necesito la ruta o carpeta para ejecutar esa tarea.",
         "confirmation_required": "Preparé la operación. Es una acción sensible; respondé 'confirmo' para ejecutarla.",
+        "cancelled": "Operación cancelada.",
     },
     "en": {
         "greeting": "Hi, how can I help you?",
@@ -18,6 +19,7 @@ MESSAGES = {
         "status_progress": "The task is still running. ADA continues working.",
         "path_required": "I need the path or folder to execute that task.",
         "confirmation_required": "The operation is ready. It is sensitive; reply 'confirm' to execute it.",
+        "cancelled": "Operation cancelled.",
     },
 }
 

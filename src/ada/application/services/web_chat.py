@@ -80,6 +80,11 @@ class WebChatService:
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · respuesta rápida"}, 200
 
+        if state.pending_action and text.lower() in {"no", "n", "cancelar", "cancela", "cancel"}:
+            state.pending_action = None
+            reply = tr("cancelled", lang)
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · agente"}, 200
         if state.pending_action and text.lower() in self._AFFIRMATIVE:
             pending = dict(state.pending_action)
             state.pending_action = None
