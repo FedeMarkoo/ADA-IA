@@ -44,8 +44,8 @@ revocar tareas.
 
 - prototipo de geofencing y notificaciones: reglas locales y webhook autenticado
   para Tasker/móvil implementados;
-- adapter de Telegram con reintentos y auditoría: implementado; faltan comandos
-  móviles adicionales;
+- adapter de Telegram con reintentos, auditoría y comandos `/help`, `/status` y
+  `/cancel`: implementado;
 - evaluación posterior de una app propia con Capacitor o React Native;
 - despliegue permanente en Linux con servicios separados y backups.
 
