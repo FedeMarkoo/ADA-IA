@@ -19,12 +19,18 @@ capability conoce reglas de organización, SQLite, XMP, RAW/JPG, verificación y
 el ejecutor `gestor_fotos_lightroom.py`. La dirección recomendada es separar esa
 responsabilidad en un **Lightroom MCP Server** independiente.
 
-### Objetivo
+### Estado
 
-Convertir las operaciones específicas de Lightroom/fotografía en tools MCP y
-hacer que ADA actúe como cliente/orquestador. ADA debería decidir *qué* quiere
-hacer y el MCP de Lightroom debería encargarse de *cómo* interactuar con el
-catálogo, XMP y archivos.
+- [x] Crear un servidor MCP de Lightroom ejecutable por separado mediante `ada-lightroom-mcp`.
+- [x] Exponer operaciones de conteo, análisis, planificación, simulación,
+  aplicación y recuperación como tools MCP.
+- [x] Mantener confirmación explícita para operaciones mutantes.
+- [x] Documentar la configuración de Lightroom como servidor MCP de VS Code/ADA.
+- [ ] Hacer que ADA consuma exclusivamente el MCP para Lightroom.
+- [ ] Extraer el servicio de fotografía/Lightroom a un paquete independiente,
+  sin dependencias del runtime de ADA.
+- [ ] Publicar el Lightroom MCP como proyecto/repo independiente cuando el
+  contrato de tools esté estabilizado.
 
 ### Tools propuestas
 
@@ -62,7 +68,9 @@ Lightroom MCP Server
 3. Toda escritura de archivos, catálogo o XMP debe poder identificarse en un
    manifiesto y ser reversible cuando sea técnicamente posible.
 4. El MCP debe poder ejecutarse de manera independiente de ADA para permitir
-   pruebas, CLI y otros clientes MCP.
+   pruebas, CLI y otros clientes MCP. El servidor de este PR sigue reutilizando
+   temporalmente el adaptador existente; la extracción del servicio es el paso
+   siguiente.
 5. ADA debe consumir schemas de las tools y no duplicar manualmente sus
    argumentos.
 6. La migración debe conservar las validaciones actuales de RAW/JPG/XMP y las
@@ -71,7 +79,7 @@ Lightroom MCP Server
 ### Orden recomendado
 
 1. Extraer primero las funciones puras de análisis/validación.
-2. Crear el servidor MCP de Lightroom con `stdio` como transporte inicial.
+2. [x] Crear el servidor MCP de Lightroom con `stdio` como transporte inicial.
 3. Migrar `plan`, `simulate` y `validate`.
 4. Migrar las operaciones de escritura y recuperación.
 5. Hacer que ADA consuma exclusivamente el MCP para Lightroom.
