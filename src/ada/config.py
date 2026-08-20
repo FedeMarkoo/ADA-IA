@@ -61,9 +61,7 @@ def load_config(path=None, project_root=None):
         raise ValueError("allowed_roots debe ser una lista de carpetas.")
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]
     if "mcp_servers" not in config:
-        config["mcp_servers"] = _load_vscode_mcp(root)
-    elif "mcpServers" in config and not config.get("mcp_servers"):
-        config["mcp_servers"] = config["mcpServers"]
+        config["mcp_servers"] = config.get("mcpServers") or _load_vscode_mcp(root)
     config.setdefault("confirm_risky", True)
     config.setdefault("memory_encryption", False)
     config.setdefault("allowed_commands", [])
