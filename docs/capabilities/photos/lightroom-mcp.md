@@ -1,6 +1,20 @@
 # Lightroom MCP
 
-Lightroom is exposed as a standalone MCP server so ADA can consume photo-management operations through the same MCP interface used for other external tools.
+Lightroom is exposed as a standalone MCP server for external clients. The
+existing ADA capability remains the canonical implementation and this server
+delegates to it, so there is only one path containing execution and safety
+logic. ADA itself continues to call that capability directly.
+
+The server loads ADA's configuration independently. It validates `root` and
+`only_route` against `allowed_roots`, accepts only the configured
+`lightroom_script` (or entries in `lightroom_allowed_scripts`), bounds the
+subprocess timeout, and records every call in ADA's `audit_log`. These checks
+also apply when VS Code or another MCP host invokes the server without ADA's
+agent policy in front of it.
+
+`allowed_roots` debe contener al menos una raíz. Una
+`lightroom_allowed_scripts` vacía deshabilita la ejecución; para habilitarla hay
+que declarar la ruta exacta del script autorizado.
 
 ## Run locally
 
@@ -48,16 +62,21 @@ When running from a source checkout, the equivalent command is:
 | `lightroom_apply` | **Yes** | Apply the organization plan. Requires `confirm: true`. |
 | `lightroom_recover` | **Yes** | Recover organization state. Requires `confirm: true`. |
 
-The server delegates execution to the existing, tested `gestor_fotos_lightroom.py` flow. The existing rules and safety behavior remain authoritative; this PR separates the MCP transport/interface from ADA's agent process without rewriting the photo-management algorithm.
+The server delegates execution to the existing, tested
+`gestor_fotos_lightroom.py` flow. The existing capability and its safety
+behavior remain authoritative; this PR adds an MCP transport/interface without
+creating a second implementation.
 
 ## Architecture
 
 ```text
-ADA
+VS Code / external MCP client
   |
-  | MCP client
   v
-Lightroom MCP (stdio)
+Lightroom MCP (stdio + policy + audit)
+  |
+  v
+ADA Lightroom capability (canonical adapter)
   |
   v
 gestor_fotos_lightroom.py
