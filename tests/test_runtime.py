@@ -37,6 +37,11 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(status.available)
         self.assertEqual(status.reason, "not_running")
 
+    def test_runtime_reload_updates_endpoint(self):
+        runtime = LocalModelRuntime({"ollama_url": "http://127.0.0.1:1", "local_runtime": {"auto_start": False}})
+        runtime.reload({"ollama_url": "http://127.0.0.1:2", "local_runtime": {"auto_start": False}})
+        self.assertEqual(runtime.endpoint, "http://127.0.0.1:2")
+
     def test_model_manager_exposes_local_capability_and_runtime(self):
         manager = ModelManager(
             {
