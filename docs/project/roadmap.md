@@ -42,8 +42,8 @@ revocar tareas.
 
 ### Móvil e integraciones
 
-- prototipo de geofencing y notificaciones: reglas locales implementadas; falta
-  el adaptador móvil/Tasker;
+- prototipo de geofencing y notificaciones: reglas locales y webhook autenticado
+  para Tasker/móvil implementados;
 - adapter de Telegram con reintentos y auditoría: implementado; faltan comandos
   móviles adicionales;
 - evaluación posterior de una app propia con Capacitor o React Native;

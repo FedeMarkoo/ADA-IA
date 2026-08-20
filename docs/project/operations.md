@@ -11,6 +11,8 @@ Ese entrypoint mantiene compatibilidad con Flask. Para ASGI, instalá la extra
 Para el worker autónomo, ejecutá `ada-autonomous`; usa SQLite como event store,
 watchers de carpetas y scheduler con reintentos.
 Para separar API y autonomía en procesos del sistema, ejecutá `ada-supervisor`.
+Para exponer las capabilities por MCP stdio, ejecutá `ada-mcp` desde el cliente
+MCP que vaya a consumirlas.
 
 Diagnóstico y configuración local:
 

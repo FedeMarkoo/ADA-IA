@@ -5,17 +5,19 @@ import sys
 from typing import Any, Dict, List
 
 
-def serve(capabilities, descriptions=None):
+def serve(capabilities, descriptions=None, schemas=None):
     descriptions = descriptions or {}
+    schemas = schemas or {}
     tools: List[Dict[str, Any]] = [
         {
             "name": name,
             "description": descriptions.get(name, f"ADA capability {name}"),
-            "inputSchema": {"type": "object"},
+            "inputSchema": schemas.get(name, {"type": "object"}),
         }
         for name in sorted(capabilities)
     ]
     for line in sys.stdin:
+        request = None
         try:
             request = json.loads(line)
             method = request.get("method")
@@ -35,7 +37,9 @@ def serve(capabilities, descriptions=None):
                     raise ValueError(f"Unknown tool: {name}")
                 output = capabilities[name](params.get("arguments") or {})
                 result = {"content": [{"type": "text", "text": json.dumps(output, ensure_ascii=False, default=str)}]}
-            elif method.startswith("notifications/"):
+            elif method == "ping":
+                result = {}
+            elif method and method.startswith("notifications/"):
                 continue
             else:
                 raise ValueError(f"Unknown method: {method}")

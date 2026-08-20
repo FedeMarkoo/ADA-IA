@@ -38,6 +38,7 @@ dev = [
 ada = "ada.interfaces.cli:main"
 ada-autonomous = "ada.infrastructure.runtime.daemon:run"
 ada-supervisor = "ada.infrastructure.runtime.supervisor:run"
+ada-mcp = "ada.interfaces.mcp_server:main"
 
 [tool.ruff]
 line-length = 120
