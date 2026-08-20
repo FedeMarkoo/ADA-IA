@@ -32,6 +32,7 @@ _RISKY = {
     "mcp",
     "lightroom",
     "gmail_send",
+    "gmail_draft",
     "instagram_publish",
 }
 

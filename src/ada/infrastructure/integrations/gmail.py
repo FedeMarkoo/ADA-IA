@@ -104,3 +104,17 @@ def send(config, to, subject, body, confirm=False):
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
     result = service.users().messages().send(userId="me", body={"raw": raw}).execute()
     return {"ok": True, "id": result.get("id"), "to": to, "subject": subject}
+
+
+def draft(config, to, subject, body, confirm=False):
+    """Create a real Gmail draft after explicit confirmation."""
+    preview = {"to": str(to), "subject": str(subject), "body": str(body)}
+    if not confirm:
+        return {"error": "confirmation_required", "preview": preview}
+    service = _service(config, ["https://www.googleapis.com/auth/gmail.compose"])
+    message = MIMEText(str(body), "plain", "utf-8")
+    message["to"] = to
+    message["subject"] = subject
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+    result = service.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
+    return {"ok": True, "id": result.get("id"), "message_id": result.get("message", {}).get("id"), "preview": preview}

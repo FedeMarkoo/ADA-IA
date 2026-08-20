@@ -40,10 +40,13 @@ debe exponer Ollama ni la API de ADA directamente a internet.
 
 ## Credenciales
 
-Gmail usa un token OAuth local y scopes separados para lectura/envío. El almacén
+Gmail usa un token OAuth local y scopes separados para lectura/borradores/envío.
+Los borradores reales requieren confirmación y el envío conserva un scope separado.
+El almacén
 cifrado opcional requiere `ADA_CREDENTIAL_KEY`; nunca se guarda un secreto en
 `config.json` o Git. Instagram sólo ejecuta el script Node configurado, con
-allowlist de rutas y confirmación explícita.
+allowlist de rutas, confirmación explícita y un perfil persistente en
+`instagram_profile_dir` para conservar cookies/sesión fuera del repositorio.
 
 ## Servicio permanente
 
