@@ -1,9 +1,10 @@
 import unittest
 
 try:
-    from ada.interfaces.web.server import app
+    from ada.interfaces.web.server import app, create_app
 except ImportError:
     app = None
+    create_app = None
 
 
 @unittest.skipIf(app is None, "Flask no está instalado en este entorno")
@@ -22,6 +23,15 @@ class WebSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(first.get("/api/conversation").get_json()["messages"]), 2)
         self.assertEqual(len(second.get("/api/conversation").get_json()["messages"]), 0)
+
+    def test_factory_accepts_injected_agent(self):
+        class FakeAgent:
+            pass
+
+        fake = FakeAgent()
+        fake.mem = type("Memory", (), {"conversation": lambda self, **kwargs: []})()
+        factory_app = create_app({"db_path": ":memory:"}, agent_instance=fake)
+        self.assertIs(factory_app.extensions["ada_runtime"]["agent"], fake)
 
 
 if __name__ == "__main__":
