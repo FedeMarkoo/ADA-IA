@@ -1,0 +1,71 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "python",
+      "args": [
+        "mcps/filesystem/server.py"
+      ],
+      "description": "Servidor MCP modular de archivos de ADA",
+      "status": "active"
+    },
+    "web-search": {
+      "command": "python",
+      "args": [
+        "mcps/web_search/server.py"
+      ],
+      "description": "Búsqueda web en vivo mediante DuckDuckGo",
+      "status": "active"
+    },
+    "photography": {
+      "command": "python",
+      "args": [
+        "mcps/photography/server.py"
+      ],
+      "description": "Análisis técnico de calidad de imágenes RAW/JPG y Lightroom",
+      "status": "active"
+    },
+    "food": {
+      "command": "python",
+      "args": [
+        "mcps/food/server.py"
+      ],
+      "description": "Gestor de recetas, inventario de comida, lista de compras y alacena",
+      "status": "active"
+    },
+    "system-runner": {
+      "command": "python",
+      "args": [
+        "mcps/system/server.py"
+      ],
+      "description": "Ejecutor de comandos en allowlist",
+      "status": "active"
+    },
+    "google-gmail": {
+      "type": "sse",
+      "url": "https://mcp.googleapis.com/v1/gmail",
+      "env": {
+        "GMAIL_CLIENT_ID": "${GMAIL_CLIENT_ID}"
+      },
+      "description": "Servidor MCP oficial de Google Gmail vía SSE",
+      "status": "active"
+    },
+    "sqlite-memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "memory.db"
+      ],
+      "description": "Servidor MCP de base de datos SQLite estándar",
+      "status": "active"
+    },
+    "git": {
+      "command": "python",
+      "args": [
+        "mcps/git/server.py"
+      ],
+      "description": "Servidor MCP modular de control de versiones Git para ADA",
+      "status": "active"
+    }
+  }
+}

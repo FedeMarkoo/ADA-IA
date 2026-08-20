@@ -1,0 +1,62 @@
+{
+  "version": "1.0.0",
+  "description": "Catálogo declarativo de modelos Ollama para ADA",
+  "models": [
+    {
+      "name": "llama3.2:1b",
+      "roles": ["router", "fast"],
+      "quality_tier": "tiny",
+      "min_ram_gb": 2,
+      "description": "Ultrarrápido y liviano para clasificación de intents y tareas simples."
+    },
+    {
+      "name": "llama3.2:3b",
+      "roles": ["chat", "router"],
+      "quality_tier": "small",
+      "min_ram_gb": 4,
+      "description": "Equilibrio ideal entre velocidad y razonamiento para el día a día."
+    },
+    {
+      "name": "qwen2.5:3b",
+      "roles": ["chat", "router"],
+      "quality_tier": "small",
+      "min_ram_gb": 4,
+      "description": "Excelente seguimiento de instrucciones y código ligero."
+    },
+    {
+      "name": "qwen2.5:7b",
+      "roles": ["chat", "tools", "coding"],
+      "quality_tier": "medium",
+      "min_ram_gb": 8,
+      "description": "Potente modelo para tool-calling, código y razonamiento complejo."
+    },
+    {
+      "name": "qwen2.5vl:3b",
+      "roles": ["vision"],
+      "quality_tier": "small",
+      "min_ram_gb": 6,
+      "description": "Comprensión visual y OCR para fotos, documentos y capturas."
+    },
+    {
+      "name": "deepseek-r1:8b",
+      "roles": ["chat", "reasoning"],
+      "quality_tier": "medium",
+      "min_ram_gb": 10,
+      "description": "Capacidades avanzadas de razonamiento paso a paso (Chain of Thought)."
+    },
+    {
+      "name": "nomic-embed-text",
+      "roles": ["embedding"],
+      "quality_tier": "small",
+      "min_ram_gb": 2,
+      "description": "Modelo de embeddings de alto rendimiento para búsqueda semántica."
+    }
+  ],
+  "roles": {
+    "chat": "llama3.2:3b",
+    "vision": "qwen2.5vl:3b",
+    "router": "llama3.2:3b",
+    "reasoning": "deepseek-r1:8b",
+    "embedding": "nomic-embed-text"
+  }
+}

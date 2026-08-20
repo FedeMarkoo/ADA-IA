@@ -7,7 +7,7 @@ from ada.infrastructure.runtime.resources import recommended_threads
 from ada.infrastructure.integrations.gmail import send as gmail_send
 from ada.capabilities.files.filesystem import run as filesystem_run
 from ada.capabilities.files.group_files import run as group_files_run
-from ada.capabilities.photography.organize_photos import run as organize_photos_run
+from mcps.photography.organizer import run as organize_photos_run
 
 
 class SecurityTests(unittest.TestCase):

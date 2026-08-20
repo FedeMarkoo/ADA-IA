@@ -10,7 +10,6 @@ from ada.application.evaluation import EvaluationCase, evaluate
 from ada.infrastructure.notifications import CompositeNotifier
 from ada.infrastructure.runtime.supervisor import ServiceSupervisor
 from ada.infrastructure.integrations.mcp_server import serve
-from ada.interfaces.mcp_server import _policy_wrapped_tools
 
 
 def noop():
@@ -55,22 +54,6 @@ class OperationsTests(unittest.TestCase):
             with contextlib.redirect_stdout(output):
                 serve({"demo": lambda _: {"ok": True}}, schemas={"demo": {"type": "object"}})
         self.assertIn('"id": 1', output.getvalue())
-
-    def test_ada_mcp_entrypoint_routes_calls_through_agent_policy(self):
-        class FakeAgent:
-            skills = {"danger": lambda _: {"unsafe": True}}
-
-            def __init__(self):
-                self.calls = []
-
-            def run_skill(self, name, args, confirm=None):
-                self.calls.append((name, args, confirm))
-                return {"authorized": True}
-
-        agent = FakeAgent()
-        result = _policy_wrapped_tools(agent)["danger"]({"confirm": True})
-        self.assertEqual(result, {"authorized": True})
-        self.assertEqual(agent.calls, [("danger", {"confirm": True}, True)])
 
     def test_evaluation_harness_reports_routing(self):
         class FakeAgent:

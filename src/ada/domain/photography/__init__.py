@@ -1,1 +1,0 @@
-"""Photography domain rules."""
