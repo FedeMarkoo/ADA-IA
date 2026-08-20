@@ -96,6 +96,8 @@ def validate_config(config):
         "engine_priority",
         "knowledge_files",
         "watch_folders",
+        "gmail_scopes",
+        "gmail_mcp_allowed_hosts",
         "lightroom_allowed_scripts",
     )
     if "memory_encryption" in config and not isinstance(config["memory_encryption"], bool):
@@ -110,16 +112,27 @@ def validate_config(config):
     for key in bool_keys:
         if key in config and not isinstance(config[key], bool):
             raise ValueError(f"{key} debe ser booleano.")
-    string_keys = ("db_path", "photo_root", "food_profile", "instagram_profile_dir", "web_framework")
+    string_keys = (
+        "db_path",
+        "photo_root",
+        "food_profile",
+        "instagram_profile_dir",
+        "web_framework",
+        "gmail_backend",
+        "gmail_mcp_server",
+    )
     for key in string_keys:
         if key in config and config[key] is not None and not isinstance(config[key], str):
             raise ValueError(f"{key} debe ser texto.")
     if "photo_executor" in config and config["photo_executor"] not in {"thread", "process"}:
         raise ValueError("photo_executor debe ser 'thread' o 'process'.")
+    if config.get("gmail_backend", "api") not in {"api", "mcp"}:
+        raise ValueError("gmail_backend debe ser 'api' o 'mcp'.")
     for key in (
         "backup_interval_seconds",
         "cpu_throttle_seconds",
         "cpu_throttle_max_wait_seconds",
+        "gmail_mcp_timeout",
         "lightroom_mcp_max_timeout",
     ):
         if key in config:
@@ -130,6 +143,8 @@ def validate_config(config):
                 if isinstance(exc, ValueError) and str(exc).startswith(key):
                     raise
                 raise ValueError(f"{key} debe ser numérico.") from exc
+    if "gmail_mcp_timeout" in config and float(config["gmail_mcp_timeout"]) <= 0:
+        raise ValueError("gmail_mcp_timeout debe ser mayor que cero.")
     if "cpu_limit_percent" in config:
         try:
             cpu_limit = float(config["cpu_limit_percent"])

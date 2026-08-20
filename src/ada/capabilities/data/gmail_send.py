@@ -3,6 +3,15 @@
 from ada.infrastructure.integrations.gmail import send
 
 
+CAPABILITY_SPEC = {
+    "name": "gmail_send",
+    "description": "Enviar un correo de Gmail después de confirmación explícita",
+    "risk_level": "high",
+    "requires_confirmation": True,
+    "permissions": ["gmail.send"],
+}
+
+
 def run(args):
     return send(
         args.get("config", {}),

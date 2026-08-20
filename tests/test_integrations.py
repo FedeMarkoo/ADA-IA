@@ -92,10 +92,12 @@ class IntegrationTests(unittest.TestCase):
     def test_gmail_still_previews_before_oauth(self):
         self.assertEqual(gmail_send({}, "a@b.com", "s", "b")["error"], "confirmation_required")
 
-    def test_gmail_draft_is_a_confirmed_real_operation(self):
-        preview = gmail_draft({}, "a@b.com", "s", "b")
-        self.assertEqual(preview["error"], "confirmation_required")
-        self.assertEqual(preview["preview"]["subject"], "s")
+    def test_gmail_draft_does_not_require_send_confirmation(self):
+        with patch("ada.infrastructure.integrations.gmail._mcp_call", return_value={"ok": True}) as call:
+            result = gmail_draft({"gmail_backend": "mcp"}, "a@b.com", "s", "b")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["preview"]["subject"], "s")
+        call.assert_called_once()
 
     def test_instagram_persists_profile_and_passes_it_to_puppeteer(self):
         with tempfile.TemporaryDirectory() as directory:
