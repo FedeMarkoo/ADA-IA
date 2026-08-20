@@ -18,6 +18,43 @@ class IntegrationTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             client.call(list_only=True)
 
+    def test_mcp_accepts_vscode_stdio_command_args_env_and_cwd(self):
+        script = (
+            "import json,os,sys; "
+            "print(json.dumps({'jsonrpc':'2.0','id':1,'result':{}}),flush=True); "
+            "print(json.dumps({'jsonrpc':'2.0','id':2,'result':{'tools':[{'name':'hello'}]}}),flush=True); "
+            "line=sys.stdin.readline(); "
+            "print(json.dumps({'jsonrpc':'2.0','id':3,'result':{'content':[{'text':os.environ['ADA_MCP_TEST']}]}}),flush=True)"
+        )
+        client = MCPClient(
+            {
+                "type": "stdio",
+                "command": sys.executable,
+                "args": ["-c", script],
+                "env": {"ADA_MCP_TEST": "ok"},
+                "cwd": str(Path.cwd()),
+            }
+        )
+        result = client.call(tool="hello", arguments={})
+        self.assertEqual(result["tool"], "hello")
+        self.assertEqual(result["result"]["content"][0]["text"], "ok")
+
+    def test_mcp_http_uses_streamable_http_style_session(self):
+        responses = [
+            ({"result": {}}, "session-1"),
+            ({}, None),
+            ({"result": {"tools": [{"name": "hello"}]}}, None),
+            ({"result": {"content": [{"text": "ok"}]}}, None),
+        ]
+        with patch("ada.infrastructure.integrations.mcp.urllib.request.urlopen") as urlopen:
+            context = urlopen.return_value.__enter__.return_value
+            context.headers.get.side_effect = lambda key: "session-1" if key == "Mcp-Session-Id" else "application/json"
+            context.read.side_effect = [json_bytes for json_bytes, _ in [(b'{"result":{}}', None), (b'{}', None), (b'{"result":{"tools":[{"name":"hello"}]}}', None), (b'{"result":{"content":[{"text":"ok"}]}}', None)]]
+            client = MCPClient({"type": "http", "url": "https://example.test/mcp"})
+            result = client.call(tool="hello", arguments={})
+        self.assertEqual(result["result"]["content"][0]["text"], "ok")
+        self.assertEqual(context.headers.get.call_count, 5)
+
     def test_graph_publisher_requires_configuration_and_confirmation(self):
         preview = graph_publish({}, "https://example.com/photo.jpg", "caption")
         self.assertEqual(preview["error"], "confirmation_required")
