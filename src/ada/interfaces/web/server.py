@@ -144,6 +144,7 @@ def status():
             "agents": list(agent.coordinator.available_agents()),
             "hardware": hardware_profile(),
             "models": agent.model_manager.model_catalog(),
+            "model_recommendations": agent.model_manager.model_recommendations(),
             "metrics": {"agent": agent.metrics.snapshot(), "models": agent.model_manager.metrics.snapshot()},
         }
     )

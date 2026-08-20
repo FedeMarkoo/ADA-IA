@@ -122,7 +122,7 @@ class Agent:
             return {"model": None, "result": result}
 
         prompt = self.prompt_builder.task(task, self.lang)
-        model_name = self.model_manager.select_model(task, role=task.get("model_role", "chat"))
+        model_name = self.model_manager.ensure_model(task, role=task.get("model_role", "chat"))
         call_options = {"ollama_model": model_name} if provider == "ollama" and model_name else {}
         try:
             result = self.model_manager.call(provider, prompt, complexity=task["complexity"], **call_options)
