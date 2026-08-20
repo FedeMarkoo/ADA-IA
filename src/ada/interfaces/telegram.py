@@ -126,6 +126,19 @@ class TelegramListener:
         text = (message.get("text") or message.get("caption") or "").strip()
         photos = message.get("photo") or []
         logger.info("chat_id=%s mensaje_recibido", chat_id)
+        command = text.lower().split()[0] if text.startswith("/") else ""
+        if command in {"/start", "/help"}:
+            self.send_message(
+                chat_id,
+                "ADA lista. Enviame una consulta, una foto o /status. Comandos: /help, /status, /cancel.",
+            )
+            return
+        if command == "/cancel":
+            self.send_message(chat_id, self._invoke_internal_chat("cancelar"))
+            return
+        if command == "/status":
+            self.send_message(chat_id, self._status_summary())
+            return
         if photos:
             path = self._download_photo(photos[-1])
             text = f"{text}\nAnalizá la imagen descargada: {path}".strip()
@@ -138,6 +151,16 @@ class TelegramListener:
         reply = self._invoke_internal_chat(text)
         logger.info("chat_id=%s respuesta=%r", chat_id, str(reply)[:500])
         self.send_message(chat_id, reply)
+
+    def _status_summary(self):
+        def call():
+            request = urllib.request.Request(f"{self.base_url}/api/status", method="GET")
+            with urllib.request.urlopen(request, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            engines = ", ".join(name for name, enabled in data.get("engines", {}).items() if enabled) or "ninguno"
+            return f"ADA online. Motores disponibles: {engines}. Agentes: {len(data.get('agents', []))}."
+
+        return self._retry(call, "telegram_status")
 
     def _invoke_internal_chat(self, text):
         def call():
