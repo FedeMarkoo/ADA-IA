@@ -11,8 +11,11 @@ permissions: subprocess, external-tool
 ---
 
 ADA acepta definiciones de servidores compatibles con el formato de VS Code.
-La configuración puede vivir en `config.json` bajo `mcp_servers` o copiarse desde
-`.vscode/mcp.json` usando la sección `servers`.
+La configuración puede vivir en `config.json` bajo `mcp_servers`. ADA sólo
+importa `.vscode/mcp.json` cuando `trust_workspace_mcp` está activado de forma
+explícita en la configuración (o mediante `ADA_TRUST_WORKSPACE_MCP=1`). Mantener
+el valor desactivado al abrir repositorios que no sean de confianza: un servidor
+`stdio` puede ejecutar el comando declarado por el workspace.
 
 ## Servidores locales
 
@@ -31,9 +34,10 @@ La configuración puede vivir en `config.json` bajo `mcp_servers` o copiarse des
 ```
 
 Se soportan `command`, `args`, `env` y `cwd`. Las variables `${env:NAME}` se
-resuelven desde el entorno de ADA. Las entradas `${input:NAME}` de VS Code no se
-resuelven automáticamente: deben convertirse en variables de entorno o valores
-explícitos antes de ejecutar ADA.
+resuelven desde el entorno de ADA tanto solas como incrustadas en otros valores
+(`--token=${env:TOKEN}`). Las entradas `${input:NAME}` de VS Code no se resuelven
+automáticamente: deben convertirse en variables de entorno o valores explícitos
+antes de ejecutar ADA.
 
 ## Servidores remotos
 
@@ -54,6 +58,9 @@ explícitos antes de ejecutar ADA.
 El transporte HTTP usa JSON-RPC sobre Streamable HTTP y conserva el
 `Mcp-Session-Id` cuando el servidor lo entrega. También acepta respuestas
 `text/event-stream` de servidores que entreguen el resultado mediante SSE.
+Los endpoints remotos deben usar HTTPS. HTTP sin cifrar sólo se permite para
+loopback (`localhost`, `127.0.0.1` o `::1`), salvo opt-in explícito mediante
+`allow_insecure_http` en la definición del servidor.
 
 ## Ejecución
 
@@ -64,5 +71,6 @@ para ejecutar una de ellas.
 
 Los servidores MCP son código externo y reciben los permisos que su propio
 proceso requiera. ADA mantiene su política de confirmación para operaciones
-riesgosas; configurar un MCP no debe interpretarse como una autorización para
-eliminar esa protección.
+riesgosas en cada invocación; confiar en un workspace sólo habilita la carga de
+su definición y no elimina esa confirmación. El entrypoint `ada-mcp` también
+encamina sus llamadas por el mismo motor de políticas.

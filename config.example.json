@@ -18,6 +18,7 @@
   "instagram_access_token": "",
   "instagram_publish_script": "",
   "instagram_profile_dir": "~/.config/ada/instagram-profile",
+  "trust_workspace_mcp": false,
   "mcp_servers": {
     "example-local": {
       "type": "stdio",
