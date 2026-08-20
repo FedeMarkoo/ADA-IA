@@ -1,6 +1,6 @@
 """Protocols that keep model providers replaceable."""
 
-from typing import Any, Optional, Protocol
+from typing import Any, Dict, Optional, Protocol
 
 
 class ModelProvider(Protocol):
@@ -17,3 +17,18 @@ class MemoryStore(Protocol):
 
 class Notifier(Protocol):
     def send(self, text: str, **kwargs: Any) -> None: ...
+
+
+class Capability(Protocol):
+    def __call__(self, args: Dict[str, Any]) -> Any: ...
+
+
+class EventBusProvider(Protocol):
+    def publish(self, topic: str, payload: Dict[str, Any], **kwargs: Any) -> Any: ...
+    def consume(self, limit: int = 10) -> list: ...
+
+
+class SchedulerProvider(Protocol):
+    def schedule(self, topic: str, payload: Dict[str, Any], **kwargs: Any) -> Any: ...
+    def run_once(self) -> int: ...
+    def stop(self) -> None: ...

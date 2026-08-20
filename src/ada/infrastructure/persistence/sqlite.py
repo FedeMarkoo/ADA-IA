@@ -48,6 +48,7 @@ class Memory:
             return text
         if text.startswith("ada:v1:"):
             return text
+        assert self._fernet is not None
         return "ada:v1:" + self._fernet.encrypt(text.encode("utf-8")).decode("ascii")
 
     def _open(self, value):
@@ -205,7 +206,7 @@ class Memory:
             self.conn.execute("PRAGMA user_version = 2")
 
     def _seed_dynamic_ai_defaults(self):
-        actions = {
+        aliases = {
             "analyze_photo": (
                 "Analizar una foto",
                 ("foto", "imagen", "raw", "jpg", "nef", "arw", "enfoque", "exposición", "iso"),
@@ -248,8 +249,14 @@ class Memory:
             "instagram_publish": ("Publicar una imagen en Instagram", ("instagram", "publicar foto", "postear")),
             "ask": ("Conversación general", ()),
         }
+        from ada.capabilities.registry import capability_specs
+
+        generated = {name: (spec.description, ()) for name, spec in capability_specs().items()}
+        actions = dict(aliases)
+        actions.update({name: value for name, value in generated.items() if name not in actions})
         self.conn.executemany(
-            "INSERT OR IGNORE INTO router_catalog(action,description,keywords) VALUES (?,?,?)",
+            "INSERT INTO router_catalog(action,description,keywords) VALUES (?,?,?) "
+            "ON CONFLICT(action) DO UPDATE SET description=excluded.description, keywords=excluded.keywords",
             [
                 (action, description, json.dumps(keywords, ensure_ascii=False))
                 for action, (description, keywords) in actions.items()
