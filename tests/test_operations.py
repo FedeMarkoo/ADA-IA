@@ -9,6 +9,7 @@ from ada.application.fine_tuning import prepare_dataset, validate_dataset
 from ada.application.evaluation import EvaluationCase, evaluate
 from ada.infrastructure.notifications import CompositeNotifier
 from ada.infrastructure.runtime.supervisor import ServiceSupervisor
+from ada.infrastructure.integrations.mcp_server import serve
 
 
 def noop():
@@ -42,6 +43,17 @@ class OperationsTests(unittest.TestCase):
             source.write_text(json.dumps([{"task": "router", "prompt": "hola", "expected": "ask"}]), encoding="utf-8")
             self.assertEqual(prepare_dataset(source, target)["examples"], 1)
             self.assertEqual(validate_dataset(target)["tasks"], {"router": 1})
+
+    def test_mcp_server_accepts_ping_and_exposes_schema(self):
+        import io
+        import contextlib
+        import unittest.mock
+
+        with unittest.mock.patch("sys.stdin", io.StringIO('{"jsonrpc":"2.0","id":1,"method":"ping"}\n')):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                serve({"demo": lambda _: {"ok": True}}, schemas={"demo": {"type": "object"}})
+        self.assertIn('"id": 1', output.getvalue())
 
     def test_evaluation_harness_reports_routing(self):
         class FakeAgent:
