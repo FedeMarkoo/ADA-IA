@@ -65,6 +65,12 @@ def load_config(path=None, project_root=None):
     if not isinstance(config["allowed_roots"], list):
         raise ValueError("allowed_roots debe ser una lista de carpetas.")
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]
+    if "lightroom_allowed_scripts" in config:
+        if not isinstance(config["lightroom_allowed_scripts"], list):
+            raise ValueError("lightroom_allowed_scripts debe ser una lista.")
+        config["lightroom_allowed_scripts"] = [
+            _path(item, root) for item in config["lightroom_allowed_scripts"] if item
+        ]
     config.setdefault("trust_workspace_mcp", _env_flag("ADA_TRUST_WORKSPACE_MCP"))
     if "mcp_servers" not in config:
         if "mcpServers" in config:
@@ -84,7 +90,14 @@ def validate_config(config):
     """Validate the public configuration contract before runtime construction."""
     if not isinstance(config, dict):
         raise ValueError("La configuración ADA debe ser un objeto JSON.")
-    list_keys = ("allowed_roots", "allowed_commands", "engine_priority", "knowledge_files", "watch_folders")
+    list_keys = (
+        "allowed_roots",
+        "allowed_commands",
+        "engine_priority",
+        "knowledge_files",
+        "watch_folders",
+        "lightroom_allowed_scripts",
+    )
     if "memory_encryption" in config and not isinstance(config["memory_encryption"], bool):
         raise ValueError("memory_encryption debe ser booleano.")
     for key in list_keys:
@@ -103,7 +116,12 @@ def validate_config(config):
             raise ValueError(f"{key} debe ser texto.")
     if "photo_executor" in config and config["photo_executor"] not in {"thread", "process"}:
         raise ValueError("photo_executor debe ser 'thread' o 'process'.")
-    for key in ("backup_interval_seconds", "cpu_throttle_seconds", "cpu_throttle_max_wait_seconds"):
+    for key in (
+        "backup_interval_seconds",
+        "cpu_throttle_seconds",
+        "cpu_throttle_max_wait_seconds",
+        "lightroom_mcp_max_timeout",
+    ):
         if key in config:
             try:
                 if float(config[key]) < 0:
@@ -126,6 +144,8 @@ def validate_config(config):
             raise ValueError("chat_workers debe ser entero.") from exc
         if not 1 <= chat_workers <= 32:
             raise ValueError("chat_workers debe estar entre 1 y 32.")
+    if "lightroom_mcp_max_timeout" in config and float(config["lightroom_mcp_max_timeout"]) <= 0:
+        raise ValueError("lightroom_mcp_max_timeout debe ser mayor que cero.")
     framework = config.get("web_framework", "flask")
     if framework not in {"flask", "asgi"}:
         raise ValueError("web_framework debe ser 'flask' o 'asgi'.")

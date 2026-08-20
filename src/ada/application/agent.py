@@ -222,7 +222,10 @@ class Agent:
         if name == "food" and "config" not in args:
             args = dict(args)
             args["config"] = self.cfg
-        if name in {"gmail_read", "gmail_send", "gmail_draft", "instagram_publish"} and "config" not in args:
+        if (
+            name in {"gmail_read", "gmail_send", "gmail_draft", "instagram_publish", "lightroom"}
+            and "config" not in args
+        ):
             args = dict(args)
             args["config"] = self.cfg
         if name == "filesystem" and "allowed_roots" not in args:
