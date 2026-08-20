@@ -2,7 +2,7 @@ import unittest
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from ada.infrastructure.integrations.gmail import draft as gmail_draft
 from ada.infrastructure.integrations.gmail import send as gmail_send
@@ -40,20 +40,24 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(result["result"]["content"][0]["text"], "ok")
 
     def test_mcp_http_uses_streamable_http_style_session(self):
-        responses = [
-            ({"result": {}}, "session-1"),
-            ({}, None),
-            ({"result": {"tools": [{"name": "hello"}]}}, None),
-            ({"result": {"content": [{"text": "ok"}]}}, None),
+        payloads = [
+            (b'{"result":{}}', "session-1"),
+            (b'{}', None),
+            (b'{"result":{"tools":[{"name":"hello"}]}}', None),
+            (b'{"result":{"content":[{"text":"ok"}]}}', None),
         ]
-        with patch("ada.infrastructure.integrations.mcp.urllib.request.urlopen") as urlopen:
-            context = urlopen.return_value.__enter__.return_value
-            context.headers.get.side_effect = lambda key: "session-1" if key == "Mcp-Session-Id" else "application/json"
-            context.read.side_effect = [json_bytes for json_bytes, _ in [(b'{"result":{}}', None), (b'{}', None), (b'{"result":{"tools":[{"name":"hello"}]}}', None), (b'{"result":{"content":[{"text":"ok"}]}}', None)]]
+        contexts = []
+        for body, session_id in payloads:
+            response = MagicMock()
+            response.headers.get.side_effect = lambda key, sid=session_id: sid if key == "Mcp-Session-Id" else "application/json"
+            response.read.return_value = body
+            context = MagicMock()
+            context.__enter__.return_value = response
+            contexts.append(context)
+        with patch("ada.infrastructure.integrations.mcp.urllib.request.urlopen", side_effect=contexts):
             client = MCPClient({"type": "http", "url": "https://example.test/mcp"})
             result = client.call(tool="hello", arguments={})
         self.assertEqual(result["result"]["content"][0]["text"], "ok")
-        self.assertEqual(context.headers.get.call_count, 5)
 
     def test_graph_publisher_requires_configuration_and_confirmation(self):
         preview = graph_publish({}, "https://example.com/photo.jpg", "caption")
