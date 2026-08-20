@@ -1,8 +1,7 @@
 # Compras y recetas
 
-Este es un objetivo funcional de ADA todavía pendiente de implementación
-completa. El asistente debería mantener una lista de compras, inventario
-opcional, recetas y planificación de comidas.
+ADA mantiene localmente una lista de compras, inventario, presupuestos por
+período, recetas y planificación semanal de comidas.
 
 ## Capacidades objetivo
 
@@ -23,8 +22,16 @@ listarlas, sugerirlas por ingredientes y convertir sus ingredientes en una
 lista de compras. Los datos viven en las tablas `food_shopping` y
 `food_recipes` de la misma SQLite de ADA.
 
-El inventario, el presupuesto, la planificación semanal y el detector de
-ubicación siguen pendientes. Tampoco se realizan pedidos ni pagos externos.
+El detector móvil de ubicación sigue pendiente. Tampoco se realizan pedidos ni
+pagos externos.
+
+Ejemplos estructurados:
+
+```json
+{"domain":"inventory","action":"add","item":"arroz","quantity":2,"minimum":1}
+{"domain":"budget","action":"set","period":"2026-08","amount":50000,"currency":"ARS"}
+{"domain":"planning","action":"set","plan_date":"2026-08-24","meal":"cena","recipe_name":"Tortilla"}
+```
 
 ## Configuración dinámica de IA
 

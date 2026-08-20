@@ -1,0 +1,13 @@
+# Generated core runtime lock for Python 3.9+.
+# Optional extras have their own dependency declarations in pyproject.toml.
+blinker==1.9.0
+click==8.1.8
+Flask==3.1.3
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+numpy==2.0.2
+Pillow==11.3.0
+psutil==7.0.0
+rawpy==0.25.1
+Werkzeug==3.1.8

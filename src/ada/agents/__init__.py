@@ -2,4 +2,4 @@
 
 from .coordinator import MultiAgentCoordinator
 
-__all__ = ['MultiAgentCoordinator']
+__all__ = ["MultiAgentCoordinator"]

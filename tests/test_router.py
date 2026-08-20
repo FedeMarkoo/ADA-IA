@@ -2,7 +2,8 @@ import unittest
 from pathlib import Path
 import tempfile
 
-from src.ada.application.router import IntentRouter
+from ada.application.router import IntentRouter
+from ada.infrastructure.persistence.sqlite import Memory
 
 
 class FakeModelManager:
@@ -19,36 +20,51 @@ class FakeModelManager:
 
 
 class IntentRouterTests(unittest.TestCase):
+    def setUp(self):
+        self.memory = Memory(":memory:")
+
+    def router(self, manager):
+        return IntentRouter(manager, memory=self.memory)
+
+    def test_requires_explicit_memory(self):
+        with self.assertRaises(ValueError):
+            IntentRouter(FakeModelManager())
+
     def test_fallback_routes_semantically_without_model(self):
-        router = IntentRouter(FakeModelManager())
+        router = self.router(FakeModelManager())
         result = router.route("necesito revisar el enfoque y la exposición de esta imagen")
         self.assertEqual(result["action"], "analyze_photo")
 
     def test_model_plan_is_validated(self):
-        manager = FakeModelManager('{"action":"select_photo_batch","confidence":0.92,"steps":[{"action":"select_photo_batch"}]}')
-        result = IntentRouter(manager).route("quiero que selecciones el lote y prepares los xmp")
+        manager = FakeModelManager(
+            '{"action":"select_photo_batch","confidence":0.92,"steps":[{"action":"select_photo_batch"}]}'
+        )
+        result = self.router(manager).route("quiero que selecciones el lote y prepares los xmp")
         self.assertEqual(result["action"], "select_photo_batch")
         self.assertEqual(len(result["steps"]), 1)
         self.assertEqual(manager.calls[0][2]["temperature"], 0)
 
     def test_model_routes_food_semantically(self):
-        manager = FakeModelManager('{"action":"food","domain":"recipes","food_action":"advise","advisor":true,"confidence":0.97}')
-        result = IntentRouter(manager).route('¿Qué puedo comer mañana según mis gustos?')
-        self.assertEqual(result['action'], 'food')
-        self.assertEqual(result['food_action'], 'advise')
+        manager = FakeModelManager(
+            '{"action":"food","domain":"recipes","food_action":"advise","advisor":true,"confidence":0.97}'
+        )
+        result = self.router(manager).route("¿Qué puedo comer mañana según mis gustos?")
+        self.assertEqual(result["action"], "food")
+        self.assertEqual(result["food_action"], "advise")
 
     def test_normalizes_model_food_compound_action(self):
         manager = FakeModelManager('{"action":"food/advise","needs_clarification":true}')
-        result = IntentRouter(manager).route('¿Qué puedo cocinar?')
-        self.assertEqual(result['action'], 'food')
-        self.assertEqual(result['food_action'], 'advise')
+        result = self.router(manager).route("¿Qué puedo cocinar?")
+        self.assertEqual(result["action"], "food")
+        self.assertEqual(result["food_action"], "advise")
 
     def test_invalid_model_action_uses_fallback(self):
-        result = IntentRouter(FakeModelManager('{"action":"delete_everything"}')).route("quiero ordenar los archivos")
+        result = self.router(FakeModelManager('{"action":"delete_everything"}')).route("quiero ordenar los archivos")
         self.assertEqual(result["action"], "organize")
 
     def test_photo_path_can_be_followed_by_more_text(self):
-        from src.ada.application.agent import Agent
+        from ada.application.agent import Agent
+
         with tempfile.TemporaryDirectory() as directory:
             agent = Agent({"engine_provider": "unknown", "db_path": str(Path(directory) / "test.db")})
             result = agent.parse_prompt(

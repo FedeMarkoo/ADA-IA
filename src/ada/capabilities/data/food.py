@@ -4,9 +4,11 @@ The capability is deliberately small and local-first.  Telegram and the web
 interface pass the same structured payload to it, so neither adapter owns
 food-related business logic.
 """
+
 import json
 import re
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 
@@ -16,7 +18,8 @@ def _db(args):
 
 
 def _ensure(conn):
-    conn.executescript("""
+    conn.executescript(
+        """
     CREATE TABLE IF NOT EXISTS food_shopping (
       id INTEGER PRIMARY KEY, item TEXT NOT NULL, quantity TEXT, unit TEXT,
       category TEXT, priority TEXT DEFAULT 'normal', status TEXT DEFAULT 'pending',
@@ -27,7 +30,23 @@ def _ensure(conn):
       steps TEXT, servings INTEGER, tags TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
-    """)
+    CREATE TABLE IF NOT EXISTS food_inventory (
+      id INTEGER PRIMARY KEY, item TEXT UNIQUE NOT NULL, quantity REAL NOT NULL DEFAULT 0,
+      unit TEXT, minimum REAL NOT NULL DEFAULT 0, category TEXT, expires_at TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS food_budgets (
+      period TEXT PRIMARY KEY, amount REAL NOT NULL, spent REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'ARS', notes TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS food_meal_plan (
+      id INTEGER PRIMARY KEY, plan_date TEXT NOT NULL, meal TEXT NOT NULL,
+      recipe_name TEXT, servings INTEGER, estimated_cost REAL, notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(plan_date, meal)
+    );
+    """
+    )
     conn.commit()
 
 
@@ -48,37 +67,67 @@ def _seed_profile(conn, path):
         ingredient_block = re.search(r"^###\s+Ingredientes\s*\n(.*?)(?=^###\s+|\Z)", body, re.M | re.S)
         if not ingredient_block:
             continue
-        ingredients = [line.strip()[2:].strip() for line in ingredient_block.group(1).splitlines() if line.strip().startswith("-")]
+        ingredients = [
+            line.strip()[2:].strip() for line in ingredient_block.group(1).splitlines() if line.strip().startswith("-")
+        ]
         if ingredients:
-            conn.execute("INSERT OR IGNORE INTO food_recipes(name,ingredients,steps,tags) VALUES (?,?,?,?)", (name.strip(), json.dumps(ingredients, ensure_ascii=False), body.strip(), "perfil_fede"))
+            conn.execute(
+                "INSERT OR IGNORE INTO food_recipes(name,ingredients,steps,tags) VALUES (?,?,?,?)",
+                (name.strip(), json.dumps(ingredients, ensure_ascii=False), body.strip(), "perfil_fede"),
+            )
     conn.commit()
 
 
 def _shopping(conn, args):
     action = args.get("action", "list")
     if action == "add":
-        cur = conn.execute("SELECT id FROM food_shopping WHERE lower(item)=lower(?) AND status='pending'", (args["item"],))
+        cur = conn.execute(
+            "SELECT id FROM food_shopping WHERE lower(item)=lower(?) AND status='pending'", (args["item"],)
+        )
         row = cur.fetchone()
         if row:
-            conn.execute("UPDATE food_shopping SET quantity=COALESCE(?, quantity), unit=COALESCE(?, unit), updated_at=CURRENT_TIMESTAMP WHERE id=?", (args.get("quantity"), args.get("unit"), row[0]))
+            conn.execute(
+                "UPDATE food_shopping SET quantity=COALESCE(?, quantity), unit=COALESCE(?, unit), updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (args.get("quantity"), args.get("unit"), row[0]),
+            )
             item_id = row[0]
         else:
-            item_id = conn.execute("INSERT INTO food_shopping(item,quantity,unit,category,priority) VALUES (?,?,?,?,?)", (args["item"], args.get("quantity"), args.get("unit"), args.get("category"), args.get("priority", "normal"))).lastrowid
+            item_id = conn.execute(
+                "INSERT INTO food_shopping(item,quantity,unit,category,priority) VALUES (?,?,?,?,?)",
+                (
+                    args["item"],
+                    args.get("quantity"),
+                    args.get("unit"),
+                    args.get("category"),
+                    args.get("priority", "normal"),
+                ),
+            ).lastrowid
         conn.commit()
         return {"ok": True, "action": "added", "id": item_id, "item": args["item"]}
     if action in {"check", "cancel", "remove"}:
         item = args.get("item", "").strip()
-        row = conn.execute("SELECT id,item FROM food_shopping WHERE lower(item)=lower(?) ORDER BY id DESC LIMIT 1", (item,)).fetchone()
+        row = conn.execute(
+            "SELECT id,item FROM food_shopping WHERE lower(item)=lower(?) ORDER BY id DESC LIMIT 1", (item,)
+        ).fetchone()
         if not row:
             return {"ok": False, "error": "item_not_found", "item": item}
         if action == "remove":
             conn.execute("DELETE FROM food_shopping WHERE id=?", (row[0],))
         else:
-            conn.execute("UPDATE food_shopping SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", ("bought" if action == "check" else "cancelled", row[0]))
+            conn.execute(
+                "UPDATE food_shopping SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                ("bought" if action == "check" else "cancelled", row[0]),
+            )
         conn.commit()
         return {"ok": True, "action": action, "item": row[1]}
-    rows = conn.execute("SELECT id,item,quantity,unit,category,priority,status FROM food_shopping WHERE status=? ORDER BY CASE priority WHEN 'high' THEN 0 ELSE 1 END,id", ("pending",)).fetchall()
-    return {"ok": True, "items": [dict(zip(("id","item","quantity","unit","category","priority","status"), row)) for row in rows]}
+    rows = conn.execute(
+        "SELECT id,item,quantity,unit,category,priority,status FROM food_shopping WHERE status=? ORDER BY CASE priority WHEN 'high' THEN 0 ELSE 1 END,id",
+        ("pending",),
+    ).fetchall()
+    return {
+        "ok": True,
+        "items": [dict(zip(("id", "item", "quantity", "unit", "category", "priority", "status"), row)) for row in rows],
+    }
 
 
 def _recipes(conn, args):
@@ -86,18 +135,145 @@ def _recipes(conn, args):
     if action == "save":
         name = args["name"].strip()
         ingredients = [x.strip() for x in re.split(r"[,;\n]", args.get("ingredients", "")) if x.strip()]
-        conn.execute("INSERT INTO food_recipes(name,ingredients,steps,servings,tags) VALUES (?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET ingredients=excluded.ingredients,steps=excluded.steps,servings=excluded.servings,tags=excluded.tags,updated_at=CURRENT_TIMESTAMP", (name, json.dumps(ingredients, ensure_ascii=False), args.get("steps", ""), args.get("servings"), args.get("tags", "")))
+        conn.execute(
+            "INSERT INTO food_recipes(name,ingredients,steps,servings,tags) VALUES (?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET ingredients=excluded.ingredients,steps=excluded.steps,servings=excluded.servings,tags=excluded.tags,updated_at=CURRENT_TIMESTAMP",
+            (
+                name,
+                json.dumps(ingredients, ensure_ascii=False),
+                args.get("steps", ""),
+                args.get("servings"),
+                args.get("tags", ""),
+            ),
+        )
         conn.commit()
         return {"ok": True, "action": "saved", "name": name, "ingredients": ingredients}
     rows = conn.execute("SELECT name,ingredients,steps,servings,tags FROM food_recipes ORDER BY name").fetchall()
-    recipes = [{"name": r[0], "ingredients": json.loads(r[1]), "steps": r[2], "servings": r[3], "tags": r[4]} for r in rows]
+    recipes = [
+        {"name": r[0], "ingredients": json.loads(r[1]), "steps": r[2], "servings": r[3], "tags": r[4]} for r in rows
+    ]
     if action == "get":
         wanted = args.get("name", "").lower()
         recipes = [r for r in recipes if r["name"].lower() == wanted or wanted in r["name"].lower()]
     if action == "suggest":
         available = {x.strip().lower() for x in args.get("available", "").split(",") if x.strip()}
-        recipes.sort(key=lambda r: sum(any(x in a or a in x for a in available) for x in r["ingredients"]), reverse=True)
+        recipes.sort(
+            key=lambda r: sum(any(x in a or a in x for a in available) for x in r["ingredients"]), reverse=True
+        )
     return {"ok": True, "recipes": recipes}
+
+
+def _inventory(conn, args):
+    action = args.get("action", "list")
+    if action == "add":
+        item = str(args["item"]).strip()
+        quantity = float(args.get("quantity", 0))
+        conn.execute(
+            "INSERT INTO food_inventory(item,quantity,unit,minimum,category,expires_at) VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(item) DO UPDATE SET quantity=excluded.quantity,unit=excluded.unit,"
+            "minimum=excluded.minimum,category=excluded.category,expires_at=excluded.expires_at,"
+            "updated_at=CURRENT_TIMESTAMP",
+            (
+                item,
+                quantity,
+                args.get("unit"),
+                float(args.get("minimum", 0)),
+                args.get("category"),
+                args.get("expires_at"),
+            ),
+        )
+        conn.commit()
+        return {"ok": True, "action": "inventory_added", "item": item, "quantity": quantity}
+    if action == "use":
+        item = str(args["item"]).strip()
+        amount = float(args.get("quantity", 0))
+        row = conn.execute("SELECT quantity FROM food_inventory WHERE lower(item)=lower(?)", (item,)).fetchone()
+        if not row:
+            return {"ok": False, "error": "inventory_item_not_found", "item": item}
+        quantity = max(0, float(row[0]) - amount)
+        conn.execute(
+            "UPDATE food_inventory SET quantity=?,updated_at=CURRENT_TIMESTAMP WHERE lower(item)=lower(?)",
+            (quantity, item),
+        )
+        conn.commit()
+        return {"ok": True, "action": "inventory_used", "item": item, "quantity": quantity}
+    if action == "remove":
+        item = str(args["item"]).strip()
+        cursor = conn.execute("DELETE FROM food_inventory WHERE lower(item)=lower(?)", (item,))
+        conn.commit()
+        return {"ok": cursor.rowcount > 0, "action": "inventory_removed", "item": item}
+    rows = conn.execute(
+        "SELECT id,item,quantity,unit,minimum,category,expires_at FROM food_inventory ORDER BY item"
+    ).fetchall()
+    keys = ("id", "item", "quantity", "unit", "minimum", "category", "expires_at")
+    items = [dict(zip(keys, row)) for row in rows]
+    return {"ok": True, "items": items, "low_stock": [item for item in items if item["quantity"] <= item["minimum"]]}
+
+
+def _budget(conn, args):
+    action = args.get("action", "list")
+    period = str(args.get("period") or date.today().strftime("%Y-%m"))
+    if action == "set":
+        conn.execute(
+            "INSERT INTO food_budgets(period,amount,spent,currency,notes) VALUES (?,?,0,?,?) "
+            "ON CONFLICT(period) DO UPDATE SET amount=excluded.amount,currency=excluded.currency,"
+            "notes=excluded.notes,updated_at=CURRENT_TIMESTAMP",
+            (period, float(args["amount"]), args.get("currency", "ARS"), args.get("notes")),
+        )
+    elif action == "spend":
+        conn.execute(
+            "UPDATE food_budgets SET spent=spent+?,updated_at=CURRENT_TIMESTAMP WHERE period=?",
+            (float(args["amount"]), period),
+        )
+    elif action == "remove":
+        conn.execute("DELETE FROM food_budgets WHERE period=?", (period,))
+    else:
+        rows = conn.execute(
+            "SELECT period,amount,spent,currency,notes FROM food_budgets ORDER BY period DESC"
+        ).fetchall()
+        keys = ("period", "amount", "spent", "currency", "notes")
+        return {"ok": True, "budgets": [dict(zip(keys, row)) for row in rows]}
+    conn.commit()
+    row = conn.execute(
+        "SELECT period,amount,spent,currency,notes FROM food_budgets WHERE period=?", (period,)
+    ).fetchone()
+    keys = ("period", "amount", "spent", "currency", "notes")
+    return {"ok": True, "budget": dict(zip(keys, row)) if row else None}
+
+
+def _meal_plan(conn, args):
+    action = args.get("action", "list")
+    if action == "set":
+        plan_date = str(args["plan_date"])
+        date.fromisoformat(plan_date)
+        conn.execute(
+            "INSERT INTO food_meal_plan(plan_date,meal,recipe_name,servings,estimated_cost,notes) VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(plan_date,meal) DO UPDATE SET recipe_name=excluded.recipe_name,servings=excluded.servings,"
+            "estimated_cost=excluded.estimated_cost,notes=excluded.notes,updated_at=CURRENT_TIMESTAMP",
+            (
+                plan_date,
+                args.get("meal", "cena"),
+                args.get("recipe_name"),
+                args.get("servings"),
+                args.get("estimated_cost"),
+                args.get("notes"),
+            ),
+        )
+        conn.commit()
+    elif action == "remove":
+        conn.execute(
+            "DELETE FROM food_meal_plan WHERE plan_date=? AND meal=?", (args["plan_date"], args.get("meal", "cena"))
+        )
+        conn.commit()
+    else:
+        query = "SELECT id,plan_date,meal,recipe_name,servings,estimated_cost,notes FROM food_meal_plan"
+        values: tuple = ()
+        if args.get("week"):
+            query += " WHERE plan_date BETWEEN ? AND date(?, '+6 day')"
+            values = (args["week"], args["week"])
+        rows = conn.execute(query + " ORDER BY plan_date,meal", values).fetchall()
+        keys = ("id", "plan_date", "meal", "recipe_name", "servings", "estimated_cost", "notes")
+        return {"ok": True, "plan": [dict(zip(keys, row)) for row in rows]}
+    return {"ok": True, "action": "meal_plan_updated"}
 
 
 def run(args):
@@ -111,6 +287,12 @@ def run(args):
                 return {"ok": False, "error": "recipe_not_found"}
             added = [_shopping(conn, {"action": "add", "item": ingredient}) for ingredient in recipe[0]["ingredients"]]
             return {"ok": True, "action": "recipe_to_shopping", "name": recipe[0]["name"], "added": len(added)}
+        if args.get("domain") == "inventory":
+            return _inventory(conn, args)
+        if args.get("domain") == "budget":
+            return _budget(conn, args)
+        if args.get("domain") in {"planning", "meal_plan"}:
+            return _meal_plan(conn, args)
         return _shopping(conn, args) if args.get("domain") == "shopping" else _recipes(conn, args)
     finally:
         conn.close()
