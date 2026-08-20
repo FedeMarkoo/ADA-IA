@@ -54,6 +54,21 @@ class MemoryCredentialTests(unittest.TestCase):
             self.assertEqual(store.get("token"), "secret")
             self.assertEqual(store.path.stat().st_mode & 0o777, 0o600)
 
+    def test_memory_encrypts_sensitive_rows_and_retrieves_them(self):
+        try:
+            from cryptography.fernet import Fernet
+        except ImportError:
+            self.skipTest("cryptography no instalada")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.db"
+            memory = Memory(path, encrypted=True, encryption_key=Fernet.generate_key())
+            memory.add_text("secreto de memoria", kind="profile")
+            memory.append_conversation([{"role": "user", "text": "conversación privada"}])
+            raw = memory.conn.execute("SELECT content FROM memories").fetchone()[0]
+            self.assertTrue(raw.startswith("ada:v1:"))
+            self.assertTrue(memory.search_text("secreto", kind="profile"))
+            self.assertEqual(memory.conversation()[0]["text"], "conversación privada")
+
     def test_credential_store_rejects_missing_key_even_for_reads(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "credentials.enc"

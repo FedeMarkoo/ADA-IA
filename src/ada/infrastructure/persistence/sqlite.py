@@ -6,6 +6,7 @@ dimensions or heavyweight model downloads.
 """
 
 import json
+import os
 import re
 import sqlite3
 import threading
@@ -15,7 +16,7 @@ from pathlib import Path
 class Memory:
     SCHEMA_VERSION = 2
 
-    def __init__(self, db_path):
+    def __init__(self, db_path, encrypted=False, encryption_key=None):
         self.db_path = ":memory:" if str(db_path) == ":memory:" else str(Path(db_path).expanduser().resolve())
         if self.db_path != ":memory:":
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -23,9 +24,63 @@ class Memory:
         self._lock = threading.RLock()
         self.conn.row_factory = sqlite3.Row
         self._fts_available = False
+        self._encrypted = bool(encrypted)
+        self._fernet = None
+        if self._encrypted:
+            key = encryption_key or os.environ.get("ADA_MEMORY_KEY")
+            if not key:
+                raise RuntimeError("Definí ADA_MEMORY_KEY para habilitar el cifrado de memory.db.")
+            try:
+                from cryptography.fernet import Fernet
+
+                self._fernet = Fernet(key.encode() if isinstance(key, str) else key)
+            except ImportError as exc:
+                raise RuntimeError("Instalá la extra credentials para cifrar memory.db.") from exc
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError("ADA_MEMORY_KEY no es una clave Fernet válida.") from exc
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self._ensure_tables()
+
+    def _seal(self, value):
+        text = str(value)
+        if not self._encrypted:
+            return text
+        if text.startswith("ada:v1:"):
+            return text
+        return "ada:v1:" + self._fernet.encrypt(text.encode("utf-8")).decode("ascii")
+
+    def _open(self, value):
+        text = "" if value is None else str(value)
+        if not text.startswith("ada:v1:"):
+            return text
+        if not self._fernet:
+            raise RuntimeError("La base contiene datos cifrados; inicializá Memory con ADA_MEMORY_KEY.")
+        return self._fernet.decrypt(text[7:].encode("ascii")).decode("utf-8")
+
+    @staticmethod
+    def _json(value):
+        return json.dumps(value, ensure_ascii=False, default=str)
+
+    def _migrate_sensitive_rows(self):
+        if not self._encrypted:
+            return
+        columns = (
+            ("memories", "content"),
+            ("memories", "meta"),
+            ("tasks", "task"),
+            ("tasks", "result"),
+            ("procedures", "instructions"),
+            ("procedures", "meta"),
+            ("conversation_messages", "text"),
+            ("audit_log", "request"),
+            ("audit_log", "result"),
+        )
+        for table, column in columns:
+            for row in self.conn.execute(f"SELECT id, {column} FROM {table}").fetchall():
+                value = row[column]
+                if value is not None and not str(value).startswith("ada:v1:"):
+                    self.conn.execute(f"UPDATE {table} SET {column}=? WHERE id=?", (self._seal(value), row["id"]))
 
     def _ensure_tables(self):
         self.conn.executescript(
@@ -91,8 +146,11 @@ class Memory:
         if "keywords" not in columns:
             self.conn.execute("ALTER TABLE router_catalog ADD COLUMN keywords TEXT")
         self._apply_migrations()
+        self._migrate_sensitive_rows()
         self.conn.commit()
         try:
+            if self._encrypted:
+                raise sqlite3.OperationalError("FTS no puede indexar contenido cifrado")
             self.conn.executescript(
                 """
                 CREATE VIRTUAL TABLE IF NOT EXISTS memory_search USING fts5(
@@ -365,7 +423,7 @@ class Memory:
         with self._lock:
             self.conn.execute(
                 "INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
-                (str(text), kind, json.dumps(meta or {}, ensure_ascii=False)),
+                (self._seal(text), kind, self._seal(self._json(meta or {}))),
             )
             self.conn.commit()
 
@@ -374,7 +432,7 @@ class Memory:
         with self._lock:
             self.conn.execute(
                 "INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
-                (str(content), "knowledge", json.dumps({"name": name, "source": source}, ensure_ascii=False)),
+                (self._seal(content), "knowledge", self._seal(self._json({"name": name, "source": source}))),
             )
             self.conn.commit()
 
@@ -388,17 +446,18 @@ class Memory:
                     "WHERE memory_search MATCH ? AND m.kind='knowledge' ORDER BY bm25(memory_search) LIMIT ?",
                     (match, limit),
                 ).fetchall()
-                return [row["content"] for row in rows]
+                return [self._open(row["content"]) for row in rows]
         rows = self.conn.execute(
             "SELECT content, meta FROM memories WHERE kind='knowledge' ORDER BY id DESC LIMIT 10000"
         ).fetchall()
         if not query:
-            return [row["content"] for row in rows[:limit]]
+            return [self._open(row["content"]) for row in rows[:limit]]
         terms = [t for t in re.findall(r"[\wáéíóúñü]+", query.lower()) if len(t) > 2]
         scored = []
         for row in rows:
-            score = sum(row["content"].lower().count(term) for term in terms)
-            scored.append((score, row["content"]))
+            content = self._open(row["content"])
+            score = sum(content.lower().count(term) for term in terms)
+            scored.append((score, content))
         scored.sort(key=lambda item: item[0], reverse=True)
         return [content for score, content in scored[:limit] if score]
 
@@ -421,7 +480,7 @@ class Memory:
                     "WHERE memory_search MATCH ? ORDER BY bm25(memory_search) LIMIT ?",
                     (match, k),
                 ).fetchall()
-            return [row["content"] for row in rows]
+            return [self._open(row["content"]) for row in rows]
         if kind:
             rows = self.conn.execute(
                 "SELECT content FROM memories WHERE kind=? ORDER BY id DESC LIMIT 10000", (kind,)
@@ -430,7 +489,7 @@ class Memory:
             rows = self.conn.execute("SELECT content FROM memories ORDER BY id DESC LIMIT 10000").fetchall()
         scored = []
         for row in rows:
-            content = row["content"]
+            content = self._open(row["content"])
             low = content.lower()
             score = sum(low.count(term) for term in terms)
             if score:
@@ -444,17 +503,17 @@ class Memory:
                 """INSERT INTO procedures(name, instructions, meta) VALUES (?, ?, ?)
                    ON CONFLICT(name) DO UPDATE SET instructions=excluded.instructions,
                    updated_at=CURRENT_TIMESTAMP, meta=excluded.meta""",
-                (name.strip(), instructions.strip(), json.dumps(meta or {}, ensure_ascii=False)),
+                (name.strip(), self._seal(instructions.strip()), self._seal(self._json(meta or {}))),
             )
             self.conn.commit()
 
     def list_procedures(self):
-        return [
-            dict(row)
-            for row in self.conn.execute(
-                "SELECT name, instructions, updated_at FROM procedures ORDER BY name"
-            ).fetchall()
-        ]
+        result = []
+        for row in self.conn.execute("SELECT name, instructions, updated_at FROM procedures ORDER BY name").fetchall():
+            item = dict(row)
+            item["instructions"] = self._open(item["instructions"])
+            result.append(item)
+        return result
 
     def find_procedures(self, query, k=5):
         terms = [t for t in re.findall(r"[\wáéíóúñü]+", query.lower()) if len(t) > 2]
@@ -471,7 +530,7 @@ class Memory:
         with self._lock:
             self.conn.execute(
                 "INSERT INTO tasks(task, result, provider, success) VALUES (?, ?, ?, ?)",
-                (json.dumps(task, ensure_ascii=False), str(result), provider, int(bool(success))),
+                (self._seal(self._json(task)), self._seal(result), provider, int(bool(success))),
             )
             self.conn.commit()
 
@@ -482,8 +541,8 @@ class Memory:
                 (
                     str(action),
                     actor,
-                    json.dumps(request, ensure_ascii=False, default=str) if request is not None else None,
-                    json.dumps(result, ensure_ascii=False, default=str) if result is not None else None,
+                    self._seal(self._json(request)) if request is not None else None,
+                    self._seal(self._json(result)) if result is not None else None,
                     int(bool(success)),
                     correlation_id,
                 ),
@@ -492,10 +551,15 @@ class Memory:
 
     def recent_audit(self, limit=50):
         with self._lock:
-            return [
-                dict(row)
-                for row in self.conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-            ]
+            result = []
+            for row in self.conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall():
+                item = dict(row)
+                if item.get("request") is not None:
+                    item["request"] = self._open(item["request"])
+                if item.get("result") is not None:
+                    item["result"] = self._open(item["result"])
+                result.append(item)
+            return result
 
     def publish_event(self, topic, payload, priority=0, dedupe_key=None, delay_seconds=0):
         with self._lock:
@@ -573,9 +637,13 @@ class Memory:
             return cursor.rowcount > 0
 
     def recent_tasks(self, limit=10):
-        return [
-            dict(row) for row in self.conn.execute("SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        ]
+        result = []
+        for row in self.conn.execute("SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,)).fetchall():
+            item = dict(row)
+            item["task"] = self._open(item["task"])
+            item["result"] = self._open(item["result"])
+            result.append(item)
+        return result
 
     def purge_tasks(self, keep=1000):
         with self._lock:
@@ -600,7 +668,7 @@ class Memory:
 
     def append_conversation(self, messages, session="main"):
         rows = [
-            (session, item.get("role", "assistant"), str(item.get("text", "")), item.get("model"))
+            (session, item.get("role", "assistant"), self._seal(item.get("text", "")), item.get("model"))
             for item in messages
             if item.get("text") is not None
         ]
@@ -619,7 +687,12 @@ class Memory:
             "WHERE session=? ORDER BY id DESC LIMIT ?",
             (session, limit),
         ).fetchall()
-        return [dict(row) for row in reversed(rows)]
+        result = []
+        for row in reversed(rows):
+            item = dict(row)
+            item["text"] = self._open(item["text"])
+            result.append(item)
+        return result
 
     def clear_conversation(self, session="main"):
         with self._lock:

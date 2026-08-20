@@ -28,7 +28,11 @@ class Agent:
         self.metrics = Metrics("agent")
         self.model_manager = ModelManager(self.cfg)
         db_path = self.cfg.get("db_path", str(Path(__file__).parent / "memory.db"))
-        self.mem = Memory(db_path)
+        self.mem = Memory(
+            db_path,
+            encrypted=bool(self.cfg.get("memory_encryption", False)),
+            encryption_key=os.environ.get("ADA_MEMORY_KEY"),
+        )
         self.skills = load_capabilities()
         self.coordinator = MultiAgentCoordinator(self.cfg)
         self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem)
