@@ -1,7 +1,8 @@
-import os
-from PIL import Image
-
 import json
+import os
+from typing import Any
+
+from PIL import Image
 
 _CONFIG = None
 _IMAGE_MODEL = None
@@ -102,7 +103,7 @@ def get_text_embedding(text):
             arr = _np.frombuffer(h, dtype=_np.uint8).astype("float32")
             # pad/trim to dim
             dim = 512
-            out = _np.zeros(dim, dtype="float32")
+            out: Any = _np.zeros(dim, dtype="float32")
             out[: len(arr)] = arr
             return out
         except Exception:
