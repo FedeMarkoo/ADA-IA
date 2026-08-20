@@ -39,6 +39,14 @@ class LocalModelRuntime:
 
     def __init__(self, config=None):
         self.config = config or {}
+        self._process = None
+        self._lock = threading.Lock()
+        self.reload(self.config)
+
+    def reload(self, config=None):
+        """Refresh runtime settings without touching a process already owned by ADA."""
+        if config is not None:
+            self.config = dict(config)
         runtime = self.config.get("local_runtime", {})
         self.provider = runtime.get("provider", "ollama")
         self.endpoint = os.environ.get(
@@ -49,8 +57,6 @@ class LocalModelRuntime:
         self.startup_timeout = float(runtime.get("startup_timeout", 12))
         configured_binary = runtime.get("binary") or os.environ.get("ADA_OLLAMA_BIN")
         self.binary = configured_binary or shutil.which("ollama")
-        self._process = None
-        self._lock = threading.Lock()
 
     def _healthy(self):
         try:

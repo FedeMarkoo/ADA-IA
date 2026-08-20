@@ -38,7 +38,7 @@ class WebSessionTests(unittest.TestCase):
                 "select_model": lambda self, task: "test-model",
             },
         )()
-        fake.cfg = {}
+        fake.cfg = {"db_path": ":memory:"}
         fake.policy = type("Policy", (), {})()
         fake.router = type("Router", (), {})()
         factory_app = create_app({"db_path": ":memory:"}, agent_instance=fake)
@@ -54,6 +54,12 @@ class WebSessionTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["adaptive"])
+        rejected = client.post(
+            "/api/models/reload",
+            json={"config": {"db_path": "/tmp/other.db"}},
+            headers={"X-ADA-Token": csrf},
+        )
+        self.assertEqual(rejected.status_code, 400)
 
 
 if __name__ == "__main__":

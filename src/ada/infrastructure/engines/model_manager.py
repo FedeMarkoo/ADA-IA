@@ -66,7 +66,7 @@ class ModelManager:
             self.config.get("local_runtime", {}).get("provider", "ollama"),
         )
         self.models = self.config.get("models", {})
-        self.local_runtime.config = self.config
+        self.local_runtime.reload(self.config)
         self._gpt4all = None
 
     def available(self):

@@ -212,15 +212,26 @@ def warmup():
 def reload_models():
     """Apply a validated model policy without rebuilding the running agent."""
     runtime = _runtime()
+    active_agent = runtime["agent"]
+    previous = dict(getattr(active_agent, "cfg", {}))
     payload = request.get_json(silent=True) or {}
     candidate = payload.get("config")
     if not isinstance(candidate, dict):
-        candidate = load_config(cfg_path, PROJECT_ROOT)
+        candidate = {**previous, **load_config(cfg_path, PROJECT_ROOT)}
     else:
-        candidate = dict(candidate)
+        candidate = {**previous, **candidate}
     validate_config(candidate)
-    active_agent = runtime["agent"]
-    previous = dict(getattr(active_agent, "cfg", {}))
+    immutable_keys = {
+        "db_path",
+        "allowed_roots",
+        "memory_encryption",
+        "food_profile",
+        "photo_root",
+        "knowledge_files",
+    }
+    changed_immutable = [key for key in immutable_keys if key in previous and candidate.get(key) != previous[key]]
+    if changed_immutable:
+        return jsonify({"error": "immutable_runtime_config", "keys": sorted(changed_immutable)}), 400
     try:
         active_agent.model_manager.reload(candidate)
         selected = active_agent.model_manager.select_model("chat")
