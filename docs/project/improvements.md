@@ -15,17 +15,24 @@
 
 ## Lightroom → MCP independiente
 
-La integración actual de Lightroom está demasiado cerca del núcleo de ADA: la
-capability conoce reglas de organización, SQLite, XMP, RAW/JPG, verificación y
-el ejecutor `gestor_fotos_lightroom.py`. La dirección recomendada es separar esa
-responsabilidad en un **Lightroom MCP Server** independiente.
+La capability existente es la implementación canónica y el **Lightroom MCP
+Server** es una interfaz externa delgada que reutiliza esa misma validación. ADA
+llama directamente a la capability; VS Code y otros hosts usan el MCP, que
+aplica allowlist y auditoría dentro de su propio proceso.
 
-### Objetivo
+### Estado
 
-Convertir las operaciones específicas de Lightroom/fotografía en tools MCP y
-hacer que ADA actúe como cliente/orquestador. ADA debería decidir *qué* quiere
-hacer y el MCP de Lightroom debería encargarse de *cómo* interactuar con el
-catálogo, XMP y archivos.
+- [x] Crear un servidor MCP de Lightroom ejecutable por separado mediante `ada-lightroom-mcp`.
+- [x] Exponer operaciones de conteo, análisis, planificación, simulación,
+  aplicación y recuperación como tools MCP.
+- [x] Mantener confirmación explícita para operaciones mutantes.
+- [x] Documentar la configuración de Lightroom como servidor MCP de VS Code/ADA.
+- [x] Definir la capability existente como adaptador canónico y el MCP como
+  interfaz externa del mismo código.
+- [ ] Extraer el servicio de fotografía/Lightroom a un paquete independiente,
+  sin dependencias del runtime de ADA.
+- [ ] Publicar el Lightroom MCP como proyecto/repo independiente cuando el
+  contrato de tools esté estabilizado.
 
 ### Tools propuestas
 
@@ -39,42 +46,38 @@ catálogo, XMP y archivos.
 - `lightroom.recover` — recuperar una operación usando su manifiesto/undo.
 - `lightroom.list_photos` — consultar fotografías y metadatos relevantes.
 
-### Arquitectura objetivo
+### Arquitectura elegida
 
 ```text
-ADA
- ├─ router / planner
- ├─ memoria / auditoría / confirmación
- └─ MCP client
-       │
-       ▼
-Lightroom MCP Server
- ├─ photo/session analysis
- ├─ Lightroom catalog + SQLite
- ├─ RAW/JPG/XMP operations
- ├─ organization + validation
- └─ manifests / recovery
+ADA router/planner ──────────────┐
+                                ▼
+                         Lightroom adapter
+                                ▲
+VS Code / MCP hosts ─ MCP server┘
 ```
 
 ### Reglas de migración
 
-1. No mover la lógica de negocio a ADA nuevamente después de extraerla.
+1. Mantener una sola implementación de reglas y ejecución; las interfaces sólo
+   delegan.
 2. Mantener `plan` y `simulate` como operaciones sin mutaciones.
 3. Toda escritura de archivos, catálogo o XMP debe poder identificarse en un
    manifiesto y ser reversible cuando sea técnicamente posible.
 4. El MCP debe poder ejecutarse de manera independiente de ADA para permitir
-   pruebas, CLI y otros clientes MCP.
-5. ADA debe consumir schemas de las tools y no duplicar manualmente sus
-   argumentos.
+   pruebas, CLI y otros clientes MCP. El servidor de este PR sigue reutilizando
+   temporalmente el adaptador existente; la extracción del servicio es el paso
+   siguiente.
+5. El MCP publica schemas propios sin crear una segunda capability en el router
+   de ADA.
 6. La migración debe conservar las validaciones actuales de RAW/JPG/XMP y las
    reglas para evitar asociaciones incorrectas por nombre base.
 
 ### Orden recomendado
 
-1. Extraer primero las funciones puras de análisis/validación.
-2. Crear el servidor MCP de Lightroom con `stdio` como transporte inicial.
-3. Migrar `plan`, `simulate` y `validate`.
-4. Migrar las operaciones de escritura y recuperación.
-5. Hacer que ADA consuma exclusivamente el MCP para Lightroom.
-6. Eliminar progresivamente la capability Lightroom interna y actualizar la
-   documentación.
+1. [x] Mantener la capability como adaptador canónico de ejecución.
+2. [x] Crear el servidor MCP con `stdio` como transporte inicial.
+3. [x] Aplicar allowlist, confirmación, límites y auditoría dentro del servidor.
+4. [ ] Extraer la lógica canónica a un paquete independiente si el servidor se
+   publica fuera del repositorio.
+5. [ ] Hacer que ambos adaptadores dependan de ese paquete sin cambiar sus
+   contratos públicos.
