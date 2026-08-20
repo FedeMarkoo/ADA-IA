@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 
 from ada.application.agent import Agent
 from ada.application.services.web_chat import WebChatService
-from ada.config import load_config
+from ada.config import load_config, validate_config
 from ada.infrastructure.runtime.resources import hardware_profile
 from ada.interfaces.telegram import TelegramListener
 from ada.interfaces.i18n import tr
@@ -195,6 +195,33 @@ def audit_api():
 @app.route("/api/warmup", methods=["POST"])
 def warmup():
     return jsonify({"runtime": _runtime()["agent"].model_manager.runtime_status(), "ok": True})
+
+
+@app.route("/api/models/reload", methods=["POST"])
+def reload_models():
+    """Apply a validated model policy without rebuilding the running agent."""
+    runtime = _runtime()
+    payload = request.get_json(silent=True) or {}
+    candidate = payload.get("config")
+    if not isinstance(candidate, dict):
+        candidate = load_config(cfg_path, PROJECT_ROOT)
+    else:
+        candidate = dict(candidate)
+    validate_config(candidate)
+    active_agent = runtime["agent"]
+    previous = dict(getattr(active_agent, "cfg", {}))
+    try:
+        active_agent.model_manager.reload(candidate)
+        selected = active_agent.model_manager.select_model("chat")
+        active_agent.cfg = candidate
+        active_agent.policy.config = candidate
+        active_agent.router.config = candidate
+        runtime["cfg"] = candidate
+        runtime["web_chat"].config = candidate
+    except Exception:
+        active_agent.model_manager.reload(previous)
+        raise
+    return jsonify({"ok": True, "model": selected, "adaptive": bool(candidate.get("adaptive_models", False))})
 
 
 @app.route("/api/conversation", methods=["GET", "DELETE"])

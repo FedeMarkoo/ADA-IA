@@ -30,8 +30,30 @@ class WebSessionTests(unittest.TestCase):
 
         fake = FakeAgent()
         fake.mem = type("Memory", (), {"conversation": lambda self, **kwargs: []})()
+        fake.model_manager = type(
+            "ModelManager",
+            (),
+            {
+                "reload": lambda self, config: setattr(self, "config", config),
+                "select_model": lambda self, task: "test-model",
+            },
+        )()
+        fake.cfg = {}
+        fake.policy = type("Policy", (), {})()
+        fake.router = type("Router", (), {})()
         factory_app = create_app({"db_path": ":memory:"}, agent_instance=fake)
         self.assertIs(factory_app.extensions["ada_runtime"]["agent"], fake)
+
+        client = factory_app.test_client()
+        client.get("/").close()
+        csrf = client.get_cookie("ada_csrf").value
+        response = client.post(
+            "/api/models/reload",
+            json={"config": {"adaptive_models": True, "models": {"chat": "test-model"}}},
+            headers={"X-ADA-Token": csrf},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["adaptive"])
 
 
 if __name__ == "__main__":
