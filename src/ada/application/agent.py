@@ -15,6 +15,9 @@ from ada.domain.policy import PolicyEngine, PolicyViolation
 from ada.application.planner import Planner
 from ada.domain.tasks import Action
 from ada.infrastructure.observability import Metrics
+from ada.application.services.complexity import ComplexityEstimator
+from ada.application.services.knowledge import KnowledgeLoader
+from ada.application.services.prompts import PromptBuilder
 
 
 logger = logging.getLogger("ada.agent")
@@ -38,6 +41,8 @@ class Agent:
         self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem)
         self.policy = PolicyEngine(self.cfg)
         self.planner = Planner(self.skills, self.policy)
+        self.knowledge_loader = KnowledgeLoader(self.mem)
+        self.prompt_builder = PromptBuilder(self.mem)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
@@ -64,29 +69,10 @@ class Agent:
         return capability_catalog()
 
     def _load_knowledge(self):
-        for filename in self.cfg.get("knowledge_files", []):
-            try:
-                path = Path(os.path.expanduser(filename))
-                if not path.exists():
-                    continue
-                marker = f"[ADA knowledge: {path.name}]"
-                if not any(marker in item for item in self.mem.knowledge()):
-                    self.mem.add_knowledge(
-                        path.name, marker + "\n" + path.read_text(encoding="utf-8"), source=str(path)
-                    )
-            except Exception as exc:
-                logger.warning("knowledge_load_failed file=%s error=%s", filename, exc)
-                continue
+        return self.knowledge_loader.load_files(self.cfg.get("knowledge_files", []))
 
     def _system_prompt(self):
-        language = "Responde en español." if self.lang.startswith("es") else ""
-        return (
-            "Eres ADA, un agente de IA neutral y práctico. Tu modo permanente es AGENTE, no chatbot: "
-            "no preguntes al usuario si quiere chat o agente ni ofrezcas elegir entre esos modos. "
-            "Interpretá la intención, proponé el siguiente paso concreto y usá las herramientas disponibles "
-            "cuando la solicitud corresponda a una acción. No inventes ejecuciones ni resultados. "
-            "Si no podés ejecutar una acción, explicá claramente qué falta. Sé breve y claro. " + language
-        )
+        return self.prompt_builder.system(self.lang)
 
     def decide_and_run(self, task):
         task = dict(task)
@@ -135,20 +121,11 @@ class Agent:
             self.mem.record_task(task, result, success=False)
             return {"model": None, "result": result}
 
-        prompt = self._system_prompt()
-        knowledge = self.mem.knowledge(task.get("prompt", ""), limit=2)
-        if knowledge:
-            prompt += "\nReferencias confiables del proyecto; respetalas y no inventes reglas:\n" + "\n---\n".join(
-                knowledge
-            )
-        procedures = self.mem.find_procedures(task.get("prompt", ""))
-        if procedures:
-            prompt += "\nProcedimientos aprendidos relevantes:\n" + "\n".join(
-                f"- {p['name']}: {p['instructions']}" for p in procedures
-            )
-        prompt += "\nSolicitud del usuario:\n" + (task.get("prompt") or json.dumps(task, ensure_ascii=False))
+        prompt = self.prompt_builder.task(task, self.lang)
+        model_name = self.model_manager.select_model(task, role=task.get("model_role", "chat"))
+        call_options = {"ollama_model": model_name} if provider == "ollama" and model_name else {}
         try:
-            result = self.model_manager.call(provider, prompt, complexity=task["complexity"])
+            result = self.model_manager.call(provider, prompt, complexity=task["complexity"], **call_options)
             self.mem.record_task(task, result, provider=provider, success=True)
             self.mem.add_text(
                 f"Tarea: {task.get('prompt', task)}\nResultado: {result}",
@@ -162,7 +139,9 @@ class Agent:
             # the local model before returning an error to the user.
             if provider != "ollama" and self.model_manager.available().get("ollama"):
                 try:
-                    result = self.model_manager.call("ollama", prompt, complexity=task["complexity"])
+                    result = self.model_manager.call(
+                        "ollama", prompt, complexity=task["complexity"], ollama_model=model_name or None
+                    )
                     self.mem.record_task(task, result, provider="ollama", success=True)
                     return {"model": "ollama (fallback)", "result": result}
                 except Exception as fallback_exc:
@@ -278,17 +257,7 @@ class Agent:
 
     @staticmethod
     def estimate_complexity(text):
-        value = text.lower()
-        if any(
-            word in value
-            for word in ("analizá", "analiza", "analizar", "diseñá", "diseña", "investiga", "complejo", "script nuevo")
-        ):
-            return 8
-        if any(word in value for word in ("adaptá", "adapta", "modifica", "explica", "compará", "compara")):
-            return 5
-        if any(word in value for word in ("ejecuta", "corré", "corre", "lista", "mostrame", "reporte")):
-            return 2
-        return 3
+        return ComplexityEstimator.estimate(text)
 
     def teach(self, name, instructions):
         self.mem.add_procedure(name, instructions, meta={"source": "user"})
