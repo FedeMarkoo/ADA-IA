@@ -15,7 +15,7 @@ ollama pull qwen2.5vl:3b
 
 La integración de bot requiere un token de BotFather. El token debe vivir solo
 en `TELEGRAM_BOT_TOKEN` y nunca en Git. ADA implementa long polling dentro del
-proceso iniciado con `ada.py serve`: recibe texto o imágenes, descarga las
+proceso iniciado con `ada serve`: recibe texto o imágenes, descarga las
 imágenes en `telegram_inbox/` y reenvía el pedido al endpoint interno
 `POST /api/chat`.
 
@@ -28,13 +28,13 @@ Telegram es un adapter de entrada/salida; no contiene lógica de negocio.
 ```bash
 export TELEGRAM_BOT_TOKEN='token-entregado-por-botfather'
 export TELEGRAM_ALLOWED_CHAT_IDS='123456789'
-.venv/bin/python ada.py serve
+.venv/bin/ada serve
 ```
 
 Para diagnóstico detallado:
 
 ```bash
-.venv/bin/python ada.py serve -debug
+.venv/bin/ada serve -debug
 ```
 
 La ejecución escribe un log con el timestamp de inicio en

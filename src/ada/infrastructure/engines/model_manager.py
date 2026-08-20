@@ -3,14 +3,19 @@
 The local provider is Ollama. Remote providers are optional and are only used
 when configured and when the router decides that the task needs them.
 """
+
 import json
 import os
 import urllib.error
 import urllib.request
+import time
+import threading
 
-from src.ada.infrastructure.runtime.resources import recommended_threads
+from ada.infrastructure.runtime.resources import recommended_threads
+from ada.infrastructure.runtime.resources import hardware_profile
 
-from src.ada.infrastructure.runtime.ollama import LocalModelRuntime
+from ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
+from ada.infrastructure.observability import Metrics
 
 try:
     from openai import OpenAI
@@ -43,6 +48,26 @@ class ModelManager:
         )
         self.models = self.config.get("models", {})
         self._gpt4all = None
+        self.metrics = Metrics("models")
+        self._model_stats = {}
+        self._model_stats_lock = threading.RLock()
+
+    def reload(self, config=None):
+        """Reload model policy at runtime without recreating the agent."""
+        if config is not None:
+            self.config = dict(config)
+        self.ollama_url = os.environ.get(
+            "ADA_OLLAMA_URL", self.config.get("ollama_url", "http://127.0.0.1:11434")
+        ).rstrip("/")
+        self.openai_key = os.environ.get("OPENAI_API_KEY")
+        self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        self.provider = self.config.get(
+            "engine_provider",
+            self.config.get("local_runtime", {}).get("provider", "ollama"),
+        )
+        self.models = self.config.get("models", {})
+        self.local_runtime.reload(self.config)
+        self._gpt4all = None
 
     def available(self):
         local_available = self._ollama_available() if self.provider == "ollama" else False
@@ -57,7 +82,118 @@ class ModelManager:
         }
 
     def _model(self, role, legacy_key, default):
+        policy = self.config.get("model_policy", {})
+        candidate = policy.get(role)
+        if isinstance(candidate, dict):
+            candidate = candidate.get("preferred") or (candidate.get("fallbacks") or [None])[0]
+        if candidate:
+            return candidate
         return self.models.get(role) or self.config.get(legacy_key, default)
+
+    def model_catalog(self):
+        """Return the declarative model catalog filtered by the current hardware."""
+        profile = hardware_profile()
+        catalog = self.config.get("model_catalog") or []
+        if isinstance(catalog, dict):
+            catalog = [dict({"name": name}, **value) for name, value in catalog.items()]
+        result = []
+        for item in catalog:
+            if not isinstance(item, dict) or not item.get("name"):
+                continue
+            minimum = item.get("min_ram_gb", 0)
+            if profile["ram_gb"] and profile["ram_gb"] < float(minimum):
+                continue
+            minimum_vram = float(item.get("min_vram_gb", 0) or 0)
+            if minimum_vram and profile["vram_gb"] < minimum_vram:
+                continue
+            minimum_disk = float(item.get("min_disk_free_gb", 0) or 0)
+            if minimum_disk and profile["disk_free_gb"] < minimum_disk:
+                continue
+            result.append(dict(item, hardware_tier=profile["tier"]))
+        return result
+
+    def _model_candidates(self, task, role="chat"):
+        task_name = task if isinstance(task, str) else (task.get("task") or task.get("type") or task.get("model_role"))
+        policy = self.config.get("model_policy", {})
+        configured = policy.get(task_name) or policy.get(role)
+        names = []
+        if isinstance(configured, str):
+            names = [configured]
+        elif isinstance(configured, dict):
+            names = [configured.get("preferred")] + list(configured.get("fallbacks") or [])
+        if not names:
+            names = [self._model(role, f"{role}_model", self.models.get(role, ""))]
+        return [name for name in names if name]
+
+    def select_model(self, task, role="chat"):
+        """Select a hardware-compatible model name from the runtime policy."""
+        names = self._model_candidates(task, role)
+        names = self._adaptive_order(names)
+        available = {item["name"] for item in self.model_catalog()}
+        for name in names:
+            if name and (not available or name in available):
+                return name
+        return names[0] if names else ""
+
+    def _adaptive_order(self, names):
+        """Rank models with observed performance while preserving cold-start order."""
+        if not self.config.get("adaptive_models") or len(names) < 2:
+            return names
+        with self._model_stats_lock:
+            stats = {name: dict(self._model_stats.get(name, {})) for name in names}
+        measured = [item for item in stats.values() if item.get("calls")]
+        if not measured:
+            return names
+        best_average = min(item["seconds"] / item["calls"] for item in measured)
+
+        def score(index_name):
+            index, name = index_name
+            item = stats[name]
+            calls = item.get("calls", 0)
+            if not calls:
+                # A cold candidate gets a small exploration allowance instead
+                # of permanently losing to the first configured model.
+                return best_average * 1.25, index
+            error_rate = item.get("errors", 0) / calls
+            return (item["seconds"] / calls) * (1.0 + error_rate * 3.0), index
+
+        return [name for _, name in sorted(enumerate(names), key=score)]
+
+    def _record_model_stat(self, model_tag, duration, error=False):
+        with self._model_stats_lock:
+            item = self._model_stats.setdefault(model_tag, {"calls": 0, "errors": 0, "seconds": 0.0})
+            item["calls"] += 1
+            item["seconds"] += duration
+            if error:
+                item["errors"] += 1
+
+    def ensure_model(self, task, role="chat"):
+        """Ensure the selected local model is installed or use an installed fallback."""
+        selected = self.select_model(task, role)
+        if self.provider != "ollama" or not selected:
+            return selected
+        status = self.local_runtime.ensure_models([selected])
+        if status.get("ready"):
+            return selected
+        installed = set(status.get("installed", []))
+        for candidate in self._model_candidates(task, role):
+            if candidate in installed:
+                return candidate
+        return selected
+
+    def model_recommendations(self):
+        """Expose task policy, hardware filtering and provider telemetry together."""
+        roles = set(self.models) | set(self.config.get("model_policy", {}))
+        return {
+            "adaptive": bool(self.config.get("adaptive_models", False)),
+            "roles": {role: self.select_model(role, role=role) for role in sorted(roles)},
+            "model_stats": self.model_stats(),
+            "telemetry": self.metrics.snapshot(),
+        }
+
+    def model_stats(self):
+        with self._model_stats_lock:
+            return {name: dict(values) for name, values in self._model_stats.items()}
 
     def _gpt4all_available(self):
         if GPT4All is None:
@@ -70,28 +206,46 @@ class ModelManager:
 
     def runtime_status(self):
         """Expose runtime and installed-model state for the UI and diagnostics."""
-        status = self.local_runtime.ensure_ready() if self.provider == "ollama" else {
-            "provider": self.provider,
-            "endpoint": "configured locally",
-            "available": self.available().get(self.provider, False),
-            "managed": False,
-            "reason": "ready" if self.available().get(self.provider, False) else "provider_unavailable",
-        }
+        status = (
+            self.local_runtime.ensure_ready()
+            if self.provider == "ollama"
+            else {
+                "provider": self.provider,
+                "endpoint": "configured locally",
+                "available": self.available().get(self.provider, False),
+                "managed": False,
+                "reason": "ready" if self.available().get(self.provider, False) else "provider_unavailable",
+            }
+        )
         if self.provider == "ollama":
-            models = self.local_runtime.ensure_models([
-                self._model("chat", "ollama_model", "llama3.2:3b"),
-                self._model("vision", "vision_model", "qwen2.5vl:3b"),
-                self._model("router", "router_model", "llama3.2:3b"),
-            ]) if status.available else {"ready": False, "installed": [], "missing": []}
+            status_available = status.available if isinstance(status, RuntimeStatus) else bool(status.get("available"))
+            models = (
+                self.local_runtime.ensure_models(
+                    [
+                        self._model("chat", "ollama_model", "llama3.2:3b"),
+                        self._model("vision", "vision_model", "qwen2.5vl:3b"),
+                        self._model("router", "router_model", "llama3.2:3b"),
+                    ]
+                )
+                if status_available
+                else {"ready": False, "installed": [], "missing": []}
+            )
         else:
             models = {"ready": self.available().get(self.provider, False), "installed": [], "missing": []}
-        return {"status": status.as_dict() if hasattr(status, "as_dict") else status, "models": models}
+        status_payload = status.as_dict() if hasattr(status, "as_dict") else status
+        return {"status": status_payload, "models": models}
 
     def choose(self, task):
         """Choose a provider using complexity, privacy and explicit preferences."""
         available = self.available()
-        requested = task.get("model") or task.get("model_hint") or self.config.get("model_hint")
-        requested = {"local": "ollama", "ollama": "ollama", "chatgpt": "openai", "claude": "anthropic"}.get(requested, requested)
+        requested_value = task.get("model") or task.get("model_hint") or self.config.get("model_hint")
+        requested = str(requested_value) if requested_value else None
+        if requested == "local":
+            requested = "ollama"
+        elif requested == "chatgpt":
+            requested = "openai"
+        elif requested == "claude":
+            requested = "anthropic"
         if requested in available and available[requested]:
             return requested
 
@@ -117,15 +271,29 @@ class ModelManager:
         return None
 
     def call(self, provider, prompt, **kwargs):
-        if provider == "ollama":
-            return self._call_ollama(prompt, **kwargs)
-        if provider == "openai":
-            return self._call_openai(prompt, **kwargs)
-        if provider == "anthropic":
-            return self._call_anthropic(prompt, **kwargs)
-        if provider == "gpt4all":
-            return self._call_gpt4all(prompt, **kwargs)
-        raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
+        started = time.monotonic()
+        model_tag = kwargs.get("ollama_model") or kwargs.get(f"{provider}_model") or "default"
+        tags = {"provider": provider, "model": model_tag}
+        self.metrics.increment("provider.calls", tags=tags)
+        failed = False
+        try:
+            if provider == "ollama":
+                return self._call_ollama(prompt, **kwargs)
+            if provider == "openai":
+                return self._call_openai(prompt, **kwargs)
+            if provider == "anthropic":
+                return self._call_anthropic(prompt, **kwargs)
+            if provider == "gpt4all":
+                return self._call_gpt4all(prompt, **kwargs)
+            raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
+        except Exception:
+            failed = True
+            self.metrics.increment("provider.errors", tags=tags)
+            raise
+        finally:
+            duration = time.monotonic() - started
+            self._record_model_stat(model_tag, duration, error=failed)
+            self.metrics.observe("provider.duration", duration, tags)
 
     def call_vision(self, provider, prompt, image_base64, **kwargs):
         if provider != "ollama":
@@ -142,15 +310,18 @@ class ModelManager:
                 "temperature": kwargs.get("temperature", 0.2),
                 "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
             },
+            "keep_alive": kwargs.get("keep_alive", self.config.get("ollama_keep_alive", "5m")),
         }
         # Ollama accepts a JSON schema here and constrains the model output.
         # This is stronger than asking for JSON in the natural-language prompt.
-        if kwargs.get('format'):
-            payload['format'] = kwargs['format']
-        payload = json.dumps(payload).encode("utf-8")
+        if kwargs.get("format"):
+            payload["format"] = kwargs["format"]
+        request_body = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
-            self.ollama_url + "/api/chat", data=payload,
-            headers={"Content-Type": "application/json"}, method="POST"
+            self.ollama_url + "/api/chat",
+            data=request_body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
         try:
             with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
@@ -162,18 +333,22 @@ class ModelManager:
 
     def _call_ollama_vision(self, prompt, image_base64, **kwargs):
         model = kwargs.get("ollama_model") or self._model("vision", "vision_model", "qwen2.5vl:3b")
-        payload = json.dumps({
-            "model": model,
-            "messages": [{"role": "user", "content": prompt, "images": [image_base64]}],
-            "stream": False,
-            "format": "json",
-            "options": {
-                "temperature": kwargs.get("temperature", 0.1),
-                "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
-            },
-        }).encode("utf-8")
-        request = urllib.request.Request(self.ollama_url + "/api/chat", data=payload,
-                                         headers={"Content-Type": "application/json"}, method="POST")
+        payload = json.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt, "images": [image_base64]}],
+                "stream": False,
+                "format": "json",
+                "options": {
+                    "temperature": kwargs.get("temperature", 0.1),
+                    "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
+                },
+                "keep_alive": kwargs.get("keep_alive", self.config.get("ollama_keep_alive", "5m")),
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            self.ollama_url + "/api/chat", data=payload, headers={"Content-Type": "application/json"}, method="POST"
+        )
         try:
             with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
                 data = json.loads(response.read().decode("utf-8"))

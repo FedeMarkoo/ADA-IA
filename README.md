@@ -56,13 +56,20 @@ ADA/
 ## Instalación y ejecución
 
 ```bash
-cd /Users/home/Desktop/ADA
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python ada.py serve
+python3 -m pip install -e '.[dev]'
+ada serve
 ```
 
+En Windows usá `.venv\\Scripts\\python.exe` y `.venv\\Scripts\\pip.exe` en lugar
+de los comandos POSIX. Copiá `config.example.json` a `config.json` y ajustá las
+rutas locales; `config.json` no se versiona.
+
 La interfaz queda disponible en `http://127.0.0.1:5005/`.
+
+Para usar el servidor ASGI desde el CLI: `ada serve --asgi`.
+También podés definir `web_framework: "asgi"` en la configuración; Flask queda
+disponible como fallback con `ADA_WEB_FRAMEWORK=flask`.
 
 El proveedor activo y los modelos se configuran en `config.json`. Por ejemplo,
 la configuración inicial usa un proveedor local con estos modelos:
@@ -75,6 +82,12 @@ ollama pull qwen2.5vl:3b
 El análisis técnico puede ejecutarse sin modelo visual; el análisis semántico de
 fotos necesita un modelo con visión.
 
+La interfaz ASGI opcional se inicia con:
+
+```bash
+python3 -m uvicorn ada.interfaces.web.asgi:create_app --factory --host 127.0.0.1 --port 5006
+```
+
 Para cambiar el proveedor conversacional, modificá `engine_provider` y la
 sección correspondiente (`models` o `gpt4all`) en `config.json`. Las interfaces
 y el router no necesitan cambios.
@@ -83,6 +96,13 @@ y el router no necesitan cambios.
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
+.venv/bin/pre-commit run --all-files
+```
+
+La memoria se puede respaldar sin copiar manualmente el archivo WAL:
+
+```bash
+.venv/bin/ada backup --path ~/Desktop/ada-backups/memory.db
 ```
 
 ## Seguridad y datos
@@ -95,3 +115,12 @@ exponerse directamente a internet.
 Las bases SQLite, modelos descargados, entornos virtuales y archivos de prueba
 locales están excluidos del repositorio mediante `.gitignore` cuando
 corresponde.
+
+Para autonomía controlada, configurá `watch_folders`, ejecutá
+`ada-autonomous` y revisá la auditoría mediante `/api/audit`. Las acciones
+externas requieren confirmación y las operaciones de archivos devuelven un
+manifiesto utilizable por la acción `undo`.
+
+Las reglas evento→acción se configuran en `event_rules`; por defecto solo se
+ejecutan automáticamente acciones no riesgosas. Las acciones sensibles quedan
+como propuestas auditadas hasta recibir confirmación explícita.

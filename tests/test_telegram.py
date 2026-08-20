@@ -1,6 +1,6 @@
 import unittest
 
-from src.ada.interfaces.telegram import TelegramListener
+from ada.interfaces.telegram import TelegramListener
 
 
 class TelegramAdapterTests(unittest.TestCase):
@@ -26,9 +26,16 @@ class TelegramAdapterTests(unittest.TestCase):
         listener = TelegramListener({"telegram": {"enabled": False}})
         listener._invoke_internal_chat = lambda text: text
         listener.send_message = lambda chat_id, text: None
-        with self.assertLogs('ada.telegram', level='INFO') as logs:
+        with self.assertLogs("ada.telegram", level="INFO") as logs:
             listener.handle_update({"message": {"chat": {"id": 987654321}, "text": "hola"}})
         self.assertIn("chat_id=987654321", "\n".join(logs.output))
+
+    def test_commands_are_handled_at_the_edge(self):
+        listener = TelegramListener({"telegram": {"enabled": False}})
+        sent = []
+        listener.send_message = lambda chat_id, text: sent.append((chat_id, text))
+        listener.handle_update({"message": {"chat": {"id": 9}, "text": "/help"}})
+        self.assertIn("/status", sent[0][1])
 
 
 if __name__ == "__main__":

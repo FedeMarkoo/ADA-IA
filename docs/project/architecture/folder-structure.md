@@ -7,7 +7,7 @@ solo el entrypoint, configuración, documentación, pruebas y la interfaz web.
 ```text
 ADA/
 ├── README.md
-├── ada.py                         entrypoint único
+├── pyproject.toml                 entrypoints instalables
 ├── config.json                    configuración local
 ├── pyproject.toml                 configuración del paquete
 ├── requirements.txt               dependencias

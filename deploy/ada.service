@@ -1,0 +1,14 @@
+[Unit]
+Description=ADA local autonomous assistant
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ADA
+ExecStart=%h/ADA/.venv/bin/python -m ada.infrastructure.runtime.daemon
+Restart=on-failure
+RestartSec=5
+Environment=ADA_CONFIG=%h/ADA/config.json
+
+[Install]
+WantedBy=default.target
