@@ -13,6 +13,7 @@ class PlannerPolicyTests(unittest.TestCase):
         with self.assertRaises(PolicyViolation):
             policy.authorize("gmail_send", {}, confirmed=False)
         policy.authorize("gmail_send", {}, confirmed=True)
+        policy.authorize("gmail_draft", {}, confirmed=False)
 
     def test_policy_rejects_paths_outside_scope(self):
         policy = PolicyEngine({"allowed_roots": ["/tmp"]})
@@ -66,6 +67,8 @@ class PlannerPolicyTests(unittest.TestCase):
         self.assertEqual(catalog["gmail_draft"]["permissions"], ["gmail.compose"])
         self.assertTrue(catalog["mcp"]["requires_confirmation"])
         self.assertEqual(catalog["mcp"]["permissions"], ["mcp.execute"])
+        self.assertFalse(catalog["gmail_draft"]["requires_confirmation"])
+        self.assertEqual(catalog["gmail_send"]["permissions"], ["gmail.send"])
 
 
 if __name__ == "__main__":

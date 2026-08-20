@@ -6,6 +6,7 @@
 - [x] Soporte de `command`, `args`, `env` y `cwd` en servidores locales.
 - [x] Resolución de variables `${env:NAME}` completas o incrustadas desde el entorno de ADA.
 - [x] Compatibilidad inicial con MCP remoto mediante Streamable HTTP.
+- [x] Backend MCP opcional dentro de las capabilities canónicas de Gmail, sin routing duplicado.
 - [x] Importar `.vscode/mcp.json` sólo con opt-in explícito del workspace.
 - [ ] Resolver de forma segura `${input:NAME}` con un mecanismo de configuración/secretos de ADA.
 - [ ] Mantener procesos MCP persistentes para evitar arrancar un proceso nuevo por cada llamada.

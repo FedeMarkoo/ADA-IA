@@ -65,6 +65,12 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_config({"trust_workspace_mcp": "yes"})
 
+    def test_validation_rejects_invalid_gmail_backend_and_timeout(self):
+        with self.assertRaises(ValueError):
+            validate_config({"gmail_backend": "duplicate"})
+        with self.assertRaises(ValueError):
+            validate_config({"gmail_mcp_timeout": 0})
+
     def test_validation_rejects_non_positive_lightroom_mcp_timeout(self):
         with self.assertRaises(ValueError):
             validate_config({"lightroom_mcp_max_timeout": 0})
