@@ -1,13 +1,13 @@
 from typing import Any, Dict, List
+import logging
 
+logger = logging.getLogger("ada.web_search")
 
 try:
     from ddgs import DDGS
-except Exception:  # Web search is optional; the core agent must work offline.
-    try:
-        from duckduckgo_search import DDGS
-    except Exception:
-        DDGS = None
+except ImportError:  # Web search is optional; the core agent must work offline.
+    DDGS = None
+    logger.info("web_search_disabled reason=ddgs_not_installed")
 
 
 def search_web(query, max_results=5):
@@ -29,5 +29,6 @@ def search_web(query, max_results=5):
                 }
             )
         return out
-    except Exception:
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        logger.warning("web_search_failed error=%s", exc)
         return []
