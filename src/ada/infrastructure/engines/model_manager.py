@@ -99,20 +99,50 @@ class ModelManager:
             result.append(dict(item, hardware_tier=profile["tier"]))
         return result
 
-    def select_model(self, task, role="chat"):
-        """Select a model name from policy/catalog without requiring code changes."""
+    def _model_candidates(self, task, role="chat"):
+        task_name = task if isinstance(task, str) else (task.get("task") or task.get("type") or task.get("model_role"))
         policy = self.config.get("model_policy", {})
-        configured = policy.get(task) or policy.get(role)
+        configured = policy.get(task_name) or policy.get(role)
         names = []
         if isinstance(configured, str):
             names = [configured]
         elif isinstance(configured, dict):
             names = [configured.get("preferred")] + list(configured.get("fallbacks") or [])
+        if not names:
+            names = [self._model(role, f"{role}_model", self.models.get(role, ""))]
+        return [name for name in names if name]
+
+    def select_model(self, task, role="chat"):
+        """Select a hardware-compatible model name from the runtime policy."""
+        names = self._model_candidates(task, role)
         available = {item["name"] for item in self.model_catalog()}
         for name in names:
             if name and (not available or name in available):
                 return name
-        return self._model(role, f"{role}_model", self.models.get(role, ""))
+        return names[0] if names else ""
+
+    def ensure_model(self, task, role="chat"):
+        """Ensure the selected local model is installed or use an installed fallback."""
+        selected = self.select_model(task, role)
+        if self.provider != "ollama" or not selected:
+            return selected
+        status = self.local_runtime.ensure_models([selected])
+        if status.get("ready"):
+            return selected
+        installed = set(status.get("installed", []))
+        for candidate in self._model_candidates(task, role):
+            if candidate in installed:
+                return candidate
+        return selected
+
+    def model_recommendations(self):
+        """Expose task policy, hardware filtering and provider telemetry together."""
+        roles = set(self.models) | set(self.config.get("model_policy", {}))
+        return {
+            "adaptive": bool(self.config.get("adaptive_models", False)),
+            "roles": {role: self.select_model(role, role=role) for role in sorted(roles)},
+            "telemetry": self.metrics.snapshot(),
+        }
 
     def _gpt4all_available(self):
         if GPT4All is None:
@@ -191,7 +221,9 @@ class ModelManager:
 
     def call(self, provider, prompt, **kwargs):
         started = time.monotonic()
-        self.metrics.increment("provider.calls", tags={"provider": provider})
+        model_tag = kwargs.get("ollama_model") or kwargs.get(f"{provider}_model") or "default"
+        tags = {"provider": provider, "model": model_tag}
+        self.metrics.increment("provider.calls", tags=tags)
         try:
             if provider == "ollama":
                 return self._call_ollama(prompt, **kwargs)
@@ -203,10 +235,10 @@ class ModelManager:
                 return self._call_gpt4all(prompt, **kwargs)
             raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
         except Exception:
-            self.metrics.increment("provider.errors", tags={"provider": provider})
+            self.metrics.increment("provider.errors", tags=tags)
             raise
         finally:
-            self.metrics.observe("provider.duration", time.monotonic() - started, {"provider": provider})
+            self.metrics.observe("provider.duration", time.monotonic() - started, tags)
 
     def call_vision(self, provider, prompt, image_base64, **kwargs):
         if provider != "ollama":

@@ -22,6 +22,8 @@ class RuntimeTests(unittest.TestCase):
             }
         )
         self.assertEqual(manager.select_model("chat"), "small-model")
+        self.assertEqual(manager.select_model({"type": "chat"}), "small-model")
+        self.assertIn("roles", manager.model_recommendations())
 
     def test_runtime_can_report_missing_service_without_starting(self):
         runtime = LocalModelRuntime(
