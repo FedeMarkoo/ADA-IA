@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context, g
+from flask import Flask, current_app, request, jsonify, send_from_directory, Response, stream_with_context, g
 import json
 import os
 import time
@@ -22,7 +22,7 @@ app = Flask(__name__, static_folder=str(PROJECT_ROOT / "ui"))
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(error):
-    app.logger.exception("Unhandled ADA request error")
+    current_app.logger.exception("Unhandled ADA request error")
     correlation_id = secrets.token_hex(8)
     app.logger.error("request_failed correlation_id=%s", correlation_id)
     return (
@@ -109,13 +109,37 @@ session_states_lock = threading.RLock()
 chat_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ada-chat")
 
 
+app.extensions["ada_runtime"] = {
+    "cfg": cfg,
+    "agent": agent,
+    "web_chat": web_chat,
+    "session_states": session_states,
+    "session_states_lock": session_states_lock,
+}
+
+
+def _runtime():
+    """Return the dependencies associated with the current Flask application."""
+    return current_app.extensions.get(
+        "ada_runtime",
+        {
+            "cfg": cfg,
+            "agent": agent,
+            "web_chat": web_chat,
+            "session_states": session_states,
+            "session_states_lock": session_states_lock,
+        },
+    )
+
+
 def _session_state():
+    runtime = _runtime()
     session_id = request.cookies.get("ada_session") or getattr(g, "ada_session_id", None)
     if not session_id:
         session_id = secrets.token_urlsafe(24)
         g.ada_session_id = session_id
-    with session_states_lock:
-        return session_states.setdefault(session_id, WebSessionState(agent.mem, session_id))
+    with runtime["session_states_lock"]:
+        return runtime["session_states"].setdefault(session_id, WebSessionState(runtime["agent"].mem, session_id))
 
 
 @app.after_request
@@ -137,34 +161,40 @@ def index():
 @app.route("/api/status")
 def status():
     """Return active engines, local runtime health, and agent registry."""
+    runtime = _runtime()
+    active_agent = runtime["agent"]
     return jsonify(
         {
-            "engines": agent.model_manager.available(),
-            "runtime": agent.model_manager.runtime_status(),
-            "agents": list(agent.coordinator.available_agents()),
+            "engines": active_agent.model_manager.available(),
+            "runtime": active_agent.model_manager.runtime_status(),
+            "agents": list(active_agent.coordinator.available_agents()),
             "hardware": hardware_profile(),
-            "models": agent.model_manager.model_catalog(),
-            "model_recommendations": agent.model_manager.model_recommendations(),
-            "metrics": {"agent": agent.metrics.snapshot(), "models": agent.model_manager.metrics.snapshot()},
+            "models": active_agent.model_manager.model_catalog(),
+            "model_recommendations": active_agent.model_manager.model_recommendations(),
+            "metrics": {
+                "agent": active_agent.metrics.snapshot(),
+                "models": active_agent.model_manager.metrics.snapshot(),
+            },
         }
     )
 
 
 @app.route("/api/metrics")
 def metrics_api():
-    return jsonify({"agent": agent.metrics.snapshot(), "models": agent.model_manager.metrics.snapshot()})
+    active_agent = _runtime()["agent"]
+    return jsonify({"agent": active_agent.metrics.snapshot(), "models": active_agent.model_manager.metrics.snapshot()})
 
 
 @app.route("/api/audit")
 def audit_api():
     limit = min(200, max(1, request.args.get("limit", default=50, type=int)))
-    entries = agent.mem.recent_audit(limit)
+    entries = _runtime()["agent"].mem.recent_audit(limit)
     return jsonify({"entries": entries, "count": len(entries)})
 
 
 @app.route("/api/warmup", methods=["POST"])
 def warmup():
-    return jsonify({"runtime": agent.model_manager.runtime_status(), "ok": True})
+    return jsonify({"runtime": _runtime()["agent"].model_manager.runtime_status(), "ok": True})
 
 
 @app.route("/api/conversation", methods=["GET", "DELETE"])
@@ -181,9 +211,10 @@ def conversation_api():
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.get_json() or {}
+    runtime = _runtime()
     state = _session_state()
     with state.lock:
-        payload, status_code = web_chat.handle(data.get("message", ""), state, data.get("lang"))
+        payload, status_code = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"))
     return jsonify(payload), status_code
 
 
@@ -192,9 +223,9 @@ def _sse(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _run_chat_in_worker(data, session_id):
+def _run_chat_in_worker(data, session_id, runtime_app):
     """Run the existing JSON chat action in an isolated request context."""
-    with app.test_request_context(
+    with runtime_app.test_request_context(
         "/api/chat", method="POST", json=data, headers={"Cookie": f"ada_session={session_id}"}
     ):
         response = chat()
@@ -224,7 +255,12 @@ def chat_stream():
         processing = tr("processing", data.get("lang"))
         state.conversation.extend([{"role": "assistant", "text": processing, "kind": "status"}])
         yield _sse("status", {"text": processing})
-        future = chat_executor.submit(_run_chat_in_worker, data, state.session_id)
+        future = chat_executor.submit(
+            _run_chat_in_worker,
+            data,
+            state.session_id,
+            current_app._get_current_object(),  # type: ignore[attr-defined]
+        )
         try:
             last_update = time.monotonic()
             while not future.done():
@@ -240,7 +276,7 @@ def chat_stream():
             else:
                 yield _sse("reply", {"text": payload.get("reply", "(sin respuesta)")})
         except Exception as error:
-            app.logger.exception("Streaming chat failed")
+            current_app.logger.exception("Streaming chat failed")
             failure = f"La tarea terminó con un error: {error}"
             state.conversation.extend([{"role": "assistant", "text": failure, "kind": "error"}])
             yield _sse("error", {"text": failure})
@@ -256,6 +292,40 @@ def chat_stream():
             "Connection": "keep-alive",
         },
     )
+
+
+def create_app(config=None, agent_instance=None):
+    """Create an isolated Flask application with injectable ADA dependencies.
+
+    The module-level ``app`` remains available for the existing CLI and WSGI
+    entry point. Tests, workers and embedders can use this factory to avoid
+    sharing its agent and session state.
+    """
+    runtime_cfg = dict(config) if isinstance(config, dict) else load_config(cfg_path, PROJECT_ROOT)
+    runtime_agent = agent_instance or Agent(runtime_cfg)
+    runtime_app = Flask(__name__, static_folder=str(PROJECT_ROOT / "ui"))
+    runtime_app.extensions["ada_runtime"] = {
+        "cfg": runtime_cfg,
+        "agent": runtime_agent,
+        "web_chat": WebChatService(runtime_agent, runtime_cfg),
+        "session_states": {},
+        "session_states_lock": threading.RLock(),
+    }
+    runtime_app.before_request(protect_mutating_requests)
+    runtime_app.after_request(hide_provider_metadata)
+    runtime_app.after_request(set_session_cookie)
+    runtime_app.register_error_handler(Exception, handle_unexpected_error)
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint == "static":
+            continue
+        methods = sorted((rule.methods or set()) - {"HEAD", "OPTIONS"})
+        runtime_app.add_url_rule(
+            rule.rule,
+            endpoint=rule.endpoint,
+            view_func=app.view_functions[rule.endpoint],
+            methods=methods,
+        )
+    return runtime_app
 
 
 def main():
