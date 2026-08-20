@@ -13,16 +13,25 @@
   "gmail_token_path": "~/.config/ada/gmail-token.json",
   "gmail_credential_name": "gmail_oauth",
   "gmail_client_secret_path": "~/.config/ada/google-client.json",
+  "gmail_backend": "mcp",
+  "gmail_mcp_server": "gmail",
+  "gmail_mcp_allowed_hosts": ["gmailmcp.googleapis.com"],
+  "gmail_mcp_timeout": 60,
+  "gmail_scopes": [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.compose",
+    "https://www.googleapis.com/auth/gmail.send"
+  ],
   "instagram_provider": "puppeteer",
   "instagram_user_id": "",
   "instagram_access_token": "",
   "instagram_publish_script": "",
   "instagram_profile_dir": "~/.config/ada/instagram-profile",
+  "trust_workspace_mcp": false,
   "mcp_servers": {
     "gmail": {
       "type": "http",
-      "url": "https://gmailmcp.googleapis.com/mcp/v1",
-      "headers": {"Authorization": "Bearer ${env:GMAIL_MCP_ACCESS_TOKEN}"}
+      "url": "https://gmailmcp.googleapis.com/mcp/v1"
     },
     "example-local": {
       "type": "stdio",
