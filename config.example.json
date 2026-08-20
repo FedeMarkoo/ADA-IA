@@ -18,6 +18,20 @@
   "instagram_access_token": "",
   "instagram_publish_script": "",
   "instagram_profile_dir": "~/.config/ada/instagram-profile",
+  "mcp_servers": {
+    "example-local": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "~/Desktop"],
+      "env": {},
+      "cwd": "~"
+    },
+    "example-remote": {
+      "type": "http",
+      "url": "https://example.com/mcp",
+      "headers": {"Authorization": "Bearer ${env:MCP_TOKEN}"}
+    }
+  },
   "model_catalog": [
     {"name": "llama3.2:3b", "roles": ["chat", "router"], "quality_tier": "small", "min_ram_gb": 4},
     {"name": "qwen2.5vl:3b", "roles": ["vision"], "quality_tier": "small", "min_ram_gb": 6}
@@ -30,8 +44,8 @@
   "confirm_risky": true,
   "privacy_default": "normal",
   "local_runtime": {"provider": "ollama", "auto_start": true, "auto_pull": false},
-  "telegram": {"enabled": false, "allowed_chat_ids": []}
-  ,"event_rules": {
+  "telegram": {"enabled": false, "allowed_chat_ids": []},
+  "event_rules": {
     "filesystem.file_created": {
       "action": "analyze_photo",
       "extensions": [".jpg", ".jpeg", ".png", ".nef", ".arw", ".cr2", ".dng"],
