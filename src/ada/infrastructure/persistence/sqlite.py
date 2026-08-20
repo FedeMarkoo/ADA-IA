@@ -274,13 +274,13 @@ class Memory:
             ),
             "router": (
                 "Sos el router de ADA. Devolvé SOLO JSON válido. Elegí una action del catálogo: {actions}. "
-                "Para comida usá domain=shopping|recipes y food_action={food_actions}. "
+                "Para comida usá domain=shopping|recipes|inventory|budget|planning y food_action={food_actions}. "
                 "Si el pedido trata de cocinar, comer, recetas, gustos o supermercado, elegí food. "
                 "No ejecutes acciones. Historial: {history}\nPedido: {text}"
             ),
             "food_classifier": (
                 "Clasificá semánticamente el pedido. Devolvé SOLO JSON válido. "
-                "Si trata de comida, cocina, recetas o compras, is_food=true y food_action={food_actions}. "
+                "Si trata de comida, cocina, recetas, compras, inventario o planificación, is_food=true y food_action={food_actions}. "
                 "Una duda como qué cocinar usa advise. Si no es comida, is_food=false. "
                 "Historial: {history}\nPedido: {text}"
             ),
@@ -325,10 +325,29 @@ class Memory:
                             "ask",
                         ],
                     },
-                    "domain": {"type": "string", "enum": ["shopping", "recipes"]},
+                    "domain": {"type": "string", "enum": ["shopping", "recipes", "inventory", "budget", "planning"]},
                     "food_action": {
                         "type": "string",
-                        "enum": ["add", "list", "check", "remove", "save", "suggest", "recipe_to_shopping", "advise"],
+                        "enum": [
+                            "add",
+                            "list",
+                            "check",
+                            "remove",
+                            "save",
+                            "suggest",
+                            "recipe_to_shopping",
+                            "advise",
+                            "inventory_add",
+                            "inventory_list",
+                            "inventory_use",
+                            "inventory_remove",
+                            "budget_set",
+                            "budget_spend",
+                            "budget_list",
+                            "plan_set",
+                            "plan_list",
+                            "plan_remove",
+                        ],
                     },
                     "item": {"type": "string"},
                     "quantity": {"type": "string"},
@@ -348,10 +367,28 @@ class Memory:
                 "type": "object",
                 "properties": {
                     "is_food": {"type": "boolean"},
-                    "domain": {"type": "string", "enum": ["shopping", "recipes"]},
+                    "domain": {"type": "string", "enum": ["shopping", "recipes", "inventory", "budget", "planning"]},
                     "food_action": {
                         "type": "string",
-                        "enum": ["add", "list", "check", "remove", "save", "recipe_to_shopping", "advise"],
+                        "enum": [
+                            "add",
+                            "list",
+                            "check",
+                            "remove",
+                            "save",
+                            "recipe_to_shopping",
+                            "advise",
+                            "inventory_add",
+                            "inventory_list",
+                            "inventory_use",
+                            "inventory_remove",
+                            "budget_set",
+                            "budget_spend",
+                            "budget_list",
+                            "plan_set",
+                            "plan_list",
+                            "plan_remove",
+                        ],
                     },
                     "item": {"type": "string"},
                     "quantity": {"type": "string"},

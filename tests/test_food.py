@@ -66,6 +66,51 @@ class FoodTests(unittest.TestCase):
             memory.upsert_json_schema("food_reply", {"type": "object", "properties": {"reply": {"type": "string"}}})
             self.assertEqual(memory.json_schema("food_reply")["type"], "object")
 
+    def test_inventory_budget_and_weekly_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = str(Path(directory) / "food.db")
+            self.assertTrue(
+                run(
+                    {
+                        "db_path": db,
+                        "domain": "inventory",
+                        "action": "add",
+                        "item": "arroz",
+                        "quantity": 2,
+                        "minimum": 1,
+                    }
+                )["ok"]
+            )
+            self.assertEqual(
+                run({"db_path": db, "domain": "inventory", "action": "use", "item": "arroz", "quantity": 1})[
+                    "quantity"
+                ],
+                1.0,
+            )
+            self.assertEqual(
+                run({"db_path": db, "domain": "budget", "action": "set", "period": "2026-08", "amount": 10000})[
+                    "budget"
+                ]["amount"],
+                10000,
+            )
+            run({"db_path": db, "domain": "budget", "action": "spend", "period": "2026-08", "amount": 1200})
+            self.assertEqual(run({"db_path": db, "domain": "budget", "action": "list"})["budgets"][0]["spent"], 1200)
+            self.assertTrue(
+                run(
+                    {
+                        "db_path": db,
+                        "domain": "planning",
+                        "action": "set",
+                        "plan_date": "2026-08-24",
+                        "meal": "cena",
+                        "recipe_name": "Tortilla",
+                    }
+                )["ok"]
+            )
+            self.assertEqual(
+                len(run({"db_path": db, "domain": "planning", "action": "list", "week": "2026-08-24"})["plan"]), 1
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
