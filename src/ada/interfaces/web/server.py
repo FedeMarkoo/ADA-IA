@@ -17,7 +17,7 @@ import secrets
 import threading
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
-app = Flask(__name__, static_folder=str(PROJECT_ROOT / "ui"))
+app = Flask(__name__, static_folder=str(PROJECT_ROOT / "ui"), static_url_path="/static")
 
 
 @app.errorhandler(Exception)
@@ -352,7 +352,7 @@ def create_app(config=None, agent_instance=None):
     """
     runtime_cfg = dict(config) if isinstance(config, dict) else load_config(cfg_path, PROJECT_ROOT)
     runtime_agent = agent_instance or Agent(runtime_cfg)
-    runtime_app = Flask(__name__, static_folder=str(PROJECT_ROOT / "ui"))
+    runtime_app = Flask(__name__, static_folder=str(PROJECT_ROOT / "ui"), static_url_path="/static")
     runtime_app.extensions["ada_runtime"] = {
         "cfg": runtime_cfg,
         "agent": runtime_agent,
