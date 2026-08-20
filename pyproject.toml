@@ -36,6 +36,7 @@ dev = [
 [project.scripts]
 ada = "ada.interfaces.cli:main"
 ada-autonomous = "ada.infrastructure.runtime.daemon:run"
+ada-supervisor = "ada.infrastructure.runtime.supervisor:run"
 
 [tool.ruff]
 line-length = 120

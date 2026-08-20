@@ -1,6 +1,7 @@
 """Small multiprocessing supervisor for API, inference and autonomy workers."""
 
 import multiprocessing
+from functools import partial
 
 
 class ServiceSupervisor:
@@ -30,3 +31,13 @@ class ServiceSupervisor:
                 process.join()
         except KeyboardInterrupt:
             self.stop()
+
+
+def run(config=None):
+    """Run the web adapter and autonomy daemon as isolated OS processes."""
+    from ada.infrastructure.runtime.daemon import run as run_daemon
+    from ada.interfaces.web.server import main as run_web
+
+    supervisor = ServiceSupervisor({"web": run_web, "autonomy": partial(run_daemon, config)})
+    supervisor.start()
+    supervisor.wait()

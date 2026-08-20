@@ -10,6 +10,7 @@ Ese entrypoint mantiene compatibilidad con Flask. Para ASGI, instalá la extra
 `web` y ejecutá `uvicorn ada.interfaces.web.asgi:create_app --factory`.
 Para el worker autónomo, ejecutá `ada-autonomous`; usa SQLite como event store,
 watchers de carpetas y scheduler con reintentos.
+Para separar API y autonomía en procesos del sistema, ejecutá `ada-supervisor`.
 
 Para instalaciones reproducibles del runtime base, ejecutá
 `python -m pip install -r requirements.lock`. Las extras opcionales siguen
