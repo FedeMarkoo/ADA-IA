@@ -64,6 +64,8 @@ class PlannerPolicyTests(unittest.TestCase):
         self.assertTrue(catalog["filesystem"]["requires_confirmation"])
         self.assertEqual(catalog["gmail_draft"]["risk_level"], "medium")
         self.assertEqual(catalog["gmail_draft"]["permissions"], ["gmail.compose"])
+        self.assertTrue(catalog["mcp"]["requires_confirmation"])
+        self.assertEqual(catalog["mcp"]["permissions"], ["mcp.execute"])
 
 
 if __name__ == "__main__":

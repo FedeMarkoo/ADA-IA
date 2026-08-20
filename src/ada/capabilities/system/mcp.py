@@ -1,18 +1,35 @@
-"""MCP tool bridge. Disabled until servers are explicitly configured."""
+"""MCP tool bridge for explicitly configured local and remote servers."""
 
 from ada.infrastructure.integrations.mcp import MCPClient
 
 
+CAPABILITY_SPEC = {
+    "name": "mcp",
+    "description": "Descubrir o ejecutar tools de un servidor MCP configurado",
+    "risk_level": "high",
+    "permissions": ["mcp.execute"],
+    "requires_confirmation": True,
+}
+
+
 def run(args):
-    servers = args.get("servers") or {}
+    servers = args.get("servers") or args.get("mcpServers") or args.get("mcp_servers") or {}
     name = args.get("server")
     if not servers:
-        return {"error": "no_mcp_servers_configured", "message": "Agregá un servidor en config.json bajo mcp_servers."}
+        return {
+            "error": "no_mcp_servers_configured",
+            "message": "Agregá servidores MCP en config.json o .vscode/mcp.json.",
+        }
     if name not in servers:
         return {"error": "mcp_server_not_found", "server": name, "available": sorted(servers)}
-    command = servers[name].get("command") if isinstance(servers[name], dict) else servers[name]
-    if not command:
-        return {"error": "invalid_mcp_server_command", "server": name}
-    return MCPClient(command).call(
-        tool=args.get("tool"), arguments=args.get("arguments"), list_only=bool(args.get("list_tools"))
-    )
+    server = servers[name]
+    if isinstance(server, str):
+        server = {"command": server}
+    if not isinstance(server, dict):
+        return {"error": "invalid_mcp_server_config", "server": name}
+    try:
+        return MCPClient(server).call(
+            tool=args.get("tool"), arguments=args.get("arguments"), list_only=bool(args.get("list_tools"))
+        )
+    except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
+        return {"error": "mcp_execution_failed", "server": name, "message": str(exc)}

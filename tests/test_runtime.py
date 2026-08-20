@@ -27,15 +27,34 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn("roles", manager.model_recommendations())
 
     def test_runtime_can_report_missing_service_without_starting(self):
-        runtime = LocalModelRuntime(
-            {
-                "ollama_url": "http://127.0.0.1:1",
-                "local_runtime": {"auto_start": False},
-            }
-        )
-        status = runtime.ensure_ready()
+        with (
+            patch("ada.infrastructure.runtime.ollama.shutil.which", return_value="/usr/bin/ollama"),
+            patch.object(LocalModelRuntime, "_healthy", return_value=False),
+        ):
+            runtime = LocalModelRuntime(
+                {
+                    "ollama_url": "http://127.0.0.1:1",
+                    "local_runtime": {"auto_start": False},
+                }
+            )
+            status = runtime.ensure_ready()
         self.assertFalse(status.available)
         self.assertEqual(status.reason, "not_running")
+
+    def test_runtime_reports_when_ollama_is_not_installed(self):
+        with (
+            patch("ada.infrastructure.runtime.ollama.shutil.which", return_value=None),
+            patch.object(LocalModelRuntime, "_healthy", return_value=False),
+        ):
+            runtime = LocalModelRuntime(
+                {
+                    "ollama_url": "http://127.0.0.1:1",
+                    "local_runtime": {"auto_start": False},
+                }
+            )
+            status = runtime.ensure_ready()
+        self.assertFalse(status.available)
+        self.assertEqual(status.reason, "ollama_not_installed")
 
     def test_runtime_reload_updates_endpoint(self):
         runtime = LocalModelRuntime({"ollama_url": "http://127.0.0.1:1", "local_runtime": {"auto_start": False}})
