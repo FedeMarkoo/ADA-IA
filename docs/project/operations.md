@@ -16,6 +16,11 @@ Para instalaciones reproducibles del runtime base, ejecutá
 `python -m pip install -r requirements.lock`. Las extras opcionales siguen
 declaradas en `pyproject.toml`.
 
+La política de modelos puede recargarse sin reiniciar el proceso mediante
+`POST /api/models/reload`, siempre con el token CSRF de la sesión. Se puede
+enviar una configuración completa en el campo JSON `config`; ADA la valida y
+conserva la política anterior si la aplicación falla.
+
 ## Pruebas
 
 ```bash
@@ -31,6 +36,9 @@ El perfil predeterminado prioriza no saturar el equipo durante lotes RAW:
 - `ollama_num_thread: 2`;
 - `cpu_limit_percent: 50`;
 - pausa adaptativa si la carga ya está alta.
+
+El pool HTTP se ajusta al equipo automáticamente (entre 2 y 8 workers) y se
+puede fijar con `chat_workers` entre 1 y 32.
 
 Esto limita la concurrencia y los hilos solicitados a Ollama. Puede haber picos
 breves al decodificar un RAW; no es un límite duro impuesto por el kernel.
