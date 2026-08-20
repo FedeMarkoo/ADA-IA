@@ -65,6 +65,18 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_config({"trust_workspace_mcp": "yes"})
 
+    def test_validation_rejects_non_positive_lightroom_mcp_timeout(self):
+        with self.assertRaises(ValueError):
+            validate_config({"lightroom_mcp_max_timeout": 0})
+
+    def test_load_config_rejects_non_list_lightroom_scripts_before_path_expansion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps({"lightroom_allowed_scripts": "manager.py"}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_config(path=config_path, project_root=root)
+
 
 if __name__ == "__main__":
     unittest.main()

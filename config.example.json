@@ -9,6 +9,8 @@
   "photo_root": "~/Desktop/Fotos",
   "photo_executor": "thread",
   "allowed_roots": ["~/Desktop"],
+  "lightroom_allowed_scripts": [],
+  "lightroom_mcp_max_timeout": 3600,
   "allowed_commands": [],
   "gmail_token_path": "~/.config/ada/gmail-token.json",
   "gmail_credential_name": "gmail_oauth",
