@@ -186,6 +186,7 @@ class Memory:
             ),
             "gmail_read": ("Leer metadatos de Gmail", ("gmail", "correo", "mail", "email", "bandeja")),
             "gmail_send": ("Enviar un correo de Gmail", ("enviar correo", "mandar mail", "gmail enviar")),
+            "gmail_draft": ("Crear un borrador de Gmail", ("borrador de correo", "draft gmail", "preparar mail")),
             "instagram_publish": ("Publicar una imagen en Instagram", ("instagram", "publicar foto", "postear")),
             "ask": ("Conversación general", ()),
         }
@@ -245,6 +246,7 @@ class Memory:
                             "food",
                             "gmail_read",
                             "gmail_send",
+                            "gmail_draft",
                             "instagram_publish",
                             "ask",
                         ],

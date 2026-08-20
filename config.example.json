@@ -15,6 +15,7 @@
   "instagram_user_id": "",
   "instagram_access_token": "",
   "instagram_publish_script": "",
+  "instagram_profile_dir": "~/.config/ada/instagram-profile",
   "model_catalog": [
     {"name": "llama3.2:3b", "roles": ["chat", "router"], "quality_tier": "small", "min_ram_gb": 4},
     {"name": "qwen2.5vl:3b", "roles": ["vision"], "quality_tier": "small", "min_ram_gb": 6}

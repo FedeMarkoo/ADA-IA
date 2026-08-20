@@ -32,6 +32,7 @@ def load_config(path=None, project_root=None):
         "lightroom_db",
         "local_model_path",
         "gpt4all_model_path",
+        "instagram_profile_dir",
     ):
         if key in config:
             config[key] = _path(config[key], root)

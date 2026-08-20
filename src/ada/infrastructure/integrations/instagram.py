@@ -23,8 +23,25 @@ def publish(config, image, caption, confirm=False):
         return {"error": "image_or_script_not_found", "image": str(image_path), "script": str(script_path)}
     if roots and not any(image_path == root or root in image_path.parents for root in roots):
         return {"error": "path_outside_allowed_roots", "image": str(image_path)}
+    profile_dir = Path(
+        os.path.expanduser(str(config.get("instagram_profile_dir", "~/.config/ada/instagram-profile")))
+    ).resolve()
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        profile_dir.chmod(0o700)
+    except OSError:
+        pass
     result = subprocess.run(
-        ["node", str(script_path), "--image", str(image_path), "--caption", str(caption)],
+        [
+            "node",
+            str(script_path),
+            "--image",
+            str(image_path),
+            "--caption",
+            str(caption),
+            "--user-data-dir",
+            str(profile_dir),
+        ],
         capture_output=True,
         text=True,
         timeout=int(config.get("instagram_timeout", 180)),
@@ -35,4 +52,5 @@ def publish(config, image, caption, confirm=False):
         "stdout": result.stdout,
         "stderr": result.stderr,
         "preview": preview,
+        "profile_dir": str(profile_dir),
     }
