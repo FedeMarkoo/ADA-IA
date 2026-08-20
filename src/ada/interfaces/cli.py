@@ -4,11 +4,14 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import os
+import json
 
 from ada.infrastructure.persistence.sqlite import Memory
 from ada.application.indexer import index_folder, suggest_organization
 from ada.application.agent import Agent
 from ada.config import load_config as load_validated_config
+from ada.application.services.doctor import diagnose, pull_models, prepare_instagram_profile
+from ada.infrastructure.integrations.gmail import authenticate
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
@@ -37,10 +40,31 @@ def main():
     p_prompt.add_argument("text", help="Natural language prompt for ADA")
     p_backup = sub.add_parser("backup", help="Create a consistent backup of ADA memory")
     p_backup.add_argument("--path", required=True)
+    sub.add_parser("doctor", help="Check local model and integration readiness")
+    p_models = sub.add_parser("models", help="Inspect or explicitly pull configured Ollama models")
+    p_models.add_argument("--pull", action="store_true")
+    p_gmail = sub.add_parser("auth-gmail", help="Run the explicit Gmail OAuth flow")
+    p_gmail.add_argument("--scope", action="append", help="OAuth scope; can be repeated")
+    sub.add_parser("setup-instagram", help="Create the private Puppeteer browser profile directory")
 
     args = parser.parse_args()
     cfg = load_config()
     print(f"Starting {cfg.get('name', 'ADA')}")
+    if args.cmd == "doctor":
+        print(json.dumps(diagnose(cfg), indent=2, ensure_ascii=False))
+        return
+    if args.cmd == "models":
+        if not args.pull:
+            print(json.dumps(diagnose(cfg)["checks"]["ollama"], indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(pull_models(cfg), indent=2, ensure_ascii=False))
+        return
+    if args.cmd == "auth-gmail":
+        print(json.dumps(authenticate(cfg, scopes=args.scope), indent=2, ensure_ascii=False))
+        return
+    if args.cmd == "setup-instagram":
+        print(json.dumps(prepare_instagram_profile(cfg), indent=2, ensure_ascii=False))
+        return
     if args.cmd == "serve":
         if args.debug:
             started_at = datetime.now().strftime("%Y%m%d-%H%M%S")
