@@ -41,6 +41,7 @@ def load_config(path=None, project_root=None):
         raise ValueError("allowed_roots debe ser una lista de carpetas.")
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]
     config.setdefault("confirm_risky", True)
+    config.setdefault("memory_encryption", False)
     config.setdefault("allowed_commands", [])
     validate_config(config)
     return config
@@ -51,6 +52,8 @@ def validate_config(config):
     if not isinstance(config, dict):
         raise ValueError("La configuración ADA debe ser un objeto JSON.")
     list_keys = ("allowed_roots", "allowed_commands", "engine_priority", "knowledge_files", "watch_folders")
+    if "memory_encryption" in config and not isinstance(config["memory_encryption"], bool):
+        raise ValueError("memory_encryption debe ser booleano.")
     for key in list_keys:
         if key in config and not isinstance(config[key], list):
             raise ValueError(f"{key} debe ser una lista.")

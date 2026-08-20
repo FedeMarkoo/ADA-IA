@@ -48,6 +48,12 @@ cifrado opcional requiere `ADA_CREDENTIAL_KEY`; nunca se guarda un secreto en
 allowlist de rutas, confirmación explícita y un perfil persistente en
 `instagram_profile_dir` para conservar cookies/sesión fuera del repositorio.
 
+Para cifrar el contenido sensible de `memory.db`, instalá la extra
+`credentials`, definí una clave Fernet en `ADA_MEMORY_KEY` y activá
+`memory_encryption: true`. ADA migra las filas existentes al iniciar y usa
+búsqueda local sin FTS sobre el contenido descifrado en memoria; la base y sus
+backups siguen cifrados en disco.
+
 ## Servicio permanente
 
 En Linux, copiá `deploy/ada.service` a `~/.config/systemd/user/ada.service`,

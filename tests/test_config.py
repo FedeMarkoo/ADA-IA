@@ -12,6 +12,10 @@ class ConfigTests(unittest.TestCase):
         config = validate_config({"model_catalog": {"small": {"min_ram_gb": 2}}})
         self.assertEqual(config["model_catalog"]["small"]["min_ram_gb"], 2)
 
+    def test_validation_rejects_non_boolean_memory_encryption(self):
+        with self.assertRaises(ValueError):
+            validate_config({"memory_encryption": "yes"})
+
 
 if __name__ == "__main__":
     unittest.main()
