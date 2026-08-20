@@ -25,6 +25,7 @@ web = ["fastapi>=0.110,<1", "uvicorn>=0.29,<1"]
 credentials = ["cryptography>=42,<46"]
 voice = ["faster-whisper>=1,<2"]
 desktop = ["plyer>=2,<3"]
+fine-tuning = ["datasets>=2,<4", "transformers>=4.40,<5", "peft>=0.10,<1", "accelerate>=0.28,<2"]
 dev = [
     "black>=25,<26",
     "mypy>=1.10,<2",

@@ -12,6 +12,7 @@ from ada.application.agent import Agent
 from ada.config import load_config as load_validated_config
 from ada.application.services.doctor import diagnose, pull_models, prepare_instagram_profile
 from ada.infrastructure.integrations.gmail import authenticate
+from ada.application.fine_tuning import prepare_dataset, train_lora, validate_dataset
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
@@ -46,6 +47,12 @@ def main():
     p_gmail = sub.add_parser("auth-gmail", help="Run the explicit Gmail OAuth flow")
     p_gmail.add_argument("--scope", action="append", help="OAuth scope; can be repeated")
     sub.add_parser("setup-instagram", help="Create the private Puppeteer browser profile directory")
+    p_finetune = sub.add_parser("finetune", help="Prepare, validate or explicitly train a local LoRA adapter")
+    p_finetune.add_argument("action", choices=("prepare", "validate", "train"))
+    p_finetune.add_argument("--input", required=True)
+    p_finetune.add_argument("--output", required=True)
+    p_finetune.add_argument("--model")
+    p_finetune.add_argument("--steps", type=int, default=100)
 
     args = parser.parse_args()
     cfg = load_config()
@@ -64,6 +71,16 @@ def main():
         return
     if args.cmd == "setup-instagram":
         print(json.dumps(prepare_instagram_profile(cfg), indent=2, ensure_ascii=False))
+        return
+    if args.cmd == "finetune":
+        if args.action == "prepare":
+            print(json.dumps(prepare_dataset(args.input, args.output), indent=2, ensure_ascii=False))
+        elif args.action == "validate":
+            print(json.dumps(validate_dataset(args.input), indent=2, ensure_ascii=False))
+        else:
+            if not args.model:
+                raise SystemExit("--model es obligatorio para entrenar")
+            print(json.dumps(train_lora(args.input, args.model, args.output, args.steps), indent=2, ensure_ascii=False))
         return
     if args.cmd == "serve":
         if args.debug:
