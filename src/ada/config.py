@@ -86,6 +86,13 @@ def validate_config(config):
             raise ValueError("cpu_limit_percent debe ser numérico.") from exc
         if not 0 < cpu_limit <= 100:
             raise ValueError("cpu_limit_percent debe estar entre 0 y 100.")
+    if "chat_workers" in config:
+        try:
+            chat_workers = int(config["chat_workers"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("chat_workers debe ser entero.") from exc
+        if not 1 <= chat_workers <= 32:
+            raise ValueError("chat_workers debe estar entre 1 y 32.")
     framework = config.get("web_framework", "flask")
     if framework not in {"flask", "asgi"}:
         raise ValueError("web_framework debe ser 'flask' o 'asgi'.")

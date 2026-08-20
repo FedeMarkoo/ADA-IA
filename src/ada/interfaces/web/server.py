@@ -106,7 +106,16 @@ class WebSessionState:
 
 session_states: Dict[str, WebSessionState] = {}
 session_states_lock = threading.RLock()
-chat_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ada-chat")
+
+
+def _chat_workers(config):
+    configured = config.get("chat_workers")
+    if configured is not None:
+        return max(1, min(32, int(configured)))
+    return max(2, min(8, os.cpu_count() or 2))
+
+
+chat_executor = ThreadPoolExecutor(max_workers=_chat_workers(cfg), thread_name_prefix="ada-chat")
 
 
 app.extensions["ada_runtime"] = {
@@ -115,6 +124,7 @@ app.extensions["ada_runtime"] = {
     "web_chat": web_chat,
     "session_states": session_states,
     "session_states_lock": session_states_lock,
+    "chat_executor": chat_executor,
 }
 
 
@@ -128,6 +138,7 @@ def _runtime():
             "web_chat": web_chat,
             "session_states": session_states,
             "session_states_lock": session_states_lock,
+            "chat_executor": chat_executor,
         },
     )
 
@@ -282,7 +293,7 @@ def chat_stream():
         processing = tr("processing", data.get("lang"))
         state.conversation.extend([{"role": "assistant", "text": processing, "kind": "status"}])
         yield _sse("status", {"text": processing})
-        future = chat_executor.submit(
+        future = _runtime()["chat_executor"].submit(
             _run_chat_in_worker,
             data,
             state.session_id,
@@ -337,6 +348,7 @@ def create_app(config=None, agent_instance=None):
         "web_chat": WebChatService(runtime_agent, runtime_cfg),
         "session_states": {},
         "session_states_lock": threading.RLock(),
+        "chat_executor": ThreadPoolExecutor(max_workers=_chat_workers(runtime_cfg), thread_name_prefix="ada-chat"),
     }
     runtime_app.before_request(protect_mutating_requests)
     runtime_app.after_request(hide_provider_metadata)
