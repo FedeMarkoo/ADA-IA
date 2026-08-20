@@ -1,8 +1,10 @@
 import unittest
 import tempfile
+import json
 from pathlib import Path
 
 from ada.application.services.doctor import diagnose, prepare_instagram_profile
+from ada.application.fine_tuning import prepare_dataset, validate_dataset
 
 from ada.application.evaluation import EvaluationCase, evaluate
 from ada.infrastructure.notifications import CompositeNotifier
@@ -32,6 +34,14 @@ class OperationsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             result = prepare_instagram_profile({"instagram_profile_dir": str(Path(directory) / "profile")})
             self.assertEqual(result["mode"], "0o700")
+
+    def test_finetune_dataset_is_prepared_and_validated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "cases.json"
+            target = Path(directory) / "dataset.jsonl"
+            source.write_text(json.dumps([{"task": "router", "prompt": "hola", "expected": "ask"}]), encoding="utf-8")
+            self.assertEqual(prepare_dataset(source, target)["examples"], 1)
+            self.assertEqual(validate_dataset(target)["tasks"], {"router": 1})
 
     def test_evaluation_harness_reports_routing(self):
         class FakeAgent:
