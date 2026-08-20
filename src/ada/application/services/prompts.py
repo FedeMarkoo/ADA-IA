@@ -17,7 +17,9 @@ class PromptBuilder:
         )
 
     def task(self, task, language="auto"):
-        prompt = self.system(language)
+        fallback = self.system(language)
+        template = self.memory.prompt_template("agent_system", fallback)
+        prompt = template.replace("{language}", "Responde en español." if str(language).startswith("es") else "")
         query = task.get("prompt", "")
         knowledge = self.memory.knowledge(query, limit=2)
         if knowledge:

@@ -11,6 +11,7 @@ from ada.application.services.web_chat import WebChatService
 from ada.config import load_config
 from ada.infrastructure.runtime.resources import hardware_profile
 from ada.interfaces.telegram import TelegramListener
+from ada.interfaces.i18n import tr
 import re
 import secrets
 import threading
@@ -215,13 +216,11 @@ def chat_stream():
 
     @stream_with_context
     def events():
-        received = "Recibí tu pedido. Estoy entendiendo qué tarea corresponde."
+        received = tr("status_received", data.get("lang"))
         state.conversation.extend([{"role": "assistant", "text": received, "kind": "status"}])
         yield _sse("status", {"text": received})
 
-        processing = (
-            "Estoy procesando la información y preparando la respuesta. Las tareas largas continúan en segundo plano."
-        )
+        processing = tr("processing", data.get("lang"))
         state.conversation.extend([{"role": "assistant", "text": processing, "kind": "status"}])
         yield _sse("status", {"text": processing})
         future = chat_executor.submit(_run_chat_in_worker, data, state.session_id)
@@ -229,7 +228,7 @@ def chat_stream():
             last_update = time.monotonic()
             while not future.done():
                 if time.monotonic() - last_update >= 5:
-                    update = "La tarea sigue en ejecución. ADA continúa trabajando y guardará los resultados progresivamente."
+                    update = tr("status_progress", data.get("lang"))
                     state.conversation.extend([{"role": "assistant", "text": update, "kind": "status"}])
                     yield _sse("status", {"text": update})
                     last_update = time.monotonic()
