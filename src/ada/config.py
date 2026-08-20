@@ -12,11 +12,31 @@ def _path(value, base):
     return str(path if path.is_absolute() else (base / path).resolve())
 
 
+def _load_vscode_mcp(root):
+    path = root / ".vscode" / "mcp.json"
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Configuración MCP de VS Code inválida en {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(".vscode/mcp.json debe ser un objeto JSON.")
+    servers = payload.get("servers", {})
+    if not isinstance(servers, dict):
+        raise ValueError(".vscode/mcp.json: servers debe ser un objeto.")
+    return servers
+
+
 def load_config(path=None, project_root=None):
     root = Path(project_root or Path(__file__).resolve().parents[2])
     config_path = Path(path or os.environ.get("ADA_CONFIG", root / "config.json")).expanduser()
     if not config_path.exists():
-        return {"db_path": str(root / "memory.db"), "allowed_roots": [str(Path.home() / "Desktop")]}
+        return {
+            "db_path": str(root / "memory.db"),
+            "allowed_roots": [str(Path.home() / "Desktop")],
+            "mcp_servers": _load_vscode_mcp(root),
+        }
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -40,6 +60,10 @@ def load_config(path=None, project_root=None):
     if not isinstance(config["allowed_roots"], list):
         raise ValueError("allowed_roots debe ser una lista de carpetas.")
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]
+    if "mcp_servers" not in config:
+        config["mcp_servers"] = _load_vscode_mcp(root)
+    elif "mcpServers" in config and not config.get("mcp_servers"):
+        config["mcp_servers"] = config["mcpServers"]
     config.setdefault("confirm_risky", True)
     config.setdefault("memory_encryption", False)
     config.setdefault("allowed_commands", [])
@@ -57,7 +81,7 @@ def validate_config(config):
     for key in list_keys:
         if key in config and not isinstance(config[key], list):
             raise ValueError(f"{key} debe ser una lista.")
-    for key in ("local_runtime", "models", "model_policy", "gpt4all", "telegram"):
+    for key in ("local_runtime", "models", "model_policy", "gpt4all", "telegram", "mcp_servers"):
         if key in config and not isinstance(config[key], dict):
             raise ValueError(f"{key} debe ser un objeto.")
     bool_keys = ("confirm_risky", "adaptive_models", "auto_pull_models")
