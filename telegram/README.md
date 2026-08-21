@@ -6,11 +6,13 @@ Este módulo actúa como un **servidor y cliente de mensajería independiente** 
 
 ## 🚀 Cómo Ejecutar el Bot
 
-1. Configurá tu token de Telegram:
-   ```bash
-   export TELEGRAM_BOT_TOKEN="tu-token-aqui"
-   export TELEGRAM_ALLOWED_CHAT_IDS="123456789" # Opcional pero recomendado
-   ```
+1. Configurá tu token en la **Bóveda Cifrada (`vault.db`)**:
+   - **Desde el Gestor Web**: Ingresá en `http://127.0.0.1:5005` → Pestaña **Telegram Bot** → **🔑 Configurar Token**.
+   - **O por CLI**:
+     ```bash
+     .venv/bin/python -c "from utils.credentials import SecureVault; SecureVault().set('telegram_bot_token', 'TU_TOKEN_DE_BOTFATHER')"
+     ```
+
 2. Ejecutá el servidor del bot de forma independiente:
    ```bash
    .venv/bin/python telegram/bot.py

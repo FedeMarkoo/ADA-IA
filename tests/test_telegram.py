@@ -4,7 +4,7 @@ from telegram.bot import TelegramListener
 
 class TelegramAdapterTests(unittest.TestCase):
     def test_disabled_without_token(self):
-        listener = TelegramListener({"telegram": {"enabled": True}})
+        listener = TelegramListener({"telegram": {"enabled": True, "token": ""}})
         self.assertFalse(listener.enabled)
 
     def test_allowed_chat_ids_are_normalized(self):

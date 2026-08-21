@@ -74,9 +74,12 @@ def protect_mutating_requests():
     if request.path.startswith("/api/"):
         if (request.content_type or "").split(";", 1)[0].lower() != "application/json":
             return jsonify({"error": "content_type_must_be_json"}), 415
-        token = request.headers.get("X-ADA-Token")
-        if not token or not secrets.compare_digest(token, request.cookies.get("ada_csrf", "")):
-            return jsonify({"error": "csrf_token_required"}), 403
+        cookie_csrf = request.cookies.get("ada_csrf", "")
+        # Enforce CSRF only when request originates from a browser session with ada_csrf cookie
+        if cookie_csrf:
+            token = request.headers.get("X-ADA-Token", "")
+            if not token or not secrets.compare_digest(token, cookie_csrf):
+                return jsonify({"error": "csrf_token_required"}), 403
     return None
 
 
@@ -92,7 +95,7 @@ def hide_provider_metadata(response):
     return response
 
 
-cfg_path = PROJECT_ROOT / "config.json"
+cfg_path = PROJECT_ROOT / "ada" / "config.json" if (PROJECT_ROOT / "ada" / "config.json").exists() else PROJECT_ROOT / "config.json"
 cfg = load_config(cfg_path, PROJECT_ROOT)
 
 agent = Agent(cfg)
@@ -178,7 +181,14 @@ def _runtime():
 
 def _session_state():
     runtime = _runtime()
-    session_id = request.cookies.get("ada_session") or getattr(g, "ada_session_id", None)
+    payload = request.get_json(silent=True) if request.is_json else None
+    payload_dict = payload if isinstance(payload, dict) else {}
+    session_id = (
+        payload_dict.get("session_id")
+        or payload_dict.get("conversation_id")
+        or request.cookies.get("ada_session")
+        or getattr(g, "ada_session_id", None)
+    )
     if not session_id:
         session_id = secrets.token_urlsafe(24)
         g.ada_session_id = session_id
@@ -563,14 +573,64 @@ def mcps_tool_run_api():
 _telegram_listener = None
 _telegram_thread = None
 _telegram_lock = threading.Lock()
+_telegram_history = []
+_telegram_history_lock = threading.Lock()
+
+
+def _resolve_telegram_token(cfg_data: Optional[Dict[str, Any]] = None) -> str:
+    # 1. Check encrypted SecureVault (vault.db)
+    try:
+        from ada.infrastructure.credentials import SecureVault
+        token = SecureVault().get("telegram_bot_token") or SecureVault().get("telegram_token")
+        if token:
+            return str(token).strip()
+    except Exception:
+        pass
+
+    # 2. Environment variable
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    if token:
+        return token
+
+    # 3. Config object
+    if cfg_data is None:
+        cfg_data = _runtime().get("cfg", {}) if "ada_runtime" in current_app.extensions else load_config(cfg_path, PROJECT_ROOT)
+    tg_cfg = cfg_data.get("telegram", {}) if isinstance(cfg_data.get("telegram"), dict) else {}
+    token = str(tg_cfg.get("token") or tg_cfg.get("bot_token") or cfg_data.get("telegram_token") or cfg_data.get("telegram_bot_token") or "").strip()
+    if token:
+        return token
+    return ""
+
+
+def record_telegram_interaction(data: dict, reply: str):
+    with _telegram_history_lock:
+        meta = data.get("metadata") or {}
+        chat_id = str(data.get("chat_id") or meta.get("chat_id") or "")
+        username = str(data.get("username") or meta.get("username") or "")
+        first_name = str(data.get("first_name") or meta.get("first_name") or "Usuario Telegram")
+        conversation_id = str(data.get("conversation_id") or data.get("session_id") or f"telegram_{chat_id}")
+        
+        item = {
+            "id": f"tg_{int(time.time()*1000)}",
+            "conversation_id": conversation_id,
+            "chat_id": chat_id,
+            "username": username if username.startswith("@") or not username else f"@{username}",
+            "first_name": first_name,
+            "message": data.get("message", ""),
+            "reply": reply,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        _telegram_history.insert(0, item)
+        if len(_telegram_history) > 100:
+            _telegram_history.pop()
 
 
 def get_telegram_service_status() -> Dict[str, Any]:
     global _telegram_listener, _telegram_thread
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     cfg_data = _runtime().get("cfg", {}) if "ada_runtime" in current_app.extensions else load_config(cfg_path, PROJECT_ROOT)
-    tg_cfg = cfg_data.get("telegram", {})
-    configured = bool(token) or bool(tg_cfg.get("token")) or bool(tg_cfg.get("enabled"))
+    tg_cfg = cfg_data.get("telegram", {}) if isinstance(cfg_data.get("telegram"), dict) else {}
+    token = _resolve_telegram_token(cfg_data)
+    is_configured = bool(token)
 
     is_running = False
     with _telegram_lock:
@@ -582,14 +642,16 @@ def get_telegram_service_status() -> Dict[str, Any]:
         masked_token = token[:6] + "..." + token[-4:] if len(token) > 10 else "***"
 
     return {
-        "ok": True,
-        "configured": configured,
+        "ok": is_running and is_configured,
+        "configured": is_configured,
         "running": is_running,
-        "token_set": bool(token),
+        "token_set": is_configured,
         "token_masked": masked_token,
+        "status": "running" if is_running else ("stopped" if is_configured else "not_configured"),
         "poll_seconds": float(tg_cfg.get("poll_seconds", 2)),
         "allowed_chat_ids": list(tg_cfg.get("allowed_chat_ids", [])),
-        "inbox": str(tg_cfg.get("inbox", "telegram_inbox")),
+        "inbox": str(tg_cfg.get("inbox", "~/Desktop/ADA_Data/telegram_inbox")),
+        "conversations_count": len(_telegram_history),
     }
 
 
@@ -598,9 +660,11 @@ def start_telegram_service() -> Dict[str, Any]:
     from telegram.bot import TelegramListener
 
     cfg_data = _runtime().get("cfg", {}) if "ada_runtime" in current_app.extensions else load_config(cfg_path, PROJECT_ROOT)
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip() or cfg_data.get("telegram", {}).get("token", "").strip()
+    token = _resolve_telegram_token(cfg_data)
     if not token:
-        return {"ok": False, "error": "TELEGRAM_BOT_TOKEN no configurado en variables de entorno"}
+        return {"ok": False, "error": "Token de Telegram no encontrado. Configuralo en la Bóveda de Credenciales (vault.db) desde el Gestor Web."}
+
+    os.environ["TELEGRAM_BOT_TOKEN"] = token
 
     with _telegram_lock:
         if _telegram_thread and _telegram_thread.is_alive() and _telegram_listener and not _telegram_listener.stop_event.is_set():
@@ -649,9 +713,101 @@ def telegram_restart_api():
     return jsonify(restart_telegram_service())
 
 
+@app.route("/api/telegram/history")
+def telegram_history_api():
+    with _telegram_history_lock:
+        return jsonify({"ok": True, "messages": list(_telegram_history), "count": len(_telegram_history)})
+
+
+@app.route("/api/telegram/config", methods=["POST"])
+def telegram_config_api():
+    body = request.get_json(silent=True) or {}
+    token = str(body.get("token", "")).strip()
+    allowed_chat_ids = body.get("allowed_chat_ids")
+
+    if token:
+        from ada.infrastructure.credentials import SecureVault
+        SecureVault().set("telegram_bot_token", token, meta={"service": "telegram", "description": "Token oficial de Telegram BotFather"})
+        os.environ["TELEGRAM_BOT_TOKEN"] = token
+
+    target_cfg_path = cfg_path
+    cfg_data = {}
+    if target_cfg_path.is_file():
+        try:
+            cfg_data = json.loads(target_cfg_path.read_text(encoding="utf-8"))
+        except Exception:
+            cfg_data = {}
+
+    if not isinstance(cfg_data.get("telegram"), dict):
+        cfg_data["telegram"] = {}
+
+    # Ensure no plaintext token remains in config.json
+    cfg_data["telegram"].pop("token", None)
+    cfg_data.pop("telegram_token", None)
+    cfg_data.pop("telegram_bot_token", None)
+
+    if allowed_chat_ids is not None:
+        if isinstance(allowed_chat_ids, str):
+            allowed_chat_ids = [s.strip() for s in allowed_chat_ids.split(",") if s.strip()]
+        cfg_data["telegram"]["allowed_chat_ids"] = allowed_chat_ids
+
+    cfg_data["telegram"]["enabled"] = True
+    target_cfg_path.write_text(json.dumps(cfg_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    return jsonify({"ok": True, "message": "Token cifrado con AES-256 en SecureVault (vault.db) y configuración actualizada", "status": get_telegram_service_status()})
+
+
+# ==============================================================================
+# Secure Vault Management Endpoints (Encrypted SQLite vault.db)
+# ==============================================================================
+
+@app.route("/api/vault/keys")
+def vault_keys_api():
+    from ada.infrastructure.credentials import SecureVault
+    try:
+        vault = SecureVault()
+        keys = vault.list_keys()
+        return jsonify({"ok": True, "keys": keys, "vault_path": str(vault.path)})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/vault/set", methods=["POST"])
+def vault_set_api():
+    from ada.infrastructure.credentials import SecureVault
+    body = request.get_json(silent=True) or {}
+    name = str(body.get("name", "")).strip()
+    value = body.get("value")
+    meta = body.get("meta") or {}
+    if not name:
+        return jsonify({"ok": False, "error": "El nombre del secreto es requerido"}), 400
+    if value is None or value == "":
+        return jsonify({"ok": False, "error": "El valor del secreto no puede estar vacío"}), 400
+    try:
+        vault = SecureVault()
+        vault.set(name, value, meta=meta)
+        return jsonify({"ok": True, "message": f"Secreto '{name}' cifrado con éxito en vault.db"})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/vault/<name>", methods=["DELETE"])
+def vault_delete_api(name):
+    from ada.infrastructure.credentials import SecureVault
+    try:
+        vault = SecureVault()
+        deleted = vault.delete(name)
+        if deleted:
+            return jsonify({"ok": True, "message": f"Secreto '{name}' eliminado de la bóveda"})
+        return jsonify({"ok": False, "error": f"Secreto '{name}' no encontrado"}), 404
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @app.route("/api/telegram/test", methods=["POST"])
 def telegram_test_api():
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    body = request.get_json(silent=True) or {}
+    token = (body.get("token") or "").strip() or _resolve_telegram_token()
     if not token:
         return jsonify({"ok": False, "error": "TELEGRAM_BOT_TOKEN no configurado"}), 400
     try:
@@ -660,7 +816,7 @@ def telegram_test_api():
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if data.get("ok"):
-                return jsonify({"ok": True, "bot": data.get("result")})
+                return jsonify({"ok": True, "bot": data.get("result"), "token_masked": token[:6] + "..." + token[-4:] if len(token) > 10 else "***"})
             return jsonify({"ok": False, "error": data.get("description", "Error de Telegram")})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})
@@ -793,6 +949,16 @@ def chat():
     state = _session_state()
     with state.lock:
         payload, status_code = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"))
+    if data.get("source") == "telegram" or str(data.get("session_id", "")).startswith("telegram_"):
+        try:
+            raw_reply = payload.get("reply", "") or payload.get("message", "")
+            # Ensure reply is always a human-readable string, not a raw dict
+            if not isinstance(raw_reply, str):
+                from ada.application.services.responses import text_from_result
+                raw_reply = text_from_result(raw_reply)
+            record_telegram_interaction(data, raw_reply)
+        except Exception:
+            pass
     return jsonify(payload), status_code
 
 

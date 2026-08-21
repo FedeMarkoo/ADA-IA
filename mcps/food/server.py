@@ -16,8 +16,18 @@ from mcps.food.recipes import RecipeManager
 from mcps.food.inventory import InventoryManager
 
 
-def get_db(db_path: str = "memory.db") -> sqlite3.Connection:
-    conn = sqlite3.connect(str(Path(db_path).expanduser()))
+def _resolve_default_db() -> str:
+    from ada.config import load_config
+    try:
+        return load_config().get("db_path", str(Path.home() / "Desktop" / "ADA_Data" / "memory.db"))
+    except Exception:
+        return str(Path.home() / "Desktop" / "ADA_Data" / "memory.db")
+
+
+def get_db(db_path: Optional[str] = None) -> sqlite3.Connection:
+    target = Path(db_path or _resolve_default_db()).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(target))
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS food_shopping (
       id INTEGER PRIMARY KEY, item TEXT NOT NULL, quantity TEXT, unit TEXT,
@@ -49,7 +59,7 @@ def get_db(db_path: str = "memory.db") -> sqlite3.Connection:
     return conn
 
 
-def create_food_server(db_path: str = "memory.db") -> StdioMCPServer:
+def create_food_server(db_path: Optional[str] = None) -> StdioMCPServer:
     server = StdioMCPServer("food", "1.0.0")
 
     def shopping_handler(args: Dict[str, Any]) -> Dict[str, Any]:

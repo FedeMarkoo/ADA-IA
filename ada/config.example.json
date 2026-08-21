@@ -1,0 +1,89 @@
+{
+  "name": "ADA",
+  "web_framework": "asgi",
+  "ollama_url": "http://127.0.0.1:11434",
+  "engine_provider": "ollama",
+  "models": {
+    "chat": "llama3.2:3b",
+    "vision": "qwen2.5vl:3b",
+    "router": "llama3.2:3b"
+  },
+  "data_dir": "~/Desktop/ADA_Data",
+  "db_path": "~/Desktop/ADA_Data/memory.db",
+  "memory_encryption": false,
+  "photo_root": "~/Desktop/Fotos",
+  "photo_executor": "thread",
+  "allowed_roots": [
+    "~/Desktop/ADA_Data",
+    "~/Desktop/Fotos",
+    "~/Desktop"
+  ],
+  "allowed_commands": [],
+  "gmail_token_path": "~/.config/ada/gmail-token.json",
+  "gmail_credential_name": "gmail_oauth",
+  "gmail_client_secret_path": "~/.config/ada/google-client.json",
+  "instagram_provider": "puppeteer",
+  "instagram_user_id": "",
+  "instagram_access_token": "",
+  "instagram_publish_script": "",
+  "instagram_profile_dir": "~/.config/ada/instagram-profile",
+  "model_catalog": [
+    {
+      "name": "llama3.2:3b",
+      "roles": ["chat", "router"],
+      "quality_tier": "small",
+      "min_ram_gb": 4
+    },
+    {
+      "name": "qwen2.5vl:3b",
+      "roles": ["vision"],
+      "quality_tier": "small",
+      "min_ram_gb": 6
+    }
+  ],
+  "model_policy": {
+    "chat": {
+      "preferred": "llama3.2:3b",
+      "fallbacks": []
+    },
+    "vision": {
+      "preferred": "qwen2.5vl:3b",
+      "fallbacks": []
+    },
+    "router": {
+      "preferred": "llama3.2:3b",
+      "fallbacks": []
+    }
+  },
+  "confirm_risky": true,
+  "privacy_default": "normal",
+  "local_runtime": {
+    "provider": "ollama",
+    "auto_start": true,
+    "auto_pull": false
+  },
+  "telegram": {
+    "enabled": false,
+    "allowed_chat_ids": [],
+    "inbox": "~/Desktop/ADA_Data/telegram_inbox"
+  },
+  "event_rules": {
+    "filesystem.file_created": {
+      "action": "analyze_photo",
+      "extensions": [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".nef",
+        ".arw",
+        ".cr2",
+        ".dng"
+      ],
+      "payload": {
+        "vision": false
+      },
+      "auto_execute": true,
+      "complexity": 4
+    }
+  }
+}

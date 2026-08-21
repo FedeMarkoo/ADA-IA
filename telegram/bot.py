@@ -21,20 +21,68 @@ if str(PROJECT_ROOT) not in sys.path:
 logger = logging.getLogger("ada.telegram")
 
 
+def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
+    # 1. Explicit config argument if key exists
+    if config:
+        tg_cfg = config.get("telegram", {}) if isinstance(config.get("telegram"), dict) else {}
+        if "token" in tg_cfg or "bot_token" in tg_cfg:
+            return str(tg_cfg.get("token") or tg_cfg.get("bot_token") or "").strip()
+        if "telegram_token" in config:
+            return str(config.get("telegram_token") or "").strip()
+
+    # 2. Environment variable
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    if token:
+        return token
+
+    # 3. Encrypted SecureVault (vault.db)
+    try:
+        from utils.credentials import SecureVault
+        token = SecureVault().get("telegram_bot_token") or SecureVault().get("telegram_token")
+        if token:
+            return str(token).strip()
+    except Exception:
+        pass
+    cfg_file = PROJECT_ROOT / "ada" / "config.json"
+    if not cfg_file.is_file():
+        cfg_file = PROJECT_ROOT / "config.json"
+    if cfg_file.is_file():
+        try:
+            c = json.loads(cfg_file.read_text(encoding="utf-8"))
+            tg_c = c.get("telegram", {}) if isinstance(c.get("telegram"), dict) else {}
+            token = str(tg_c.get("token") or tg_c.get("bot_token") or c.get("telegram_token") or "").strip()
+            if token:
+                return token
+        except Exception:
+            pass
+    for env_path in [PROJECT_ROOT / ".env", Path.home() / ".env", Path.home() / ".config" / "ada" / ".env"]:
+        if env_path.is_file():
+            try:
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("TELEGRAM_BOT_TOKEN="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            return val
+            except Exception:
+                pass
+    return ""
+
+
 class TelegramListener:
     """Independent Telegram polling bot daemon forwarding to ADA REST endpoints."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, base_url: str = "http://127.0.0.1:5005"):
         self.config = config or {}
         telegram = self.config.get("telegram", {})
-        self.token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        self.token = resolve_telegram_token(self.config)
         self.base_url = os.environ.get("ADA_INTERNAL_URL", base_url).rstrip("/")
         self.api_url = f"https://api.telegram.org/bot{self.token}"
         self.poll_seconds = float(telegram.get("poll_seconds", 2))
         self.allowed_chat_ids = self._allowed_chat_ids(
             os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "") or telegram.get("allowed_chat_ids", [])
         )
-        self.inbox = Path(telegram.get("inbox", "telegram_inbox"))
+        self.inbox = Path(os.path.expanduser(str(telegram.get("inbox", "~/Desktop/ADA_Data/telegram_inbox"))))
         self.stop_event = threading.Event()
 
     @staticmethod
@@ -45,8 +93,8 @@ class TelegramListener:
 
     @property
     def enabled(self) -> bool:
-        configured = self.config.get("telegram", {}).get("enabled", False)
-        return bool(self.token) and (configured or bool(os.environ.get("TELEGRAM_BOT_TOKEN")))
+        """Bot is enabled as long as a token is available, regardless of 'enabled' flag in config."""
+        return bool(self.token)
 
     def start(self) -> Optional[threading.Thread]:
         if not self.enabled:
@@ -123,24 +171,28 @@ class TelegramListener:
     def handle_update(self, update: Dict[str, Any]) -> None:
         message = update.get("message") or {}
         chat = message.get("chat") or {}
+        sender = message.get("from") or {}
         chat_id = str(chat.get("id", ""))
+        username = sender.get("username") or ""
+        first_name = sender.get("first_name") or sender.get("last_name") or username or f"User_{chat_id}"
+
         if chat_id:
-            logger.info("chat_id=%s", chat_id)
+            logger.info("chat_id=%s from=%s (@%s)", chat_id, first_name, username)
         if not chat_id or (self.allowed_chat_ids and chat_id not in self.allowed_chat_ids):
             return
 
         text = (message.get("text") or message.get("caption") or "").strip()
         photos = message.get("photo") or []
-        logger.info("chat_id=%s mensaje_recibido", chat_id)
+        logger.info("chat_id=%s mensaje_recibido=%r", chat_id, text[:100])
         command = text.lower().split()[0] if text.startswith("/") else ""
         if command in {"/start", "/help"}:
             self.send_message(
                 chat_id,
-                "ADA lista. Enviame una consulta, una foto o /status. Comandos: /help, /status, /cancel.",
+                f"¡Hola {first_name}! ADA está lista. Enviame una consulta, una foto o /status. Comandos: /help, /status, /cancel.",
             )
             return
         if command == "/cancel":
-            self.send_message(chat_id, self._invoke_internal_chat("cancelar"))
+            self.send_message(chat_id, self._invoke_internal_chat("cancelar", chat_id=chat_id, sender=sender))
             return
         if command == "/status":
             self.send_message(chat_id, self._status_summary())
@@ -154,7 +206,10 @@ class TelegramListener:
             )
             return
 
-        reply = self._invoke_internal_chat(text)
+        try:
+            reply = self._invoke_internal_chat(text, chat_id=chat_id, sender=sender)
+        except TypeError:
+            reply = self._invoke_internal_chat(text)
         logger.info("chat_id=%s respuesta=%r", chat_id, str(reply)[:500])
         self.send_message(chat_id, reply)
 
@@ -168,13 +223,34 @@ class TelegramListener:
 
         return self._retry(call, "telegram_status")
 
-    def _invoke_internal_chat(self, text: str) -> str:
+    def _invoke_internal_chat(self, text: str, chat_id: str = "", sender: Optional[Dict[str, Any]] = None) -> str:
+        sender = sender or {}
+        username = sender.get("username", "")
+        first_name = sender.get("first_name", "") or sender.get("last_name", "") or username or f"User_{chat_id}"
+        conversation_id = f"telegram_{chat_id}" if chat_id else "telegram_default"
+
         def call():
-            payload = json.dumps({"message": text, "lang": "es", "source": "telegram"}).encode("utf-8")
+            payload = json.dumps({
+                "message": text,
+                "lang": "es",
+                "source": "telegram",
+                "session_id": conversation_id,
+                "conversation_id": conversation_id,
+                "chat_id": str(chat_id),
+                "username": f"@{username}" if username and not username.startswith("@") else username,
+                "first_name": first_name,
+                "user_id": str(sender.get("id", chat_id)),
+                "metadata": {
+                    "chat_id": str(chat_id),
+                    "username": f"@{username}" if username and not username.startswith("@") else username,
+                    "first_name": first_name,
+                    "channel": "telegram",
+                }
+            }).encode("utf-8")
             request = urllib.request.Request(
                 f"{self.base_url}/api/chat",
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "X-ADA-Source": "telegram"},
                 method="POST",
             )
             with urllib.request.urlopen(request, timeout=300) as response:
@@ -214,7 +290,7 @@ def main():
 
     bot = TelegramListener(cfg)
     if not bot.enabled:
-        print("⚠️ Telegram bot no configurado. Configurá TELEGRAM_BOT_TOKEN en variables de entorno o config.json.")
+        print("⚠️ Telegram bot no configurado. Configuralo en la Bóveda de Credenciales (vault.db) desde el Gestor Web.")
         sys.exit(1)
 
     print("🚀 Servidor Telegram Bot iniciando...")
