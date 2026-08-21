@@ -16,11 +16,13 @@ class FolderResolver:
 
     STOPWORDS = {
         "cual", "es", "la", "el", "las", "los", "de", "del", "en", "que", "hay",
-        "tenes", "tienes", "tiene", "tienen", "tu", "tus", "fotos", "foto", "archivos",
+        "tenes", "tienes", "tengo", "tiene", "tienen", "tu", "tus", "fotos", "foto", "archivos",
         "archivo", "carpeta", "carpetas", "directorios", "directorio", "ruta", "donde",
-        "quiero", "saber", "busca", "buscar", "mostrame", "mostrar", "listame", "lista",
+        "quiero", "saber", "busca", "buscar", "buscame", "mostrame", "mostrar", "listame", "lista",
         "listar", "sea", "ahi", "adentro", "dentro", "contenido", "contenidos", "una", "un",
-        "y", "por", "favor",
+        "y", "por", "favor", "cuanto", "cuantos", "cuanta", "cuantas", "cantidad", "total",
+        "estan", "esta", "estaba", "estaban", "me", "acuerdo", "refiero", "exacta", "exacto",
+        "che", "ada", "no", "mis", "mi", "cumple", "cumpleanos",
     }
 
     def __init__(self, config, memory=None):
@@ -78,14 +80,37 @@ class FolderResolver:
         names = output.decode("utf-8", errors="replace").splitlines()
         return [Path(parent) / name for name in names if name and not name.startswith(".")]
 
+    def _is_directory(self, path):
+        """Check a cached path without letting a remote mount block the worker."""
+        process = None
+        timeout = max(0.1, float(self.config.get("folder_probe_timeout", 0.75)))
+        try:
+            process = subprocess.Popen(
+                ["test", "-d", str(path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            process.wait(timeout=timeout)
+            return process.returncode == 0
+        except subprocess.TimeoutExpired:
+            process.kill()
+            threading.Thread(target=process.wait, daemon=True).start()
+            return False
+        except OSError:
+            if process and process.poll() is None:
+                process.kill()
+            return False
+
     def _score(self, path, terms):
         name = self._normalize(path.name)
         phrase = " ".join(terms)
         if name == phrase:
             return 100.0
-        if all(term in name for term in terms):
+        aliases = {"15": ("15", "xv")}
+        matches = [any(value in name for value in aliases.get(term, (term,))) for term in terms]
+        if all(matches):
             return 50.0 + sum(len(term) / max(1, len(name)) for term in terms)
-        return sum(1 for term in terms if term in name) / max(1, len(terms))
+        return sum(1 for matched in matches if matched) / max(1, len(terms))
 
     def _candidates(self, terms, context_path=None):
         started = time.monotonic()
@@ -145,28 +170,61 @@ class FolderResolver:
         started = time.monotonic()
         key = self._key(text)
         terms = self._terms(text)
-        canonical = " ".join(terms)
         base = self._base()
+        named_terms = [term for term in terms if term not in {"google", "drive", "gdrive"}]
+        stale_paths = []
 
         if re.search(r"\b(root|raiz|base|principal)\b", key) or (
             re.search(r"\b(gdrive|google drive|drive)\b", key)
             and re.search(r"\b(que|todas?|carpetas?|tengo|hay)\b", key)
+            and not named_terms
         ):
             return {"status": "resolved", "path": str(base), "source": "configured_base", "confidence": 1.0,
                     "elapsed_ms": round((time.monotonic() - started) * 1000), "terms": terms}
+
+        # "en Google Drive" describes the search root, not part of a folder
+        # name. When the user also supplies a proper label (for example
+        # "Sofía"), search by that label only.
+        terms = named_terms or terms
+        canonical = " ".join(terms)
+
+        if (
+            terms
+            and context_path
+            and self._inside_base(context_path)
+            and self._score(Path(context_path), terms) >= 1.0
+            and self._is_directory(context_path)
+        ):
+            return {
+                "status": "resolved",
+                "path": str(Path(context_path).absolute()),
+                "source": "session_context_match",
+                "confidence": 0.99,
+                "elapsed_ms": round((time.monotonic() - started) * 1000),
+                "terms": terms,
+            }
 
         if self.memory:
             for alias_key in (canonical,):
                 if not alias_key:
                     continue
                 alias = self.memory.get_folder_alias(alias_key)
-                if alias and self._inside_base(alias["path"]):
+                if alias and self._inside_base(alias["path"]) and self._is_directory(alias["path"]):
                     return {"status": "resolved", "path": alias["path"], "source": "memory",
                             "confidence": alias["confidence"], "elapsed_ms": round((time.monotonic() - started) * 1000),
                             "terms": terms}
+                if alias and self._inside_base(alias["path"]):
+                    stale_paths.append(alias["path"])
 
             if canonical and hasattr(self.memory, "search_folders"):
                 indexed = self.memory.search_folders(terms, limit=20)
+                available = []
+                for item in indexed:
+                    if self._inside_base(item["path"]) and self._is_directory(item["path"]):
+                        available.append(item)
+                    elif self._inside_base(item["path"]):
+                        stale_paths.append(item["path"])
+                indexed = available
                 if context_path and self._inside_base(context_path):
                     contextual = [
                         item for item in indexed
@@ -189,7 +247,7 @@ class FolderResolver:
                             "terms": terms}
 
         if not terms:
-            if context_path and self._inside_base(context_path):
+            if context_path and self._inside_base(context_path) and self._is_directory(context_path):
                 return {"status": "resolved", "path": str(Path(context_path).absolute()), "source": "session_context",
                         "confidence": 0.9, "elapsed_ms": round((time.monotonic() - started) * 1000), "terms": []}
             return {"status": "none", "candidates": [], "reason": "no_folder_terms",
@@ -209,7 +267,11 @@ class FolderResolver:
         if candidates:
             return {"status": "ambiguous", "candidates": [str(path.absolute()) for path in candidates],
                     "terms": terms, **diagnostics}
-        return {"status": "none", "candidates": [], "reason": "not_found", "terms": terms, **diagnostics}
+        result = {"status": "none", "candidates": [], "reason": "not_found", "terms": terms, **diagnostics}
+        if stale_paths:
+            result["reason"] = "stale_index"
+            result["stale_paths"] = list(dict.fromkeys(stale_paths))[:8]
+        return result
 
     def resolve_label(self, label, context_path=None):
         """Resolve an explicit folder label, including otherwise generic names."""

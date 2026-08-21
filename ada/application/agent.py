@@ -85,6 +85,33 @@ class Agent:
             payload.setdefault("config", self.cfg)
             payload.setdefault("db_path", self.mem.db_path)
             payload["action"] = payload.pop("food_action", payload.get("action", "list"))
+            if payload.get("action") in {"advise", "ask", "suggest"} or payload.get("advisor"):
+                inventory = self.run_skill(
+                    "food",
+                    {
+                        "db_path": self.mem.db_path,
+                        "domain": "inventory",
+                        "action": "list",
+                        "config": self.cfg,
+                    },
+                )
+                request = str(task.get("prompt") or "")
+                has_specific_ingredients = self._food_request_has_specific_ingredients(request)
+                if not inventory.get("items") and not has_specific_ingredients:
+                    reply = (
+                        "Todavía no tengo ingredientes cargados en tu alacena. "
+                        "Decime qué tenés —aunque sea tres cosas— y te propongo una comida rápida sin comprar nada."
+                    )
+                elif has_specific_ingredients:
+                    # A concrete ingredient list is enough for a useful local
+                    # answer. Avoid holding the chat open while a culinary
+                    # model starts up or times out.
+                    reply = self._fallback_food_advice(request)
+                else:
+                    reply = self.advise_food(request) or self._fallback_food_advice(request)
+                result = {"ok": True, "action": "advise", "reply": reply}
+                self.mem.record_task(task, result, provider="food-advisor", success=True)
+                return {"model": "food-advisor", "result": result}
             result = self.run_skill("food", payload)
             self.mem.record_task(task, result, provider="food", success=not bool(result.get("error")))
             return {"model": "food", "result": result}
@@ -121,8 +148,9 @@ class Agent:
             return {"model": None, "result": result}
 
         prompt = self.prompt_builder.task(task, self.lang)
-        model_name = self.model_manager.ensure_model(task, role=task.get("model_role", "chat"))
-        call_options = {"timeout": self.cfg.get("model_timeout", 25)}
+        model_role = self.model_manager.role_for_task(task)
+        model_name = self.model_manager.ensure_model(task, role=model_role)
+        call_options = {"timeout": self.cfg.get("model_timeout", 180)}
         if provider == "ollama" and model_name:
             call_options["ollama_model"] = model_name
         try:
@@ -154,6 +182,43 @@ class Agent:
             self.mem.record_task(task, result, provider=provider, success=False)
             return {"model": provider, "result": result}
 
+    @staticmethod
+    def _food_request_has_specific_ingredients(request):
+        lowered = str(request or "").lower()
+        match = re.search(r"\btengo\s+(.+?)(?:[.!?]|$)", lowered)
+        if not match:
+            return False
+        value = match.group(1).strip()
+        generic = {"lo que", "todo lo que", "cosas", "algo", "comida", "hambre", "ganas"}
+        return bool(value and not any(value.startswith(prefix) for prefix in generic))
+
+    @staticmethod
+    def _fallback_food_advice(request):
+        """Return a concise answer when the culinary model is unavailable."""
+        lowered = str(request or "").lower()
+        match = re.search(r"\btengo\s+(.+?)(?:[.!?]|$)", lowered)
+        raw = match.group(1) if match else ""
+        ingredients = [
+            item.strip(" ,")
+            for item in re.split(r",|\s+y\s+", raw)
+            if item.strip(" ,") and len(item.strip(" ,").split()) <= 4
+        ]
+        normalized = " ".join(ingredients)
+        if "arroz" in normalized and ("huevo" in normalized or "huevos" in normalized):
+            tomato = " y tomate" if "tomate" in normalized else ""
+            return (
+                f"Hacé un arroz salteado con huevo{tomato}: calentá el arroz, sumá el tomate picado "
+                "y terminá con el huevo revuelto en la misma sartén. Como segunda opción, mezclá todo "
+                "y hacé una tortilla dorada de ambos lados."
+            )
+        if ingredients:
+            shown = ", ".join(ingredients[:4])
+            return (
+                f"Con {shown}, haría un salteado rápido: cociná primero lo más firme y agregá el resto al final. "
+                "Como alternativa, unilo con huevo o una base de arroz/pasta si tenés para hacer una tortilla o bowl."
+            )
+        return "Decime qué ingredientes tenés y te propongo una comida concreta y una alternativa rápida."
+
     def advise_food(self, request):
         """Use the configured model as a culinary advisor with profile context."""
         provider = self.model_manager.choose({"complexity": 4, "privacy": "normal"})
@@ -168,8 +233,22 @@ class Agent:
                 "config": self.cfg,
             }
         ).get("recipes", [])
+        inventory = self.skills.get("food", lambda _: {"items": []})(
+            {
+                "db_path": self.mem.db_path,
+                "domain": "inventory",
+                "action": "list",
+                "config": self.cfg,
+            }
+        ).get("items", [])
+        inventory_text = ", ".join(
+            f"{item.get('item')} ({item.get('quantity', 0)} {item.get('unit') or ''})".strip()
+            for item in inventory[:50]
+        )
         context = "\n".join(profile)
-        catalog = "\n".join(f"- {item['name']}: {', '.join(item['ingredients'])}" for item in recipes[:30])
+        if inventory_text:
+            context = f"{context}\nINVENTARIO ACTUAL: {inventory_text}".strip()
+        catalog = "\n".join(f"- {item.get('name')}" for item in recipes[:30] if item.get("name"))
         recent = self.mem.conversation(limit=12)
         # Previous assistant answers can contain hallucinated steps or menus;
         # only user turns are reliable conversational constraints.
@@ -195,7 +274,10 @@ class Agent:
                 complexity=4,
                 temperature=0.25,
                 max_tokens=900,
-                timeout=self.cfg.get("food_advisor_timeout", 45),
+                timeout=self.cfg.get("food_advisor_timeout") or min(
+                    18,
+                    max(5, int(self.cfg.get("chat_timeout_seconds", 30)) - 5),
+                ),
                 format=self.mem.json_schema("food_reply"),
             )
             decoded = result

@@ -29,6 +29,17 @@ def _filesystem_summary(result, item_key, label):
 
 def text_from_result(result):
     if isinstance(result, dict):
+        if result.get("error"):
+            error = str(result.get("error"))
+            if "allowlist" in error.lower() or "fuera de" in error.lower():
+                return "No pude acceder a esa carpeta porque está fuera de las ubicaciones autorizadas de ADA."
+            known = {
+                "item_not_found": "No encontré ese elemento.",
+                "recipe_not_found": "No encontré esa receta guardada.",
+                "unknown_domain": "No pude determinar qué sección de comida usar.",
+                "dir not found": "Esa carpeta ya no está disponible en el disco.",
+            }
+            return known.get(error, f"No pude completar la operación: {error}.")
         if result.get("action") == "list_dirs" and "dirs" in result:
             return _filesystem_summary(result, "dirs", "carpetas")
         if result.get("action") in {"list_files", "search"} and "files" in result:
@@ -40,6 +51,20 @@ def text_from_result(result):
             return _filesystem_summary(result, "files", label)
         if result.get("action") in {"move_files", "copy_files", "undo"} and "count" in result:
             return f"Operación completada: {result['count']} archivos procesados."
+        if result.get("action") == "list" and result.get("domain") in {"shopping", "inventory", "recipes"}:
+            domain = result.get("domain")
+            items = result.get("items") if domain != "recipes" else result.get("recipes")
+            items = items or []
+            empty = {
+                "shopping": "Tu lista de compras está vacía.",
+                "inventory": "Todavía no hay ingredientes cargados en tu alacena.",
+                "recipes": "Todavía no hay recetas guardadas.",
+            }
+            if not items:
+                return empty[domain]
+            names = [str(item.get("item") or item.get("name") or item) for item in items[:10]]
+            title = {"shopping": "Lista de compras", "inventory": "Alacena", "recipes": "Recetas"}[domain]
+            return f"{title}:\n" + "\n".join(f"• {name}" for name in names)
         value = result.get("text") or result.get("reply") or result.get("result")
-        return str(value) if value is not None else str(result)
+        return str(value) if value is not None else "La operación se completó correctamente."
     return str(result or "")

@@ -55,6 +55,11 @@ class IntentRouter:
 
     def route(self, text, history=""):
         fallback = self._fallback(text)
+        # A plain conversational question with no capability keyword does not
+        # need a model call just to be classified as chat. This removes an
+        # entire cold start from the most common path.
+        if fallback.get("action") == "ask" and fallback.get("confidence") == 0.0:
+            return fallback
         provider = self.model_manager.choose(
             {
                 "complexity": 4,
@@ -69,7 +74,7 @@ class IntentRouter:
             raw = self.model_manager.call(
                 provider,
                 prompt,
-                ollama_model=self.config.get("models", {}).get("router") or self.config.get("router_model"),
+                ollama_model=self.model_manager.select_model("router", role="router"),
                 temperature=0,
                 max_tokens=600,
                 timeout=self.config.get("router_timeout", 8),
