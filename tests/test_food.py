@@ -42,6 +42,48 @@ class FoodTests(unittest.TestCase):
             self.assertEqual(agent.parse_prompt("qué puedo comer mañana?")["action"], "food")
             self.assertTrue(agent.parse_prompt("qué puedo comer mañana?")["advisor"])
 
+    def test_food_advice_with_empty_inventory_is_human_readable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            agent = Agent({"engine_provider": "unknown", "db_path": str(Path(directory) / "memory.db")})
+            result = agent.decide_and_run(
+                {
+                    "type": "food",
+                    "prompt": "che, que puedo cocinar hoy con lo que ya tengo? algo rapido y sin comprar nada",
+                    "payload": {"domain": "recipes", "food_action": "advise", "advisor": True},
+                }
+            )["result"]
+
+            self.assertEqual(result["action"], "advise")
+            self.assertIn("no tengo ingredientes cargados", result["reply"])
+            self.assertNotIn("{'", result["reply"])
+
+    def test_food_advice_with_explicit_ingredients_has_deterministic_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            agent = Agent({"engine_provider": "unknown", "db_path": str(Path(directory) / "memory.db")})
+            agent.advise_food = lambda _request: self.fail("Explicit ingredients must not wait for a model")
+            result = agent.decide_and_run(
+                {
+                    "type": "food",
+                    "prompt": "tengo arroz, huevos y tomate. tirame dos ideas faciles para comer ahora",
+                    "payload": {"domain": "recipes", "food_action": "advise", "advisor": True},
+                }
+            )["result"]
+
+            self.assertEqual(result["action"], "advise")
+            self.assertIn("arroz salteado", result["reply"].lower())
+            self.assertIn("segunda opción", result["reply"].lower())
+
+    def test_web_chat_detects_colloquial_food_advice_without_model_router(self):
+        from ada.application.services.web_chat import WebChatService
+
+        self.assertTrue(WebChatService._food_advice_intent("qué puedo cocinar hoy con lo que ya tengo?"))
+        self.assertTrue(
+            WebChatService._food_advice_intent(
+                "tengo arroz, huevos y tomate. tirame dos ideas faciles para comer ahora"
+            )
+        )
+        self.assertFalse(WebChatService._food_advice_intent("agregá arroz a la lista de compras"))
+
     def test_seeds_recipes_from_markdown_profile(self):
         with tempfile.TemporaryDirectory() as directory:
             profile = Path(directory) / "perfil.md"

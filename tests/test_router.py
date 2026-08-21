@@ -18,6 +18,9 @@ class FakeModelManager:
         self.calls.append((provider, prompt, kwargs))
         return self.response
 
+    def select_model(self, task, role="chat"):
+        return "router-model"
+
 
 class IntentRouterTests(unittest.TestCase):
     def setUp(self):
@@ -34,6 +37,12 @@ class IntentRouterTests(unittest.TestCase):
         router = self.router(FakeModelManager())
         result = router.route("necesito revisar el enfoque y la exposición de esta imagen")
         self.assertEqual(result["action"], "analyze_photo")
+
+    def test_plain_conversation_does_not_start_router_model(self):
+        manager = FakeModelManager('{"action":"ask"}')
+        result = self.router(manager).route("explicame por qué el cielo se ve azul")
+        self.assertEqual(result["action"], "ask")
+        self.assertEqual(manager.calls, [])
 
     def test_model_plan_is_validated(self):
         manager = FakeModelManager(
