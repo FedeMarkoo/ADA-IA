@@ -4,8 +4,8 @@
   "ollama_url": "http://127.0.0.1:11434",
   "engine_provider": "ollama",
   "router_timeout": 8,
-  "model_timeout": 25,
-  "chat_timeout_seconds": 30,
+  "model_timeout": 50,
+  "chat_timeout_seconds": 65,
   "folder_resolver_timeout": 4,
   "folder_probe_timeout": 0.75,
   "folder_max_probes": 40,
@@ -168,10 +168,11 @@
     }
   },
   "ollama_num_thread": 6,
-  "ollama_num_ctx": 8192,
+  "ollama_num_ctx": 4096,
   "ollama_keep_alive": "10m",
   "cpu_limit_percent": 75,
   "ollama_temperature": 0.2,
   "model_selection_mode": "hybrid",
-  "adaptive_models": false
+  "adaptive_models": false,
+  "chat_max_tokens": 768
 }
