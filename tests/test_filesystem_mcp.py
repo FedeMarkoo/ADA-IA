@@ -35,7 +35,7 @@ class FilesystemMCPTests(unittest.TestCase):
 
     def test_mcp_schema_exposes_recursive_default_false(self):
         server = create_filesystem_server([tempfile.gettempdir()])
-        tool = next(tool for tool in server.tools if tool["name"] == "filesystem.list_files")
+        tool = server.tools["filesystem.list_files"]
         schema = tool["inputSchema"]
 
         self.assertEqual(schema["properties"]["recursive"]["type"], "boolean")
