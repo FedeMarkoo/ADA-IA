@@ -1618,4 +1618,12 @@ body {
 }
 
 
+.btn-danger {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fee2e2;
+}
 
+.btn-danger:hover:not(:disabled) {
+  background: #991b1b;
+}

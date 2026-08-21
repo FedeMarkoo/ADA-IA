@@ -4,6 +4,7 @@ import os
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from queue import Empty, Queue
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -17,9 +18,14 @@ from ada.models.catalog import ModelCatalog
 from ada.models.benchmark import ModelBenchmark
 from ada.mcps.manager import MCPManager
 from ada.interfaces.web.doctor import HealthDoctor
+from ada.infrastructure.persistence.debug_log import DebugLog
 import re
 import secrets
 import threading
+from datetime import datetime, timezone
+
+ADA_VERSION = "0.1.0"
+PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
 
 def _find_project_root() -> Path:
     p = Path(__file__).resolve().parent
@@ -129,6 +135,8 @@ class WebSessionState:
         self.session_id = session_id
         self.conversation = PersistentConversation(memory, session=session_id)
         self.pending_action: Optional[Dict[str, Any]] = None
+        self.pending_path_action: Optional[Dict[str, Any]] = None
+        self.current_path = memory.get_folder_context(session_id) if hasattr(memory, "get_folder_context") else None
         self.lock = threading.RLock()
 
 
@@ -157,12 +165,16 @@ app.extensions["ada_runtime"] = {
     "model_catalog": model_catalog,
     "model_benchmark": model_benchmark,
     "mcp_manager": mcp_manager,
+    "identity": {"version": ADA_VERSION, "started_at": PROCESS_STARTED_AT, "reloaded_at": None, "hot_reload": False, "pid": os.getpid()},
+    "agent_enabled": True,
+    "debug_enabled": False,
+    "debug_log": DebugLog(cfg.get("debug_log_path", str(Path.home() / "Desktop/ADA_Data/debug-log.db"))),
 }
 
 
 def _runtime():
     """Return the dependencies associated with the current Flask application."""
-    return current_app.extensions.get(
+    runtime = current_app.extensions.get(
         "ada_runtime",
         {
             "cfg": cfg,
@@ -177,6 +189,22 @@ def _runtime():
             "mcp_manager": mcp_manager,
         },
     )
+    # Debug mode is persisted in debug-log.db so the UI and chat endpoints
+    # cannot disagree after a reload or when the stream uses another request
+    # context.
+    if runtime.get("debug_log") is not None:
+        runtime["debug_enabled"] = runtime["debug_log"].enabled()
+    return runtime
+
+
+def _log_lifecycle(runtime, component, action, result=None):
+    """Always persist service power-state transitions for auditability."""
+    if runtime.get("debug_log"):
+        runtime["debug_log"].write(
+            "lifecycle",
+            {"component": component, "action": action, "result": result or {}, "source": "manager"},
+            session_id=None,
+        )
 
 
 def _session_state():
@@ -223,7 +251,18 @@ def status():
     active_agent = runtime["agent"]
     ollama = runtime.get("ollama_client") or OllamaClient()
     ollama_health = ollama.health()
-    runtime_info = active_agent.model_manager.runtime_status()
+    # Do not call LocalModelRuntime.ensure_ready() when Ollama is offline: it
+    # can perform retries/model discovery and make the dashboard appear frozen.
+    if ollama_health.get("online"):
+        runtime_info = active_agent.model_manager.runtime_status()
+        engines = active_agent.model_manager.available()
+        models = active_agent.model_manager.model_catalog()
+        recommendations = active_agent.model_manager.model_recommendations()
+    else:
+        runtime_info = {"provider": "ollama", "endpoint": ollama.endpoint, "available": False, "reason": "ollama_offline"}
+        engines = {"local": False, "ollama": False, "openai": False, "anthropic": False, "gpt4all": False}
+        models = []
+        recommendations = {"adaptive": False, "roles": {}, "model_stats": {}, "telemetry": {}}
     runtime_dict = dict(runtime_info)
     if isinstance(runtime_info.get("status"), dict):
         runtime_dict["available"] = runtime_info["status"].get("available", False) or ollama_health.get("online", False)
@@ -233,13 +272,17 @@ def status():
 
     return jsonify(
         {
-            "engines": active_agent.model_manager.available(),
+            "identity": runtime.get("identity", {"version": ADA_VERSION, "started_at": PROCESS_STARTED_AT, "reloaded_at": None, "hot_reload": False, "pid": os.getpid()}),
+            "agent_enabled": runtime.get("agent_enabled", True),
+            "debug_enabled": runtime.get("debug_enabled", False),
+            "mcp_servers": runtime.get("mcp_manager", MCPManager()).list_servers(),
+            "engines": engines,
             "runtime": runtime_dict,
             "ollama_health": ollama_health,
             "agents": list(active_agent.coordinator.available_agents()),
             "hardware": hardware_profile(),
-            "models": active_agent.model_manager.model_catalog(),
-            "model_recommendations": active_agent.model_manager.model_recommendations(),
+            "models": models,
+            "model_recommendations": recommendations,
             "metrics": {
                 "agent": active_agent.metrics.snapshot(),
                 "models": active_agent.model_manager.metrics.snapshot(),
@@ -435,22 +478,25 @@ def models_benchmark_api():
 
 @app.route("/api/ollama/start", methods=["POST"])
 def ollama_start():
-    active_agent = _runtime()["agent"]
+    runtime = _runtime(); active_agent = runtime["agent"]
     status = active_agent.model_manager.local_runtime.start()
+    _log_lifecycle(runtime, "ollama", "start", status.as_dict())
     return jsonify({"ok": status.available, "runtime": status.as_dict()})
 
 
 @app.route("/api/ollama/stop", methods=["POST"])
 def ollama_stop():
-    active_agent = _runtime()["agent"]
+    runtime = _runtime(); active_agent = runtime["agent"]
     status = active_agent.model_manager.local_runtime.stop()
+    _log_lifecycle(runtime, "ollama", "stop", status.as_dict())
     return jsonify({"ok": not status.available, "runtime": status.as_dict()})
 
 
 @app.route("/api/ollama/restart", methods=["POST"])
 def ollama_restart():
-    active_agent = _runtime()["agent"]
+    runtime = _runtime(); active_agent = runtime["agent"]
     status = active_agent.model_manager.local_runtime.restart()
+    _log_lifecycle(runtime, "ollama", "restart", status.as_dict())
     return jsonify({"ok": status.available, "runtime": status.as_dict()})
 
 
@@ -459,9 +505,25 @@ def agent_restart():
     runtime = _runtime()
     active_agent = runtime["agent"]
     active_agent.model_manager.reload(runtime.get("cfg"))
+    runtime["agent_enabled"] = True
     with runtime["session_states_lock"]:
         runtime["session_states"].clear()
+    _log_lifecycle(runtime, "agent", "restart", {"enabled": True})
     return jsonify({"ok": True, "message": "Agente ADA reiniciado exitosamente."})
+
+@app.route("/api/agent/stop", methods=["POST"])
+def agent_stop():
+    runtime = _runtime()
+    runtime["agent_enabled"] = False
+    _log_lifecycle(runtime, "agent", "stop", {"enabled": False})
+    return jsonify({"ok": True, "message": "ADA Agent Core apagado."})
+
+@app.route("/api/agent/start", methods=["POST"])
+def agent_start():
+    runtime = _runtime()
+    runtime["agent_enabled"] = True
+    _log_lifecycle(runtime, "agent", "start", {"enabled": True})
+    return jsonify({"ok": True, "message": "ADA Agent Core iniciado."})
 
 
 # ==============================================================================
@@ -498,22 +560,25 @@ def mcps_servers_api():
 
 @app.route("/api/mcps/servers/<name>/start", methods=["POST"])
 def mcps_server_start_api(name):
-    manager = _runtime().get("mcp_manager") or MCPManager()
+    runtime = _runtime(); manager = runtime.get("mcp_manager") or MCPManager()
     res = manager.start_server(name)
+    _log_lifecycle(runtime, f"mcp:{name}", "start", res)
     return jsonify(res)
 
 
 @app.route("/api/mcps/servers/<name>/stop", methods=["POST"])
 def mcps_server_stop_api(name):
-    manager = _runtime().get("mcp_manager") or MCPManager()
+    runtime = _runtime(); manager = runtime.get("mcp_manager") or MCPManager()
     res = manager.stop_server(name)
+    _log_lifecycle(runtime, f"mcp:{name}", "stop", res)
     return jsonify(res)
 
 
 @app.route("/api/mcps/servers/<name>/restart", methods=["POST"])
 def mcps_server_restart_api(name):
-    manager = _runtime().get("mcp_manager") or MCPManager()
+    runtime = _runtime(); manager = runtime.get("mcp_manager") or MCPManager()
     res = manager.restart_server(name)
+    _log_lifecycle(runtime, f"mcp:{name}", "restart", res)
     return jsonify(res)
 
 
@@ -526,9 +591,24 @@ def mcps_server_ping_api(name):
 
 @app.route("/api/mcps/servers/restart-all", methods=["POST"])
 def mcps_servers_restart_all_api():
-    manager = _runtime().get("mcp_manager") or MCPManager()
+    runtime = _runtime(); manager = runtime.get("mcp_manager") or MCPManager()
     res = manager.restart_all_servers()
+    _log_lifecycle(runtime, "mcps", "restart_all", res)
     return jsonify(res)
+
+@app.route("/api/mcps/servers/stop-all", methods=["POST"])
+def mcps_servers_stop_all_api():
+    runtime = _runtime(); manager = runtime.get("mcp_manager") or MCPManager()
+    results = {name: manager.stop_server(name) for name in list(manager._servers)}
+    _log_lifecycle(runtime, "mcps", "stop_all", results)
+    return jsonify({"ok": True, "results": results})
+
+@app.route("/api/mcps/servers/start-all", methods=["POST"])
+def mcps_servers_start_all_api():
+    runtime = _runtime(); manager = runtime.get("mcp_manager") or MCPManager()
+    results = {name: manager.start_server(name) for name in list(manager._servers)}
+    _log_lifecycle(runtime, "mcps", "start_all", results)
+    return jsonify({"ok": True, "results": results})
 
 
 @app.route("/api/mcps/tools")
@@ -873,11 +953,40 @@ def config_api():
 def warmup():
     return jsonify({"runtime": _runtime()["agent"].model_manager.runtime_status(), "ok": True})
 
+@app.route("/api/debug", methods=["GET", "POST"])
+def debug_api():
+    runtime = _runtime()
+    if request.method == "POST":
+        runtime["debug_enabled"] = bool((request.get_json(silent=True) or {}).get("enabled", False))
+        runtime["debug_log"].set_enabled(runtime["debug_enabled"])
+        runtime["debug_log"].write("debug_mode_changed", {"enabled": runtime["debug_enabled"]}, level="INFO")
+    return jsonify({"enabled": runtime.get("debug_enabled", False), "path": runtime["debug_log"].path})
+
+@app.route("/api/restart-all", methods=["POST"])
+def restart_all():
+    runtime = _runtime()
+    manager = runtime.get("mcp_manager") or MCPManager()
+    mcp_result = manager.restart_all_servers()
+    ollama_status = runtime["agent"].model_manager.local_runtime.restart()
+    runtime["agent"].model_manager.reload(runtime.get("cfg"))
+    runtime["agent_enabled"] = True
+    with runtime["session_states_lock"]:
+        runtime["session_states"].clear()
+    result = {
+        "mcps": mcp_result,
+        "ollama": ollama_status.as_dict(),
+        "agent": {"enabled": True, "reloaded": True},
+    }
+    ok = bool(mcp_result.get("ok", True)) and bool(ollama_status.available)
+    _log_lifecycle(runtime, "system", "restart_all", {"ok": ok, **result})
+    return jsonify({"ok": ok, **result})
+
 
 @app.route("/api/models/reload", methods=["POST"])
 def reload_models():
     """Apply a validated model policy without rebuilding the running agent."""
     runtime = _runtime()
+    runtime.setdefault("identity", {})["reloaded_at"] = datetime.now(timezone.utc).isoformat()
     active_agent = runtime["agent"]
     previous = dict(getattr(active_agent, "cfg", {}))
     payload = request.get_json(silent=True) or {}
@@ -938,6 +1047,10 @@ def conversation_api():
         if request.method == "DELETE":
             state.conversation.clear()
             state.pending_action = None
+            state.pending_path_action = None
+            state.current_path = None
+            if hasattr(_runtime()["agent"].mem, "clear_folder_context"):
+                _runtime()["agent"].mem.clear_folder_context(state.session_id)
             return jsonify({"ok": True, "messages": []})
         return jsonify({"messages": list(state.conversation), "count": len(state.conversation)})
 
@@ -945,10 +1058,27 @@ def conversation_api():
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.get_json() or {}
+    request_started = time.monotonic()
     runtime = _runtime()
+    if not runtime.get("agent_enabled", True):
+        return jsonify({"error": "agent_disabled", "message": "ADA Agent Core está apagado."}), 503
     state = _session_state()
+    debug = runtime.get("debug_log") if runtime.get("debug_enabled") else None
+    if debug:
+        debug.write("chat_request", {"message": data.get("message", ""), "lang": data.get("lang"), "source": data.get("source")}, session_id=state.session_id)
+
+    def progress(phase, details):
+        if debug:
+            debug.write("chat_phase", {"phase": phase, **details}, session_id=state.session_id)
+
     with state.lock:
-        payload, status_code = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"))
+        payload, status_code = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"), progress=progress)
+    if debug:
+        debug.write(
+            "chat_result",
+            {"status_code": status_code, "duration_ms": round((time.monotonic() - request_started) * 1000), "payload": payload},
+            session_id=state.session_id,
+        )
     if data.get("source") == "telegram" or str(data.get("session_id", "")).startswith("telegram_"):
         try:
             raw_reply = payload.get("reply", "") or payload.get("message", "")
@@ -967,21 +1097,50 @@ def _sse(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _run_chat_in_worker(data, session_id, runtime_app):
-    """Run the existing JSON chat action in an isolated request context."""
+def _run_chat_in_worker(data, session_id, runtime_app, progress_queue):
+    """Execute chat in an isolated context while forwarding real phases."""
     with runtime_app.test_request_context(
         "/api/chat", method="POST", json=data, headers={"Cookie": f"ada_session={session_id}"}
     ):
-        response = chat()
-        if isinstance(response, tuple):
-            resp_obj = response[0]
-        else:
-            resp_obj = response
-        if hasattr(resp_obj, "get_json"):
-            return resp_obj.get_json(silent=True) or {}
-        if isinstance(resp_obj, dict):
-            return resp_obj
-        return {}
+        runtime = _runtime()
+        state = _session_state()
+        debug = runtime.get("debug_log") if runtime.get("debug_enabled") else None
+
+        def progress(phase, details):
+            event = {"phase": phase, **details}
+            progress_queue.put(event)
+            if debug:
+                debug.write("chat_phase", event, session_id=state.session_id)
+
+        with state.lock:
+            payload, _ = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"), progress=progress)
+        return payload
+
+
+def _progress_text(event):
+    phase = event.get("phase")
+    if phase == "received":
+        return "[request] mensaje recibido; iniciando ejecución..."
+    if phase == "route_local":
+        return f"[router] ruta local seleccionada: filesystem.{event.get('action')}"
+    if phase == "folder_resolver_started":
+        return f"[FolderResolver] buscando desde {event.get('context_path') or 'base_dir'}..."
+    if phase == "folder_resolver_finished":
+        if event.get("status") == "resolved":
+            return f"[FolderResolver] resuelto por {event.get('source')}: {event.get('path')} ({event.get('elapsed_ms', 0)} ms)"
+        return f"[FolderResolver] resultado: {event.get('status')} ({event.get('elapsed_ms', 0)} ms)"
+    if phase == "router_model_started":
+        return "[router] consultando clasificador de intención..."
+    if phase == "router_model_finished":
+        return f"[router] intención: {event.get('action')}"
+    if phase == "capability_started":
+        payload = event.get("payload") or {}
+        return f"[capability] ejecutando {event.get('capability')} -> {payload.get('action') or 'run'} en {payload.get('dir') or payload.get('path') or '-'}"
+    if phase == "capability_finished":
+        return f"[capability] {event.get('capability')} finalizó: {'OK' if event.get('ok') else event.get('error') or 'error'}"
+    if phase == "folder_index_updated":
+        return f"[memory] índice actualizado: {event.get('indexed', 0)} carpetas aprendidas en {event.get('parent')}"
+    return f"[runtime] {phase}"
 
 
 @app.route("/api/chat/stream", methods=["POST"])
@@ -989,38 +1148,71 @@ def chat_stream():
     """Answer through SSE so the UI can show ADA's progress incrementally."""
     data = request.get_json() or {}
     text = data.get("message", "")
+    request_started = time.monotonic()
     if not text:
         return jsonify({"error": "empty message"}), 400
     state = _session_state()
+    debug = _runtime().get("debug_log") if _runtime().get("debug_enabled") else None
+    if debug:
+        debug.write("chat_request", {"message": text, "lang": data.get("lang"), "source": data.get("source")}, session_id=state.session_id)
+    if not _runtime().get("agent_enabled", True):
+        return jsonify({"error": "agent_disabled", "message": "ADA Agent Core está apagado."}), 503
 
     @stream_with_context
     def events():
-        received = tr("status_received", data.get("lang"))
-        yield _sse("status", {"text": received})
-
-        processing = tr("processing", data.get("lang"))
-        yield _sse("status", {"text": processing})
+        progress_queue = Queue()
         future = _runtime()["chat_executor"].submit(
             _run_chat_in_worker,
             data,
             state.session_id,
             current_app._get_current_object(),  # type: ignore[attr-defined]
+            progress_queue,
         )
         try:
             last_update = time.monotonic()
+            started_at = last_update
+            hard_timeout = max(5, float(_runtime().get("cfg", {}).get("chat_timeout_seconds", 30)))
             while not future.done():
-                if time.monotonic() - last_update >= 5:
-                    update = tr("status_progress", data.get("lang"))
+                while True:
+                    try:
+                        phase_event = progress_queue.get_nowait()
+                    except Empty:
+                        break
+                    yield _sse("status", {"text": _progress_text(phase_event)})
+                if time.monotonic() - started_at >= hard_timeout:
+                    future.cancel()
+                    timeout_message = f"La tarea superó el límite de {int(hard_timeout)} segundos y fue cancelada."
+                    if debug:
+                        debug.write("chat_timeout", {"timeout_seconds": hard_timeout, "message": text}, session_id=state.session_id, level="ERROR")
+                    yield _sse("error", {"text": timeout_message})
+                    yield _sse("done", {"ok": False})
+                    return
+                if time.monotonic() - last_update >= 3:
+                    update = "[runtime] esperando respuesta del modelo/capability; worker activo..."
                     yield _sse("status", {"text": update})
                     last_update = time.monotonic()
                 time.sleep(0.25)
+            while True:
+                try:
+                    phase_event = progress_queue.get_nowait()
+                except Empty:
+                    break
+                yield _sse("status", {"text": _progress_text(phase_event)})
             payload = future.result()
+            if debug:
+                debug.write(
+                    "chat_result",
+                    {"duration_ms": round((time.monotonic() - request_started) * 1000), "payload": payload},
+                    session_id=state.session_id,
+                )
             if payload.get("error"):
                 yield _sse("error", {"text": payload.get("message") or payload["error"]})
             else:
                 yield _sse("reply", {"text": payload.get("reply", "(sin respuesta)")})
         except Exception as error:
             current_app.logger.exception("Streaming chat failed")
+            if debug:
+                debug.write("chat_error", {"message": str(error), "request": text}, session_id=state.session_id, level="ERROR")
             failure = f"La tarea terminó con un error: {error}"
             state.conversation.extend([{"role": "assistant", "text": failure, "kind": "error"}])
             yield _sse("error", {"text": failure})
@@ -1057,6 +1249,10 @@ def create_app(config=None, agent_instance=None):
         "model_benchmark": ModelBenchmark(runtime_cfg.get("ollama_url", "http://127.0.0.1:11434")),
         "mcp_manager": mcp_mgr,
         "doctor": HealthDoctor(runtime_agent, runtime_cfg, mcp_mgr, ollama_cli),
+        "identity": {"version": ADA_VERSION, "started_at": datetime.now(timezone.utc).isoformat(), "reloaded_at": None, "hot_reload": False, "pid": os.getpid()},
+        "agent_enabled": True,
+        "debug_enabled": False,
+        "debug_log": DebugLog(runtime_cfg.get("debug_log_path", str(Path.home() / "Desktop/ADA_Data/debug-log.db"))),
     }
     runtime_app.before_request(protect_mutating_requests)
     runtime_app.after_request(hide_provider_metadata)

@@ -69,6 +69,8 @@ export const api = {
   },
 
   getStatus() { return this.request('/api/status'); },
+  getDebug() { return this.request('/api/debug'); },
+  setDebug(enabled) { return this.request('/api/debug', { method: 'POST', body: JSON.stringify({ enabled }) }); },
   
   // Ollama Lifecycle
   getOllamaStatus() { return this.request('/api/ollama/status'); },
@@ -85,6 +87,8 @@ export const api = {
 
   // ADA Agent Lifecycle
   restartAgent() { return this.request('/api/agent/restart', { method: 'POST' }); },
+  stopAgent() { return this.request('/api/agent/stop', { method: 'POST' }); },
+  startAgent() { return this.request('/api/agent/start', { method: 'POST' }); },
 
   // Telegram Bot Lifecycle
   getTelegramStatus() { return this.request('/api/telegram/status'); },
@@ -120,6 +124,8 @@ export const api = {
   stopMCPServer(name) { return this.request(`/api/mcps/servers/${name}/stop`, { method: 'POST' }); },
   restartMCPServer(name) { return this.request(`/api/mcps/servers/${name}/restart`, { method: 'POST' }); },
   restartAllMCPServers() { return this.request('/api/mcps/servers/restart-all', { method: 'POST' }); },
+  stopAllMCPServers() { return this.request('/api/mcps/servers/stop-all', { method: 'POST' }); },
+  startAllMCPServers() { return this.request('/api/mcps/servers/start-all', { method: 'POST' }); },
   pingMCPServer(name) { return this.request(`/api/mcps/servers/${name}/ping`); },
   getMCPsTools(category) {
     const query = category && category !== 'all' ? `?category=${category}` : '';
@@ -150,6 +156,7 @@ export const api = {
     return this.request('/api/config', { method: 'POST', body: JSON.stringify({ config }) });
   },
   warmup() { return this.request('/api/warmup', { method: 'POST' }); },
+  restartAll() { return this.request('/api/restart-all', { method: 'POST' }); },
   getConversation() { return this.request('/api/conversation'); },
   clearConversation() { return this.request('/api/conversation', { method: 'DELETE' }); },
 };
@@ -240,18 +247,22 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
 }
 
 // 2. Header Component
-function Header({ title, subtitle, onWarmup, onRefresh, isRefreshing }) {
+function Header({ title, subtitle, onWarmup, onRefresh, onRestartAll, isRefreshing, isRestarting, identity, debugEnabled, onToggleDebug }) {
   return h('header', { className: 'top-header' }, [
     h('div', { className: 'header-left', key: 'left' }, [
       h('h1', { className: 'page-title', id: 'page-title' }, title),
-      h('span', { className: 'page-subtitle', id: 'page-subtitle' }, subtitle),
+      h('span', { className: 'page-subtitle', id: 'page-subtitle' }, `${subtitle} · ADA v${identity?.version || '—'} · inicio ${identity?.started_at ? new Date(identity.started_at).toLocaleString() : '—'}`),
     ]),
     h('div', { className: 'header-actions', key: 'actions' }, [
       h('button', { className: 'btn btn-ghost', id: 'btn-warmup', onClick: onWarmup, title: 'Precargar motor' }, [
         h('span', null, '⚡ Warmup'),
       ]),
+      h('button', { className: `btn ${debugEnabled ? 'btn-danger' : 'btn-ghost'}`, onClick: onToggleDebug, title: 'Guardar log técnico detallado' }, debugEnabled ? '🐞 Debug ON' : '🐞 Debug'),
       h('button', { className: 'btn btn-secondary', id: 'btn-refresh', onClick: onRefresh, title: 'Actualizar datos' }, [
         h('span', null, isRefreshing ? 'Actualizando...' : '🔄 Actualizar'),
+      ]),
+      h('button', { className: 'btn btn-danger', id: 'btn-restart-all', onClick: onRestartAll, disabled: isRestarting, title: 'Reiniciar servicios de ADA' }, [
+        h('span', null, isRestarting ? 'Reiniciando...' : '↻ Reiniciar todo'),
       ]),
     ]),
   ]);
@@ -266,6 +277,9 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const hardware = statusData?.hardware || {};
   const runtime = statusData?.runtime || {};
   const isOllamaRunning = isOllamaAvailable(statusData);
+  const isAgentRunning = statusData?.agent_enabled !== false;
+  const mcpServers = statusData?.mcp_servers || [];
+  const areMCPsRunning = mcpServers.some(server => server.status === 'active');
 
   const loadHealth = useCallback(async () => {
     try {
@@ -407,10 +421,15 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
       // Diagnostic Grid Checklist
       h('div', { className: 'doctor-items-grid' },
         checkItems.map(item => {
-          const isOk = item.status === 'ok';
-          const isWarn = item.status === 'warning';
+          const effectiveStatus = item.id === 'ada_agent' && statusData?.agent_enabled === false
+            ? 'stopped'
+            : item.id === 'mcps_subsystem' && statusData?.mcp_servers?.length && statusData.mcp_servers.every(server => server.status !== 'active')
+              ? 'stopped'
+              : item.status;
+          const isOk = effectiveStatus === 'ok';
+          const isWarn = effectiveStatus === 'warning';
           const statusBadge = isOk ? 'badge-success' : isWarn ? 'badge-warning' : 'badge-danger';
-          const statusLabel = isOk ? 'OK' : isWarn ? 'Alerta' : 'Error';
+          const statusLabel = isOk ? 'OK' : isWarn ? 'Alerta' : effectiveStatus === 'stopped' ? 'Apagado' : 'Error';
           const icon = ITEM_ICONS[item.id] || '⚙️';
 
           return h('div', { className: 'doctor-item-card', key: item.id }, [
@@ -421,7 +440,7 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
               ]),
               h('span', { className: `badge ${statusBadge}` }, statusLabel),
             ]),
-            h('p', { className: 'doctor-item-msg' }, item.message),
+            h('p', { className: 'doctor-item-msg' }, effectiveStatus === 'stopped' ? (item.id === 'ada_agent' ? 'ADA Agent Core está apagado.' : 'Todos los servidores MCP están apagados.') : item.message),
             item.can_auto_fix && item.status !== 'ok' ? h('div', { className: 'doctor-item-actions' }, [
               h('button', {
                 className: 'btn btn-sm btn-primary',
@@ -465,9 +484,9 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
       h('div', { className: 'card stat-card', key: 'agent-card' }, [
         h('div', { className: 'stat-header' }, [
           h('span', { className: 'stat-label' }, 'Agente ADA Core'),
-          h('span', { className: 'stat-badge badge-primary' }, 'Activo'),
+          h('span', { className: `stat-badge ${statusData?.agent_enabled === false ? 'badge-danger' : 'badge-primary'}` }, statusData?.agent_enabled === false ? 'Apagado' : 'Activo'),
         ]),
-        h('div', { className: 'stat-value' }, 'Listo'),
+        h('div', { className: 'stat-value' }, statusData?.agent_enabled === false ? 'Detenido' : 'Listo'),
         h('div', { className: 'stat-footer' }, 'SQLite FTS5 Habilitado'),
       ]),
     ]),
@@ -508,11 +527,12 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
                 h('span', { className: 'text-lg' }, '🧠'),
                 h('span', { className: 'font-bold' }, 'ADA Agent Core'),
               ]),
-              h('span', { className: 'badge badge-success' }, 'Operativo'),
+              h('span', { className: `badge ${isAgentRunning ? 'badge-success' : 'badge-danger'}` }, isAgentRunning ? 'Operativo' : 'Apagado'),
             ]),
             h('p', { className: 'text-xs text-muted mt-1' }, 'Orquestador multiagente, memoria y router.'),
             h('div', { className: 'service-box-actions mt-4 flex gap-2' }, [
-              h('button', { className: 'btn btn-sm btn-primary', onClick: handleAgentRestart }, '🔄 Reiniciar Agente'),
+              !isAgentRunning ? h('button', { className: 'btn btn-sm btn-primary', onClick: async () => { await api.startAgent(); onRefresh(); } }, '▶ Iniciar') : h('button', { className: 'btn btn-sm btn-secondary', onClick: async () => { await api.stopAgent(); onRefresh(); } }, '⏹ Apagar'),
+              h('button', { className: 'btn btn-sm btn-ghost', onClick: handleAgentRestart }, '🔄 Reiniciar'),
               h('button', { className: 'btn btn-sm btn-ghost', onClick: () => api.clearConversation().then(() => showToast('Memoria reiniciada', 'info')) }, '🧹 Limpiar'),
             ]),
           ]),
@@ -524,11 +544,12 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
                 h('span', { className: 'text-lg' }, '🔌'),
                 h('span', { className: 'font-bold' }, 'MCPs Servers (5)'),
               ]),
-              h('span', { className: 'badge badge-accent' }, 'Conectados'),
+              h('span', { className: `badge ${areMCPsRunning ? 'badge-accent' : 'badge-danger'}` }, areMCPsRunning ? 'Conectados' : 'Apagados'),
             ]),
             h('p', { className: 'text-xs text-muted mt-1' }, 'Servidores Model Context Protocol y herramientas.'),
             h('div', { className: 'service-box-actions mt-4 flex gap-2' }, [
-              h('button', { className: 'btn btn-sm btn-secondary', onClick: handleMCPsRestartAll }, '🔄 Reiniciar Todos'),
+              areMCPsRunning ? h('button', { className: 'btn btn-sm btn-secondary', onClick: async () => { await api.stopAllMCPServers(); onRefresh(); } }, '⏹ Apagar Todos') : h('button', { className: 'btn btn-sm btn-primary', onClick: async () => { await api.startAllMCPServers(); onRefresh(); } }, '▶ Iniciar Todos'),
+              h('button', { className: 'btn btn-sm btn-ghost', onClick: handleMCPsRestartAll }, '🔄 Reiniciar Todos'),
               h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('mcps') }, '⚙️ Ver Servidores'),
             ]),
           ]),
@@ -1561,24 +1582,26 @@ function ChatView({ showToast }) {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let eventName = 'message';
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        let eventName = 'message';
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            eventName = line.slice(7).trim();
-            continue;
+        const events = buffer.split(/\n\n/);
+        buffer = events.pop() || '';
+        for (const eventBlock of events) {
+          const lines = eventBlock.split(/\n/);
+          let payloadLine = null;
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+            if (line.startsWith('data: ')) payloadLine = line.slice(6);
           }
-          if (line.startsWith('data: ')) {
+          if (payloadLine) {
             try {
-              const data = JSON.parse(line.slice(6));
-              if (data.text && (eventName === 'reply' || eventName === 'error' || eventName === 'message')) {
+              const data = JSON.parse(payloadLine);
+              if (data.text && (eventName === 'status' || eventName === 'reply' || eventName === 'error' || eventName === 'message')) {
                 setMessages(prev => {
                   const updated = [...prev];
                   updated[assistantIdx] = { role: 'assistant', text: data.text };
@@ -1587,6 +1610,13 @@ function ChatView({ showToast }) {
               }
             } catch (_) {}
           }
+        }
+      }
+      if (buffer.trim()) {
+        const dataLine = buffer.split(/\n/).find(line => line.startsWith('data: '));
+        if (dataLine) {
+          const data = JSON.parse(dataLine.slice(6));
+          if (data.text) setMessages(prev => { const updated = [...prev]; updated[assistantIdx] = { role: 'assistant', text: data.text }; return updated; });
         }
       }
     } catch (err) {
@@ -2448,10 +2478,16 @@ function TelegramView({ showToast }) {
 // Main App Component
 // =============================================================================
 export function App() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const validTabs = ['overview', 'ollama', 'models', 'mcps', 'chat', 'telegram', 'memory', 'settings'];
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = window.location.hash.replace(/^#/, '');
+    return validTabs.includes(requested) ? requested : 'overview';
+  });
   const [statusData, setStatusData] = useState(null);
   const [ollamaData, setOllamaData] = useState({ models: [], running: [] });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [debugEnabled, setDebugEnabled] = useState(false);
   const [toasts, setToasts] = useState([]);
 
   const showToast = (msg, type = 'info') => {
@@ -2479,11 +2515,34 @@ export function App() {
 
   useEffect(() => {
     refreshAll();
+    api.getDebug().then(data => setDebugEnabled(Boolean(data.enabled))).catch(() => {});
     const interval = setInterval(() => {
       api.getStatus().then(setStatusData).catch(() => {});
     }, 15000);
     return () => clearInterval(interval);
   }, [refreshAll]);
+
+  const toggleDebug = async () => {
+    const next = !debugEnabled;
+    await api.setDebug(next);
+    setDebugEnabled(next);
+    showToast(next ? 'Debug activado: guardando ejecución detallada' : 'Debug desactivado', next ? 'warning' : 'info');
+  };
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const requested = window.location.hash.replace(/^#/, '');
+      if (validTabs.includes(requested)) setActiveTab(requested);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const selectTab = (tab) => {
+    if (!validTabs.includes(tab)) return;
+    setActiveTab(tab);
+    window.history.replaceState(null, '', `#${tab}`);
+  };
 
   const titles = {
     overview: ['Overview del Sistema', 'Panel general de recursos, motores y estado del agente'],
@@ -2507,11 +2566,25 @@ export function App() {
     }
   };
 
+  const handleRestartAll = async () => {
+    if (!window.confirm('¿Reiniciar todos los servicios administrados por ADA?')) return;
+    setIsRestarting(true);
+    try {
+      await api.restartAll();
+      await refreshAll();
+      showToast('Servicios reiniciados correctamente', 'success');
+    } catch (err) {
+      showToast('Error al reiniciar: ' + err.message, 'danger');
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
   return h('div', { className: 'app-layout' }, [
     h(Sidebar, {
       key: 'sidebar',
       activeTab,
-      onSelectTab: setActiveTab,
+      onSelectTab: selectTab,
       statusData,
       runtimeStatus: statusData?.runtime,
     }),
@@ -2522,11 +2595,16 @@ export function App() {
         subtitle: currentTitle[1],
         onWarmup: handleWarmup,
         onRefresh: refreshAll,
+        onRestartAll: handleRestartAll,
         isRefreshing,
+        isRestarting,
+        identity: statusData?.identity,
+        debugEnabled,
+        onToggleDebug: toggleDebug,
       }),
       h('div', { className: 'content-container', key: 'content' }, [
-        activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: setActiveTab, showToast, onRefresh: refreshAll }) : null,
-        activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { setActiveTab('models'); } }) : null,
+        activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: selectTab, showToast, onRefresh: refreshAll }) : null,
+        activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { selectTab('models'); } }) : null,
         activeTab === 'models' ? h(ModelsView, { installedModels: ollamaData.models || [], showToast }) : null,
         activeTab === 'mcps' ? h(MCPsView, { showToast }) : null,
         activeTab === 'chat' ? h(ChatView, { showToast }) : null,
