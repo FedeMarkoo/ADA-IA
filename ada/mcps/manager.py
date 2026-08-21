@@ -247,6 +247,24 @@ class MCPManager:
                 risk_level="safe",
             )
 
+        if "google-drive" in self._servers:
+            drive_tools = {
+                "google_drive.search": ("Busca archivos en Google Drive.", "safe"),
+                "google_drive.read_file": ("Lee un archivo de Google Drive.", "safe"),
+                "google_drive.list_files": ("Lista archivos de Google Drive.", "safe"),
+                "google_drive.upload_file": ("Sube un archivo a Google Drive.", "confirmation"),
+            }
+            for name, (description, risk) in drive_tools.items():
+                self._tools[name] = ToolDefinition(
+                    name=name,
+                    server="google-drive",
+                    category="google_drive",
+                    description=description,
+                    parameters={"type": "object", "additionalProperties": True},
+                    risk_level=risk,
+                    requires_confirmation=risk == "confirmation",
+                )
+
         if "sqlite-memory" in self._servers:
             self._tools["sqlite.read_query"] = ToolDefinition(
                 name="sqlite.read_query",

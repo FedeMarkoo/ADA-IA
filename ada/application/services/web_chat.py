@@ -8,6 +8,7 @@ confirmation and capability execution live here with the other application servi
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Optional
 
 from ada.application.services.responses import text_from_result
@@ -65,6 +66,55 @@ class WebChatService:
     def __init__(self, agent, config=None):
         self.agent = agent
         self.config = config or getattr(agent, "cfg", {})
+        self._memory = getattr(agent, "mem", None)
+
+    @staticmethod
+    def _alias_key(text):
+        return re.sub(r"\s+", " ", re.sub(r"[^\wáéíóúüñ ]", " ", text.lower())).strip()
+
+    def _dynamic_path(self, text):
+        """Resolve remembered or unique folder names below ADA's configured base."""
+        key = self._alias_key(text)
+        if not key:
+            return None
+        if self._memory:
+            remembered = self._memory.get_folder_alias(key)
+            if remembered and Path(remembered["path"]).is_dir():
+                return remembered["path"]
+        base = Path(os.path.expanduser(str(self.config.get("base_dir") or "~/GoogleDrive")))
+        if not base.is_dir():
+            return None
+        stopwords = {"las", "los", "la", "el", "de", "del", "en", "fotos", "foto", "archivos", "carpeta", "carpetas"}
+        terms = [term for term in re.findall(r"[\wáéíóúüñ]+", key) if term not in stopwords and len(term) > 1]
+        if not terms:
+            return None
+        matches = []
+        try:
+            for folder in base.rglob("*"):
+                if folder.is_dir() and all(term in folder.name.lower() for term in terms):
+                    matches.append(folder)
+                    if len(matches) > 1:
+                        return None
+        except OSError:
+            return None
+        if len(matches) == 1:
+            resolved = str(matches[0].resolve())
+            if self._memory:
+                self._memory.save_folder_alias(key, resolved)
+            return resolved
+        return None
+
+    def _resolve_path(self, text):
+        clean = self._alias_key(text)
+        # A phrase such as “las fotos de Sofía” must be searched dynamically;
+        # the generic word “fotos” must not short-circuit it to ~/Pictures.
+        if clean in _PATH_ALIASES or re.match(r"^[~/]", text.strip()):
+            return _resolve_path_alias(text)
+        generic = {"las", "los", "la", "el", "de", "del", "en", "que", "qué", "hay", "listar", "listame", "lista", "mostrame", "mostrar", "ver", "fotos", "foto", "archivos", "archivo", "carpeta", "carpetas", *(_PATH_ALIASES.keys())}
+        meaningful = [term for term in re.findall(r"[\wáéíóúüñ]+", clean) if term not in generic and len(term) > 1]
+        if not meaningful or not re.search(r"\b(de|del|en|fotos?|carpetas?)\b", clean):
+            return _resolve_path_alias(text)
+        return self._dynamic_path(text) or _resolve_path_alias(text)
 
     @staticmethod
     def _remember(state, user_text, reply):
@@ -91,7 +141,7 @@ class WebChatService:
             elif filesystem_action == "group_files":
                 payload.update({"action": "move_files", "name": parsed.get("name") or "Agrupadas"})
             if not (payload.get("path") or payload.get("dir")):
-                resolved = _resolve_path_alias(text)
+                resolved = self._resolve_path(text)
                 if resolved:
                     payload["dir"] = resolved
         if action == "sqlite":
@@ -162,7 +212,7 @@ class WebChatService:
         # If the bot previously asked for a path, allow the next message to supply it.
         pending_path_action = getattr(state, "pending_path_action", None)
         if pending_path_action:
-            resolved = _resolve_path_alias(text)
+            resolved = self._resolve_path(text)
             if resolved:
                 task = dict(pending_path_action)
                 state.pending_path_action = None
@@ -183,6 +233,13 @@ class WebChatService:
             state.pending_path_action = None
 
         parsed = self.agent.parse_prompt(text)
+        # Folder/file questions with a known path must not fall through to the
+        # generic chat model (which can ask for the path again).
+        lowered = text.lower()
+        if self._resolve_path(text) and re.search(r"\b(archivos?|ficheros?|documentos?|fotos?)\b", lowered):
+            parsed = dict(parsed or {})
+            parsed["action"] = "list_files"
+            parsed.setdefault("complexity", 1)
         action_name = parsed.get("action")
         if action_name in {None, "ask", "suggest"}:
             complexity = parsed.get("complexity")

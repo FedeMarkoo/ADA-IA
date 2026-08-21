@@ -6,6 +6,7 @@ This runs as an independent daemon communicating with ADA's REST API over HTTP.
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import urllib.parse
@@ -275,7 +276,11 @@ class TelegramListener:
         return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
 
     def send_message(self, chat_id: str, text: str) -> None:
-        text = str(text)
+        # Web chat replies may contain Markdown, while Telegram is sent as
+        # plain text here. Remove presentation markers so users do not see
+        # literal `**bold**` or backticks in the conversation.
+        text = re.sub(r"\*\*(.*?)\*\*", r"\1", str(text), flags=re.DOTALL)
+        text = re.sub(r"`([^`]*)`", r"\1", text)
         for start in range(0, len(text), 4000):
             self._api("sendMessage", {"chat_id": chat_id, "text": text[start : start + 4000]})
 

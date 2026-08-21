@@ -8,12 +8,14 @@
     "vision": "qwen2.5vl:3b",
     "router": "llama3.2:3b"
   },
+  "base_dir": "~/GoogleDrive",
   "data_dir": "~/Desktop/ADA_Data",
   "db_path": "~/Desktop/ADA_Data/memory.db",
   "memory_encryption": false,
-  "photo_root": "~/Desktop/Fotos",
+  "photo_root": "~/GoogleDrive/Fotos",
   "photo_executor": "thread",
   "allowed_roots": [
+    "~/GoogleDrive",
     "~/Desktop/ADA_Data",
     "~/Desktop/Fotos",
     "~/Desktop"
