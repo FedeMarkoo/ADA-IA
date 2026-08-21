@@ -25,13 +25,17 @@ def run(args: Dict[str, Any]) -> Dict[str, Any]:
         RecipeManager.seed_profile(conn, profile_path)
 
         if domain == "shopping":
-            return ShoppingManager.handle(conn, args)
+            result = ShoppingManager.handle(conn, args)
         elif domain == "recipes":
-            return RecipeManager.handle(conn, args)
+            result = RecipeManager.handle(conn, args)
         elif domain == "inventory":
-            return InventoryManager.handle(conn, args)
+            result = InventoryManager.handle(conn, args)
         elif domain == "budget":
-            return BudgetManager.handle(conn, args)
+            result = BudgetManager.handle(conn, args)
         elif domain in {"planning", "meal_plan", "planner"}:
-            return PlannerManager.handle(conn, args)
-        return {"error": "unknown_domain", "domain": domain}
+            result = PlannerManager.handle(conn, args)
+        else:
+            return {"error": "unknown_domain", "domain": domain}
+        if isinstance(result, dict):
+            result.setdefault("domain", domain)
+        return result

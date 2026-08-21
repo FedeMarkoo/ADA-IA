@@ -79,11 +79,16 @@ class WebChatService:
     def _filesystem_intent(text):
         """Classify safe read-only filesystem questions without an LLM."""
         lowered = text.lower()
-        if re.search(r"\b(ruta|ubicaci[oó]n|d[oó]nde est[aá])\b", lowered) and re.search(
+        location_words = (
+            r"\b(ruta|ubicaci[oó]n|d[oó]nde\s+(?:est[aá]|est[aá]n|tengo|guard[eé])|"
+            r"en\s+qu[eé]\s+carpeta|busc[aá]?(?:me)?\s+(?:la\s+)?carpeta|"
+            r"no\s+me\s+acuerdo\s+(?:de\s+)?(?:la\s+)?carpeta)\b"
+        )
+        if re.search(location_words, lowered) and re.search(
             r"\b(carpetas?|directorios?|archivos?|documentos?|fotos?|im[aá]genes?)\b", lowered
         ):
             return "resolve_path"
-        read_words = r"(?:qu[eé]|cu[aá]l(?:es)?|hay|tiene|tienen|listar|lista|listame|listá|mostrar|mostrá|ver|adentro|dentro|contenido)"
+        read_words = r"(?:qu[eé]|cu[aá]l(?:es)?|cu[aá]nt[oa]s?|cantidad|hay|tiene|tienen|listar|lista|listame|listá|mostrar|mostrá|ver|adentro|dentro|contenido)"
         if re.search(r"\b(carpetas?|directorios?)\b", lowered) and re.search(rf"\b{read_words}\b", lowered):
             return "list_dirs"
         if re.search(r"\b(archivos?|ficheros?|documentos?|fotos?|im[aá]genes?)\b", lowered) and re.search(
@@ -91,6 +96,23 @@ class WebChatService:
         ):
             return "list_files"
         return None
+
+    @staticmethod
+    def _food_advice_intent(text):
+        """Catch read-only cooking advice before the slower model router.
+
+        These phrases are intentionally about recommendations, never about
+        mutating shopping/inventory data.  Mutation requests continue through
+        the validated router and policy layer.
+        """
+        lowered = text.lower()
+        advice_patterns = (
+            r"\b(?:qu[eé]|q)\s+(?:me\s+)?(?:puedo|podr[ií]a)\s+(?:cocinar|comer)\b",
+            r"\b(?:tirame|tir[aá]me|dame|recomendame|recomend[aá]me|sugerime|suger[ií]me)\b.*\b(?:ideas?|recetas?|comer|cocinar|platos?)\b",
+            r"\b(?:ideas?|recetas?)\b.*\b(?:con|para)\b.*\b(?:tengo|hay)\b",
+            r"\b(?:cocinar|comer)\b.*\b(?:con\s+lo\s+que|sin\s+comprar)\b",
+        )
+        return any(re.search(pattern, lowered) for pattern in advice_patterns)
 
     def _remember_context(self, state, path):
         if not path:
@@ -255,7 +277,17 @@ class WebChatService:
         folder = {"status": "none", "candidates": []}
         existence_question = False
 
-        if local_action:
+        if self._food_advice_intent(text):
+            self._emit(progress, "route_rule", action="food/advise", reason="read_only_food_advice")
+            parsed = {
+                "action": "food",
+                "domain": "recipes",
+                "food_action": "advise",
+                "advisor": True,
+                "complexity": 4,
+                "confidence": 1.0,
+            }
+        elif local_action:
             self._emit(progress, "route_local", action=local_action, reason="read_only_filesystem_question")
             self._emit(progress, "folder_resolver_started", context_path=context_path)
             existence_question = bool(re.search(r"\bhay\s+(?:una?\s+)?carpeta\b", lowered))
@@ -290,8 +322,16 @@ class WebChatService:
             parsed["action"] = local_action
             parsed["path"] = folder["path"]
             parsed["dir"] = folder["path"]
+            if local_action == "list_files" and re.search(r"\b(fotos?|im[aá]genes?)\b", lowered):
+                parsed["extensions"] = [".jpg", ".jpeg", ".png", ".webp", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"]
         elif local_action and folder["status"] == "none" and folder.get("reason") != "no_folder_terms":
-            reply = "No pude ubicar esa carpeta dentro de Google Drive. Decime el nombre exacto o desde qué carpeta querés buscar."
+            if folder.get("reason") == "stale_index":
+                reply = (
+                    "Esa carpeta estaba registrada en ADA, pero ya no está disponible en el disco o en "
+                    "Google Drive local. Revisá que Drive esté sincronizado y volvé a intentar."
+                )
+            else:
+                reply = "No pude ubicar esa carpeta dentro de Google Drive. Decime el nombre exacto o desde qué carpeta querés buscar."
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · resolver de carpetas", "resolver": folder}, 200
         # Folder/file questions with a known path must not fall through to the
@@ -365,6 +405,14 @@ class WebChatService:
                     None,
                 )
                 reply = f"Sí, hay una carpeta Fotos en {photos}." if photos else f"No encontré una carpeta Fotos en {output.get('dir')}."
+            elif (
+                isinstance(output, dict)
+                and output.get("action") == "list_files"
+                and re.search(r"\b(cu[aá]nt[oa]s?|cantidad|total)\b", lowered)
+            ):
+                noun = "fotos" if re.search(r"\b(fotos?|im[aá]genes?)\b", lowered) else "archivos"
+                count = output.get("count", len(output.get("files") or []))
+                reply = f"Hay {count} {noun} en {output.get('dir')}."
             else:
                 reply = text_from_result(output)
         if isinstance(output, dict) and not output.get("error") and output.get("dir"):
