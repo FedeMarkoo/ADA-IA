@@ -72,7 +72,7 @@ class IntentRouter:
                 ollama_model=self.config.get("models", {}).get("router") or self.config.get("router_model"),
                 temperature=0,
                 max_tokens=600,
-                timeout=self.config.get("router_timeout", 45),
+                timeout=self.config.get("router_timeout", 8),
                 format=self._schema("router"),
             )
             logger.info("router raw=%s", str(raw)[:1000])
@@ -120,7 +120,7 @@ class IntentRouter:
                 prompt,
                 temperature=0,
                 max_tokens=180,
-                timeout=self.config.get("router_timeout", 45),
+                timeout=self.config.get("router_timeout", 8),
                 format=self._schema("food_verify"),
             )
             result = self._decode(raw)
@@ -154,7 +154,7 @@ class IntentRouter:
                 prompt,
                 temperature=0,
                 max_tokens=400,
-                timeout=self.config.get("router_timeout", 45),
+                timeout=self.config.get("router_timeout", 8),
                 format=self._schema("food"),
             )
             candidate = self._decode(raw)

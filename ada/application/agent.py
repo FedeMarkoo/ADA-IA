@@ -122,7 +122,9 @@ class Agent:
 
         prompt = self.prompt_builder.task(task, self.lang)
         model_name = self.model_manager.ensure_model(task, role=task.get("model_role", "chat"))
-        call_options = {"ollama_model": model_name} if provider == "ollama" and model_name else {}
+        call_options = {"timeout": self.cfg.get("model_timeout", 25)}
+        if provider == "ollama" and model_name:
+            call_options["ollama_model"] = model_name
         try:
             result = self.model_manager.call(provider, prompt, complexity=task["complexity"], **call_options)
             self.mem.record_task(task, result, provider=provider, success=True)
@@ -139,7 +141,8 @@ class Agent:
             if provider != "ollama" and self.model_manager.available().get("ollama"):
                 try:
                     result = self.model_manager.call(
-                        "ollama", prompt, complexity=task["complexity"], ollama_model=model_name or None
+                        "ollama", prompt, complexity=task["complexity"], ollama_model=model_name or None,
+                        timeout=self.cfg.get("model_timeout", 25),
                     )
                     self.mem.record_task(task, result, provider="ollama", success=True)
                     return {"model": "ollama (fallback)", "result": result}

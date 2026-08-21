@@ -50,7 +50,7 @@
       "status": "active"
     },
     "google-drive": {
-      "transport": "streamable-http",
+      "type": "sse",
       "url": "https://drivemcp.googleapis.com/mcp/v1",
       "description": "Servidor MCP oficial de Google Drive",
       "status": "active"

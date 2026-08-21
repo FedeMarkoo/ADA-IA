@@ -3,6 +3,12 @@
   "web_framework": "asgi",
   "ollama_url": "http://127.0.0.1:11434",
   "engine_provider": "ollama",
+  "router_timeout": 8,
+  "model_timeout": 25,
+  "chat_timeout_seconds": 30,
+  "folder_resolver_timeout": 4,
+  "folder_probe_timeout": 0.75,
+  "folder_max_probes": 40,
   "models": {
     "chat": "llama3.2:3b",
     "vision": "qwen2.5vl:3b",

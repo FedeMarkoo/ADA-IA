@@ -13,6 +13,7 @@ from typing import Optional
 
 from ada.application.services.responses import text_from_result
 from ada.interfaces.i18n import tr
+from ada.application.services.folder_resolver import FolderResolver
 
 logger = logging.getLogger("ada.web_chat")
 
@@ -67,45 +68,52 @@ class WebChatService:
         self.agent = agent
         self.config = config or getattr(agent, "cfg", {})
         self._memory = getattr(agent, "mem", None)
+        self.folder_resolver = FolderResolver(self.config, self._memory)
+
+    @staticmethod
+    def _emit(progress, phase, **details):
+        if progress:
+            progress(phase, details)
+
+    @staticmethod
+    def _filesystem_intent(text):
+        """Classify safe read-only filesystem questions without an LLM."""
+        lowered = text.lower()
+        if re.search(r"\b(ruta|ubicaci[oó]n|d[oó]nde est[aá])\b", lowered) and re.search(
+            r"\b(carpetas?|directorios?|archivos?|documentos?|fotos?|im[aá]genes?)\b", lowered
+        ):
+            return "resolve_path"
+        read_words = r"(?:qu[eé]|cu[aá]l(?:es)?|hay|tiene|tienen|listar|lista|listame|listá|mostrar|mostrá|ver|adentro|dentro|contenido)"
+        if re.search(r"\b(carpetas?|directorios?)\b", lowered) and re.search(rf"\b{read_words}\b", lowered):
+            return "list_dirs"
+        if re.search(r"\b(archivos?|ficheros?|documentos?|fotos?|im[aá]genes?)\b", lowered) and re.search(
+            rf"\b{read_words}\b|\bruta\b", lowered
+        ):
+            return "list_files"
+        return None
+
+    def _remember_context(self, state, path):
+        if not path:
+            return
+        state.current_path = str(path)
+        if self._memory and getattr(state, "session_id", None) and hasattr(self._memory, "save_folder_context"):
+            self._memory.save_folder_context(state.session_id, str(path))
 
     @staticmethod
     def _alias_key(text):
         return re.sub(r"\s+", " ", re.sub(r"[^\wáéíóúüñ ]", " ", text.lower())).strip()
 
     def _dynamic_path(self, text):
-        """Resolve remembered or unique folder names below ADA's configured base."""
-        key = self._alias_key(text)
-        if not key:
-            return None
-        if self._memory:
-            remembered = self._memory.get_folder_alias(key)
-            if remembered and Path(remembered["path"]).is_dir():
-                return remembered["path"]
-        base = Path(os.path.expanduser(str(self.config.get("base_dir") or "~/GoogleDrive")))
-        if not base.is_dir():
-            return None
-        stopwords = {"las", "los", "la", "el", "de", "del", "en", "fotos", "foto", "archivos", "carpeta", "carpetas"}
-        terms = [term for term in re.findall(r"[\wáéíóúüñ]+", key) if term not in stopwords and len(term) > 1]
-        if not terms:
-            return None
-        matches = []
-        try:
-            for folder in base.rglob("*"):
-                if folder.is_dir() and all(term in folder.name.lower() for term in terms):
-                    matches.append(folder)
-                    if len(matches) > 1:
-                        return None
-        except OSError:
-            return None
-        if len(matches) == 1:
-            resolved = str(matches[0].resolve())
-            if self._memory:
-                self._memory.save_folder_alias(key, resolved)
-            return resolved
-        return None
+        """Resolve a named folder through the bounded resolver."""
+        result = self.folder_resolver.resolve(text)
+        return result.get("path") if result.get("status") == "resolved" else None
 
     def _resolve_path(self, text):
         clean = self._alias_key(text)
+        if clean in {"fotos", "foto", "imagenes", "imágenes", "pictures", "photos"}:
+            resolved = self.folder_resolver.resolve_label("Fotos", context_path=str(self.folder_resolver._base()))
+            if resolved.get("status") == "resolved":
+                return resolved["path"]
         # A phrase such as “las fotos de Sofía” must be searched dynamically;
         # the generic word “fotos” must not short-circuit it to ~/Pictures.
         if clean in _PATH_ALIASES or re.match(r"^[~/]", text.strip()):
@@ -138,7 +146,12 @@ class WebChatService:
                 filesystem_action = "list_dirs"
             if filesystem_action in {"list_dirs", "list_files"}:
                 payload["action"] = filesystem_action
-                payload.setdefault("recursive", True)
+                # Never recurse implicitly.  This is especially important for
+                # Google Drive mounts (GVFS): a recursive walk can block while
+                # the mount is paging remote entries and makes a simple root
+                # question look like a dead request.  Recursive traversal must
+                # be an explicit user/router decision.
+                payload.setdefault("recursive", False)
             elif filesystem_action == "list_photos":
                 payload.update({"action": "list_files", "extensions": [".jpg", ".jpeg", ".png", ".webp"]})
             elif filesystem_action == "group_files":
@@ -168,10 +181,11 @@ class WebChatService:
             payload.setdefault("path", parsed.get("path"))
         return action, payload
 
-    def handle(self, text, state, lang=None):
+    def handle(self, text, state, lang=None, progress=None):
         text = str(text or "").strip()
         if not text:
             return {"error": "empty_message", "message": tr("empty_message", lang)}, 400
+        self._emit(progress, "received", message=text)
         if lang:
             self.agent.lang = lang
         if len(text.split()) <= 3 and re.fullmatch(
@@ -235,13 +249,59 @@ class WebChatService:
                 return {"reply": reply, "model": result.get("model", "tool"), "result": output}, 200
             state.pending_path_action = None
 
-        parsed = self.agent.parse_prompt(text)
+        lowered = text.lower()
+        local_action = self._filesystem_intent(text)
+        context_path = getattr(state, "current_path", None)
+        folder = {"status": "none", "candidates": []}
+        existence_question = False
+
+        if local_action:
+            self._emit(progress, "route_local", action=local_action, reason="read_only_filesystem_question")
+            self._emit(progress, "folder_resolver_started", context_path=context_path)
+            existence_question = bool(re.search(r"\bhay\s+(?:una?\s+)?carpeta\b", lowered))
+            content_of_photos = bool(
+                re.search(r"\b(adentro|dentro|contenido)\b", lowered) and re.search(r"\bfotos?\b", lowered)
+            )
+            if existence_question and context_path:
+                folder = {"status": "resolved", "path": context_path, "source": "session_context", "confidence": 1.0}
+            elif content_of_photos:
+                folder = self.folder_resolver.resolve_label("Fotos", context_path=context_path)
+            else:
+                folder = self.folder_resolver.resolve(text, context_path=context_path)
+            self._emit(progress, "folder_resolver_finished", **folder)
+            parsed = {"action": local_action, "complexity": 1}
+        else:
+            self._emit(progress, "router_model_started")
+            parsed = self.agent.parse_prompt(text)
+            self._emit(progress, "router_model_finished", action=parsed.get("action"), confidence=parsed.get("confidence"))
+
+        if folder["status"] == "ambiguous" and re.search(r"\b(fotos?|archivos?|carpetas?|documentos?|ruta)\b", lowered):
+            choices = "\n".join(f"{i + 1}. {path}" for i, path in enumerate(folder["candidates"]))
+            reply = f"Encontré varias carpetas posibles:\n{choices}\nDecime cuál querés usar."
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · resolver de carpetas", "folder_candidates": folder["candidates"]}, 200
+        if local_action == "resolve_path" and folder["status"] == "resolved":
+            self._remember_context(state, folder["path"])
+            reply = f"La ruta es {folder['path']}."
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · resolver de carpetas", "path": folder["path"], "resolver": folder}, 200
+        if folder["status"] == "resolved" and local_action:
+            parsed = dict(parsed or {})
+            parsed["action"] = local_action
+            parsed["path"] = folder["path"]
+            parsed["dir"] = folder["path"]
+        elif local_action and folder["status"] == "none" and folder.get("reason") != "no_folder_terms":
+            reply = "No pude ubicar esa carpeta dentro de Google Drive. Decime el nombre exacto o desde qué carpeta querés buscar."
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · resolver de carpetas", "resolver": folder}, 200
         # Folder/file questions with a known path must not fall through to the
         # generic chat model (which can ask for the path again).
-        lowered = text.lower()
-        if self._resolve_path(text) and re.search(r"\b(archivos?|ficheros?|documentos?|fotos?)\b", lowered):
+        static_path = _resolve_path_alias(text) if not local_action and folder["status"] != "resolved" else folder.get("path")
+        if static_path and re.search(r"\b(archivos?|ficheros?|documentos?|fotos?)\b", lowered):
             parsed = dict(parsed or {})
             parsed["action"] = "list_files"
+            parsed.setdefault("path", static_path)
+            parsed.setdefault("dir", static_path)
             parsed.setdefault("complexity", 1)
         action_name = parsed.get("action")
         if action_name in {None, "ask", "suggest"}:
@@ -279,12 +339,38 @@ class WebChatService:
             "prompt": text,
             "complexity": parsed.get("complexity", 3),
         }
+        self._emit(progress, "capability_started", capability=action, payload=payload)
         result = self.agent.decide_and_run(task)
         output = result.get("result", result)
+        self._emit(
+            progress,
+            "capability_finished",
+            capability=action,
+            ok=not bool(output.get("error")) if isinstance(output, dict) else True,
+            error=output.get("error") if isinstance(output, dict) else None,
+        )
         if isinstance(output, dict) and output.get("error") == "confirmation_required":
             state.pending_action = task
             reply = tr("confirmation_required", lang)
         else:
-            reply = text_from_result(output)
+            if (
+                isinstance(output, dict)
+                and output.get("action") == "list_dirs"
+                and existence_question
+                and re.search(r"\bcarpetas?\b", lowered)
+                and re.search(r"\bfotos?\b", lowered)
+            ):
+                photos = next(
+                    (path for path in output.get("dirs", []) if Path(path).name.casefold() == "fotos"),
+                    None,
+                )
+                reply = f"Sí, hay una carpeta Fotos en {photos}." if photos else f"No encontré una carpeta Fotos en {output.get('dir')}."
+            else:
+                reply = text_from_result(output)
+        if isinstance(output, dict) and not output.get("error") and output.get("dir"):
+            self._remember_context(state, output["dir"])
+            if output.get("action") == "list_dirs" and self._memory and hasattr(self._memory, "index_folders"):
+                indexed = self._memory.index_folders(output["dir"], output.get("dirs") or [])
+                self._emit(progress, "folder_index_updated", parent=output["dir"], indexed=indexed)
         self._remember(state, text, reply)
         return {"reply": reply, "model": result.get("model", "tool"), "result": output}, 200

@@ -8,6 +8,22 @@
       "ttft_ms": 120.4,
       "total_tokens": 128,
       "duration_seconds": 2.64
+    },
+    {
+      "model": "qwen2.5:7b",
+      "timestamp": "2026-08-21T14:07:14Z",
+      "tokens_per_second": 5.58,
+      "ttft_ms": 2793.09,
+      "total_tokens": 92,
+      "duration_seconds": 25.172
+    },
+    {
+      "model": "deepseek-r1:8b",
+      "timestamp": "2026-08-21T14:10:03Z",
+      "tokens_per_second": 5.47,
+      "ttft_ms": 1353.28,
+      "total_tokens": 128,
+      "duration_seconds": 33.012
     }
   ]
 }

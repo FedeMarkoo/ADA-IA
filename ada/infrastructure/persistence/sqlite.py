@@ -10,6 +10,7 @@ import os
 import re
 import sqlite3
 import threading
+import unicodedata
 from pathlib import Path
 
 
@@ -111,6 +112,15 @@ class Memory:
                 use_count INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS folder_contexts (
+                session TEXT PRIMARY KEY, path TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS folder_index (
+                path TEXT PRIMARY KEY, name TEXT NOT NULL, normalized_name TEXT NOT NULL,
+                parent_path TEXT NOT NULL, last_seen TEXT DEFAULT CURRENT_TIMESTAMP,
+                use_count INTEGER NOT NULL DEFAULT 0
+            );
             CREATE TABLE IF NOT EXISTS conversation_messages (
                 id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 session TEXT NOT NULL DEFAULT 'main', role TEXT NOT NULL,
@@ -147,6 +157,8 @@ class Memory:
             CREATE INDEX IF NOT EXISTS idx_memories_kind_id ON memories(kind, id DESC);
             CREATE INDEX IF NOT EXISTS idx_conversation_session_id ON conversation_messages(session, id DESC);
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(id DESC);
+            CREATE INDEX IF NOT EXISTS idx_folder_index_name ON folder_index(normalized_name);
+            CREATE INDEX IF NOT EXISTS idx_folder_index_parent ON folder_index(parent_path);
         """)
         columns = {row[1] for row in self.conn.execute("PRAGMA table_info(router_catalog)").fetchall()}
         if "keywords" not in columns:
@@ -770,6 +782,61 @@ class Memory:
                 (alias, path, float(confidence)),
             )
             self.conn.commit()
+
+    def get_folder_context(self, session):
+        row = self.conn.execute("SELECT path FROM folder_contexts WHERE session=?", (session,)).fetchone()
+        return row["path"] if row else None
+
+    def save_folder_context(self, session, path):
+        with self._lock:
+            self.conn.execute(
+                """INSERT INTO folder_contexts(session, path) VALUES (?, ?)
+                   ON CONFLICT(session) DO UPDATE SET path=excluded.path, updated_at=CURRENT_TIMESTAMP""",
+                (session, path),
+            )
+            self.conn.commit()
+
+    def clear_folder_context(self, session):
+        with self._lock:
+            self.conn.execute("DELETE FROM folder_contexts WHERE session=?", (session,))
+            self.conn.commit()
+
+    @staticmethod
+    def _normalize_folder_name(value):
+        value = unicodedata.normalize("NFKD", str(value).casefold())
+        value = "".join(char for char in value if not unicodedata.combining(char))
+        return re.sub(r"\s+", " ", re.sub(r"[^\w ]", " ", value)).strip()
+
+    def index_folders(self, parent_path, paths):
+        rows = []
+        for value in paths:
+            path = Path(value).expanduser().absolute()
+            rows.append((str(path), path.name, self._normalize_folder_name(path.name), str(Path(parent_path).expanduser().absolute())))
+        if not rows:
+            return 0
+        with self._lock:
+            self.conn.executemany(
+                """INSERT INTO folder_index(path,name,normalized_name,parent_path) VALUES(?,?,?,?)
+                   ON CONFLICT(path) DO UPDATE SET name=excluded.name,
+                   normalized_name=excluded.normalized_name, parent_path=excluded.parent_path,
+                   last_seen=CURRENT_TIMESTAMP""",
+                rows,
+            )
+            self.conn.commit()
+        return len(rows)
+
+    def search_folders(self, terms, limit=20):
+        normalized = [self._normalize_folder_name(term) for term in terms if self._normalize_folder_name(term)]
+        if not normalized:
+            return []
+        where = " AND ".join("normalized_name LIKE ?" for _ in normalized)
+        params = [f"%{term}%" for term in normalized] + [max(1, int(limit))]
+        rows = self.conn.execute(
+            f"SELECT path,name,parent_path,last_seen,use_count FROM folder_index WHERE {where} "
+            "ORDER BY use_count DESC, last_seen DESC LIMIT ?",
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def close(self):
         with self._lock:
