@@ -15,16 +15,16 @@
     "router": "llama3.2:3b"
   },
   "base_dir": "~/GoogleDrive",
-  "data_dir": "~/Desktop/ADA_Data",
-  "db_path": "~/Desktop/ADA_Data/memory.db",
+  "data_dir": "/home/fedemarkoo/Desktop/ADA_Data",
+  "db_path": "/home/fedemarkoo/Desktop/ADA_Data/memory.db",
   "memory_encryption": false,
-  "photo_root": "~/GoogleDrive/Fotos",
+  "photo_root": "/home/fedemarkoo/GoogleDrive/Fotos",
   "photo_executor": "thread",
   "allowed_roots": [
-    "~/GoogleDrive",
-    "~/Desktop/ADA_Data",
-    "~/Desktop/Fotos",
-    "~/Desktop"
+    "/home/fedemarkoo/GoogleDrive",
+    "/home/fedemarkoo/Desktop/ADA_Data",
+    "/home/fedemarkoo/Desktop/Fotos",
+    "/home/fedemarkoo/Desktop"
   ],
   "allowed_commands": [],
   "gmail_token_path": "~/.config/ada/gmail-token.json",
@@ -34,53 +34,73 @@
   "instagram_user_id": "",
   "instagram_access_token": "",
   "instagram_publish_script": "",
-  "instagram_profile_dir": "~/.config/ada/instagram-profile",
+  "instagram_profile_dir": "/home/fedemarkoo/.config/ada/instagram-profile",
   "model_catalog": [
     {
       "name": "llama3.2:1b",
-      "roles": ["router", "fast"],
+      "roles": [
+        "router",
+        "fast"
+      ],
       "quality_tier": "tiny",
       "min_ram_gb": 2,
       "description": "Ultrarrápido y liviano para clasificación de intents y tareas simples."
     },
     {
       "name": "llama3.2:3b",
-      "roles": ["chat", "router"],
+      "roles": [
+        "chat",
+        "router"
+      ],
       "quality_tier": "small",
       "min_ram_gb": 4,
       "description": "Equilibrio ideal entre velocidad y razonamiento para el día a día."
     },
     {
       "name": "qwen2.5:3b",
-      "roles": ["chat", "router"],
+      "roles": [
+        "chat",
+        "router"
+      ],
       "quality_tier": "small",
       "min_ram_gb": 4,
       "description": "Excelente seguimiento de instrucciones y código ligero."
     },
     {
       "name": "qwen2.5:7b",
-      "roles": ["chat", "tools", "coding"],
+      "roles": [
+        "chat",
+        "tools",
+        "coding"
+      ],
       "quality_tier": "medium",
       "min_ram_gb": 8,
       "description": "Potente modelo para tool-calling, código y razonamiento complejo."
     },
     {
       "name": "qwen2.5vl:3b",
-      "roles": ["vision"],
+      "roles": [
+        "vision"
+      ],
       "quality_tier": "small",
       "min_ram_gb": 6,
       "description": "Comprensión visual y OCR para fotos, documentos y capturas."
     },
     {
       "name": "deepseek-r1:8b",
-      "roles": ["chat", "reasoning"],
+      "roles": [
+        "chat",
+        "reasoning"
+      ],
       "quality_tier": "medium",
       "min_ram_gb": 10,
       "description": "Capacidades avanzadas de razonamiento paso a paso (Chain of Thought)."
     },
     {
       "name": "nomic-embed-text",
-      "roles": ["embedding"],
+      "roles": [
+        "embedding"
+      ],
       "quality_tier": "small",
       "min_ram_gb": 2,
       "description": "Modelo de embeddings de alto rendimiento para búsqueda semántica."
@@ -89,15 +109,31 @@
   "model_policy": {
     "chat": {
       "preferred": "qwen2.5:7b",
-      "fallbacks": ["deepseek-r1:8b", "llama3.2:3b"]
-    },
-    "vision": {
-      "preferred": "qwen2.5vl:3b",
-      "fallbacks": []
+      "fallbacks": [
+        "qwen3:8b",
+        "deepseek-r1:8b",
+        "llama3.2:3b"
+      ]
     },
     "router": {
       "preferred": "llama3.2:3b",
-      "fallbacks": ["llama3.2:1b"]
+      "fallbacks": []
+    },
+    "reasoning": {
+      "preferred": "deepseek-r1:8b",
+      "fallbacks": []
+    },
+    "coding": {
+      "preferred": "qwen2.5:7b",
+      "fallbacks": []
+    },
+    "tools": {
+      "preferred": "qwen2.5:7b",
+      "fallbacks": []
+    },
+    "vision": {
+      "preferred": null,
+      "fallbacks": []
     }
   },
   "confirm_risky": true,
@@ -130,5 +166,12 @@
       "auto_execute": true,
       "complexity": 4
     }
-  }
+  },
+  "ollama_num_thread": 6,
+  "ollama_num_ctx": 8192,
+  "ollama_keep_alive": "10m",
+  "cpu_limit_percent": 75,
+  "ollama_temperature": 0.2,
+  "model_selection_mode": "hybrid",
+  "adaptive_models": false
 }

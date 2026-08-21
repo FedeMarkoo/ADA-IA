@@ -120,6 +120,9 @@ def validate_config(config):
     privacy = config.get("privacy_default", "normal")
     if privacy not in {"normal", "high"}:
         raise ValueError("privacy_default debe ser 'normal' o 'high'.")
+    selection_mode = config.get("model_selection_mode", "manual")
+    if selection_mode not in {"manual", "light", "hybrid", "turbo"}:
+        raise ValueError("model_selection_mode debe ser manual, light, hybrid o turbo.")
     catalog = config.get("model_catalog", [])
     if not isinstance(catalog, (list, dict)):
         raise ValueError("model_catalog debe ser una lista u objeto de modelos.")
