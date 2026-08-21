@@ -3,8 +3,9 @@ import unittest
 from pathlib import Path
 
 from ada.application.memory import MemoryLayers
-from ada.infrastructure.credentials import CredentialStore
+from ada.infrastructure.credentials import CredentialStore, SecureVault
 from ada.infrastructure.persistence.sqlite import Memory
+import sqlite3
 
 
 class MemoryCredentialTests(unittest.TestCase):
@@ -53,6 +54,52 @@ class MemoryCredentialTests(unittest.TestCase):
             store.set("token", "secret")
             self.assertEqual(store.get("token"), "secret")
             self.assertEqual(store.path.stat().st_mode & 0o777, 0o600)
+
+    def test_utils_credentials_reexport_and_compatibility(self):
+        from utils.credentials import SecureVault as UtilsVault, CredentialStore as UtilsStore
+        from ada.infrastructure.credentials import SecureVault as AdaVault, CredentialStore as AdaStore
+        self.assertIs(UtilsVault, AdaVault)
+        self.assertIs(UtilsStore, AdaStore)
+
+    def test_secure_vault_isolated_sqlite_round_trip(self):
+        try:
+            from cryptography.fernet import Fernet
+        except ImportError:
+            self.skipTest("cryptography no instalada")
+        with tempfile.TemporaryDirectory() as directory:
+            vault_file = Path(directory) / "vault.db"
+            key = Fernet.generate_key().decode("utf-8")
+            vault = SecureVault(vault_file, master_key=key)
+
+            # Store string and json secrets
+            vault.set("telegram_bot_token", "12345:SecretBotToken", meta={"service": "telegram"})
+            vault.set("gmail_oauth", {"access_token": "ya29.xyz", "refresh_token": "1//abc"})
+
+            # Verify retrieval
+            self.assertEqual(vault.get("telegram_bot_token"), "12345:SecretBotToken")
+            self.assertEqual(vault.get("gmail_oauth")["access_token"], "ya29.xyz")
+            self.assertTrue(vault.has("telegram_bot_token"))
+            self.assertFalse(vault.has("non_existent"))
+
+            # Verify raw SQLite data is encrypted
+            with sqlite3.connect(str(vault_file)) as conn:
+                raw_row = conn.execute("SELECT ciphertext FROM secrets WHERE name = 'telegram_bot_token'").fetchone()
+                self.assertIsNotNone(raw_row)
+                self.assertNotIn(b"SecretBotToken", raw_row[0])
+
+            # Verify list_keys
+            keys = vault.list_keys()
+            self.assertEqual(len(keys), 2)
+            self.assertEqual(keys[0]["name"], "gmail_oauth")
+            self.assertEqual(keys[1]["name"], "telegram_bot_token")
+
+            # Verify delete
+            self.assertTrue(vault.delete("gmail_oauth"))
+            self.assertIsNone(vault.get("gmail_oauth"))
+            self.assertEqual(len(vault.list_keys()), 1)
+
+            # Verify file mode
+            self.assertEqual(vault_file.stat().st_mode & 0o777, 0o600)
 
     def test_memory_encrypts_sensitive_rows_and_retrieves_them(self):
         try:

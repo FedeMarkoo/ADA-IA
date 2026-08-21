@@ -1,34 +1,56 @@
-# ADA
+# 📚 Documentación Técnica de ADA-IA
 
-Índice general de documentación de ADA. El contenido está separado por
- responsabilidad: proyecto y capabilities.
+Bienvenido a la documentación técnica de **ADA-IA**, un ecosistema modular de inteligencia artificial local, gestión de servidores MCP (*Model Context Protocol*), orquestación de modelos LLM con Ollama y herramientas especializadas.
 
-## Por dónde empezar
+---
 
-- [Documentación del proyecto](project/README.md)
-- [Capabilities](capabilities/README.md)
+## 🗂️ Índice General de Contenidos
 
-## Separación de contenidos
+### 🏗️ 1. Arquitectura y Diseño
+- [**Visión General de Arquitectura**](architecture/overview.md): Principios de diseño, orquestador multiagente y router de intenciones.
+- [**Estructura del Proyecto**](architecture/folder-structure.md): Jerarquía de carpetas en la raíz y límites de responsabilidad.
+- [**Flujo de Datos y Razonamiento**](architecture/data-flow.md): Ciclo de vida de peticiones, políticas de seguridad y ejecución.
 
-- `docs/project/`: objetivos, arquitectura, funcionalidades e integración de
-  ADA como producto.
-- `docs/capabilities/`: contratos y uso de capacidades ejecutables individuales.
+### 🔌 2. Servidores y Herramientas MCP (`mcps/`)
+- [**Protocolo y Servidores MCP**](mcps/README.md): Estándar Stdio JSON-RPC 2.0, registro en `mcps/config.json` y catálogo de tools.
+- [**MCP Photography & Lightroom**](mcps/photography.md): Análisis técnico, decodificación RAW, sidecars XMP, ráfagas y catálogo.
+- [**MCP Food & Pantry**](mcps/food.md): Lista de compras, recetario inteligente, stock de alacena y presupuestos.
+- [**MCP Filesystem**](mcps/filesystem.md): Operaciones seguras sobre el sistema de archivos con allowlist.
+- [**MCP System Runner**](mcps/system.md): Ejecución de comandos del sistema con allowlist de prefijos.
+- [**MCP Web Search**](mcps/web_search.md): Motor de búsqueda en vivo con DuckDuckGo.
 
-## Instalación rápida
+### 🖥️ 3. Gestor Web y API (`dashboard/` & `ada/interfaces/web/`)
+- [**Dashboard Gestor Web**](dashboard/README.md): Interfaz gráfica en React 19, monitoreo de salud y panel de control.
+- [**Referencia de la API REST & SSE**](dashboard/api-reference.md): Endpoints de estado, chat en streaming, control de MCPs y diagnóstico.
+
+### 🧠 4. Modelos de Lenguaje & Visión (`models/`)
+- [**Catálogo de Modelos & Benchmarks**](models/README.md): Asignación de roles por hardware, catálogo y métricas de velocidad.
+- [**Modelfiles Personalizados**](models/modelfiles.md): Definición de prompts de sistema y parámetros para Ollama.
+
+### 📱 5. Integración Telegram (`telegram/`)
+- [**Servidor Independiente de Telegram**](telegram/README.md): Daemon desacoplado, polling de mensajes y reenvío seguro.
+
+### 📖 6. Guías de Uso y Operaciones
+- [**Inicio Rápido e Instalación**](guides/getting-started.md): Requisitos previos, entorno virtual y puesta en marcha.
+- [**Desarrollo y Testing**](guides/development.md): Ejecución de tests con pytest, estándares de código y buenas prácticas.
+- [**Operaciones y Diagnóstico**](guides/operations.md): Herramienta Health Doctor, auto-reparación y auditoría de eventos.
+
+### 📜 7. Historial y Roadmap
+- [**Changelog**](CHANGELOG.md): Registro de cambios por versión.
+- [**Hoja de Ruta y Mejoras**](mejoras.md): Estado de features y visión a futuro.
+
+---
+
+## ⚡ Inicio Rápido (3 Comandos)
 
 ```bash
-cd /Users/home/Desktop/ADA
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/ada serve
+# 1. Instalar entorno y dependencias
+python3 -m venv .venv && source .venv/bin/activate && pip install -e .
+
+# 2. Ejecutar tests unitarios (100% pasando)
+pytest
+
+# 3. Iniciar el Gestor Web ADA Hub
+python -m ada.interfaces.web.server
 ```
-
-La interfaz web queda disponible en `http://127.0.0.1:5005/`.
-
-ADA usa Ollama como motor local actual. Los modelos configurados son
-`llama3.2:3b` para conversación y `qwen2.5vl:3b` para visión.
-
-## Principios
-
-ADA debe ser local-first, multiagente, modular, observable, reversible y
-cuidadosa con la privacidad y los recursos del equipo. La autonomía debe surgir
-de eventos y reglas autorizadas, no de prompts ocultos ni acciones irreversibles.
+Accedé al gestor web en tu navegador: **[http://127.0.0.1:5005](http://127.0.0.1:5005)**.

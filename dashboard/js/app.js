@@ -91,7 +91,18 @@ export const api = {
   startTelegram() { return this.request('/api/telegram/start', { method: 'POST' }); },
   stopTelegram() { return this.request('/api/telegram/stop', { method: 'POST' }); },
   restartTelegram() { return this.request('/api/telegram/restart', { method: 'POST' }); },
-  testTelegram() { return this.request('/api/telegram/test', { method: 'POST' }); },
+  testTelegram(body = {}) { return this.request('/api/telegram/test', { method: 'POST', body: JSON.stringify(body) }); },
+  getTelegramHistory() { return this.request('/api/telegram/history'); },
+  saveTelegramConfig(data) { return this.request('/api/telegram/config', { method: 'POST', body: JSON.stringify(data) }); },
+
+  // Encrypted Vault (vault.db)
+  getVaultKeys() { return this.request('/api/vault/keys'); },
+  setVaultSecret(name, value, meta = {}) {
+    return this.request('/api/vault/set', { method: 'POST', body: JSON.stringify({ name, value, meta }) });
+  },
+  deleteVaultSecret(name) {
+    return this.request('/api/vault/' + encodeURIComponent(name), { method: 'DELETE' });
+  },
 
   // Models & Policy
   getModelsCatalog() { return this.request('/api/models/catalog'); },
@@ -1744,10 +1755,78 @@ function SettingsView({ showToast }) {
     }
   };
 
-  return h('section', { className: 'tab-view active', id: 'tab-settings' }, [
-    h('div', { className: 'card max-w-3xl' }, [
+  // Vault State
+  const [vaultKeys, setVaultKeys] = useState([]);
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState('telegram_bot_token');
+  const [customKeyName, setCustomKeyName] = useState('');
+  const [secretValue, setSecretValue] = useState('');
+  const [secretDescription, setSecretDescription] = useState('');
+  const [savingSecret, setSavingSecret] = useState(false);
+
+  const fetchVaultKeys = useCallback(async () => {
+    try {
+      setVaultLoading(true);
+      const res = await api.getVaultKeys();
+      if (res.ok) {
+        setVaultKeys(res.keys || []);
+      }
+    } catch (err) {
+      console.warn('Error fetching vault keys:', err);
+    } finally {
+      setVaultLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchVaultKeys();
+  }, [fetchVaultKeys]);
+
+  const handleSaveSecret = async (e) => {
+    e.preventDefault();
+    const finalKey = selectedPreset === 'custom' ? customKeyName.trim() : selectedPreset;
+    if (!finalKey) {
+      showToast('Ingresá el nombre del secreto', 'warning');
+      return;
+    }
+    if (!secretValue.trim()) {
+      showToast('El valor del secreto no puede estar vacío', 'warning');
+      return;
+    }
+    setSavingSecret(true);
+    try {
+      showToast('Cifrando y guardando en vault.db...', 'info');
+      const res = await api.setVaultSecret(finalKey, secretValue.trim(), {
+        description: secretDescription.trim() || `Clave para ${finalKey}`,
+      });
+      showToast(res.message || 'Secreto cifrado guardado', 'success');
+      setSecretValue('');
+      setSecretDescription('');
+      if (selectedPreset === 'custom') setCustomKeyName('');
+      fetchVaultKeys();
+    } catch (err) {
+      showToast('Error al guardar secreto: ' + err.message, 'danger');
+    } finally {
+      setSavingSecret(false);
+    }
+  };
+
+  const handleDeleteSecret = async (name) => {
+    if (!confirm(`¿Estás seguro de eliminar el secreto cifrado '${name}' de la bóveda?`)) return;
+    try {
+      const res = await api.deleteVaultSecret(name);
+      showToast(res.message || 'Secreto eliminado', 'info');
+      fetchVaultKeys();
+    } catch (err) {
+      showToast('Error al eliminar: ' + err.message, 'danger');
+    }
+  };
+
+  return h('section', { className: 'tab-view active flex flex-col gap-6', id: 'tab-settings' }, [
+    // 1. General Config Card
+    h('div', { className: 'card max-w-4xl' }, [
       h('div', { className: 'card-header' }, [
-        h('h3', { className: 'card-title' }, 'Configuración del Asistente'),
+        h('h3', { className: 'card-title' }, '⚙️ Configuración del Asistente'),
         h('button', { className: 'btn btn-primary', onClick: handleSave }, 'Guardar Configuración'),
       ]),
       h('div', { className: 'card-body flex flex-col gap-5' }, [
@@ -1799,11 +1878,114 @@ function SettingsView({ showToast }) {
         ]),
       ]),
     ]),
+
+    // 2. Encrypted Vault (vault.db) Card
+    h('div', { className: 'card max-w-4xl', key: 'vault-settings-card' }, [
+      h('div', { className: 'card-header' }, [
+        h('div', { className: 'flex items-center gap-2' }, [
+          h('span', { className: 'text-xl' }, '🔐'),
+          h('div', null, [
+            h('h3', { className: 'card-title' }, 'Bóveda Cifrada de Credenciales & Tokens (vault.db)'),
+            h('p', { className: 'text-xs text-muted' }, 'Base de datos SQLite aislada (~/Desktop/ADA_Data/vault.db) cifrada con AES-256 (Fernet) y protegida por el SO.'),
+          ]),
+        ]),
+        h('span', { className: 'badge badge-success' }, 'AES-256 Cifrado en Reposo'),
+      ]),
+      h('div', { className: 'card-body flex flex-col gap-6' }, [
+        // List of Stored Secrets
+        h('div', null, [
+          h('h4', { className: 'text-sm font-semibold text-white mb-3' }, 'Secretos Almacenados Cifrados:'),
+          vaultKeys.length === 0
+            ? h('p', { className: 'text-xs text-muted p-3 bg-surface-elevated rounded-lg' }, 'No hay credenciales almacenadas en la bóveda aún.')
+            : h('div', { className: 'flex flex-col gap-2' },
+                vaultKeys.map(k =>
+                  h('div', {
+                    key: k.name,
+                    className: 'p-3 bg-surface-elevated rounded-lg flex items-center justify-between border border-subtle'
+                  }, [
+                    h('div', { className: 'flex items-center gap-3' }, [
+                      h('span', { className: 'badge badge-accent font-mono' }, k.name),
+                      h('span', { className: 'text-xs text-muted' }, k.meta?.description || 'Credencial cifrada'),
+                      h('span', { className: 'text-xs text-muted' }, `(Actualizado: ${k.updated_at})`),
+                    ]),
+                    h('button', {
+                      className: 'btn btn-sm btn-ghost text-danger',
+                      onClick: () => handleDeleteSecret(k.name),
+                      title: 'Eliminar secreto de la bóveda'
+                    }, '🗑️ Eliminar')
+                  ])
+                )
+              )
+        ]),
+
+        // Add / Update Secret Form
+        h('form', { onSubmit: handleSaveSecret, className: 'p-4 bg-surface-elevated rounded-lg border border-subtle flex flex-col gap-4' }, [
+          h('h4', { className: 'text-sm font-semibold text-white' }, '➕ Agregar o Actualizar Secreto Cifrado:'),
+          h('div', { className: 'grid grid-cols-2 gap-4' }, [
+            h('div', { className: 'form-group' }, [
+              h('label', { className: 'form-label text-xs' }, 'Tipo de Secreto / Servicio'),
+              h('select', {
+                className: 'form-select font-mono text-sm',
+                value: selectedPreset,
+                onChange: (e) => setSelectedPreset(e.target.value),
+              }, [
+                h('option', { value: 'telegram_bot_token' }, '📱 Telegram Bot Token (telegram_bot_token)'),
+                h('option', { value: 'openai_api_key' }, '🤖 OpenAI API Key (openai_api_key)'),
+                h('option', { value: 'anthropic_api_key' }, '🧠 Anthropic API Key (anthropic_api_key)'),
+                h('option', { value: 'openrouter_api_key' }, '🌐 OpenRouter API Key (openrouter_api_key)'),
+                h('option', { value: 'groq_api_key' }, '⚡ Groq API Key (groq_api_key)'),
+                h('option', { value: 'gmail_oauth' }, '📧 Gmail OAuth Token (gmail_oauth)'),
+                h('option', { value: 'instagram_access_token' }, '📸 Instagram Access Token (instagram_access_token)'),
+                h('option', { value: 'custom' }, '✏️ Clave Personalizada...'),
+              ]),
+            ]),
+            selectedPreset === 'custom'
+              ? h('div', { className: 'form-group' }, [
+                  h('label', { className: 'form-label text-xs' }, 'Nombre de la Clave'),
+                  h('input', {
+                    type: 'text',
+                    className: 'form-input font-mono text-sm',
+                    placeholder: 'ej: stripe_api_key',
+                    value: customKeyName,
+                    onChange: (e) => setCustomKeyName(e.target.value),
+                  }),
+                ])
+              : h('div', { className: 'form-group' }, [
+                  h('label', { className: 'form-label text-xs' }, 'Descripción Opcional'),
+                  h('input', {
+                    type: 'text',
+                    className: 'form-input text-sm',
+                    placeholder: 'ej: Token principal',
+                    value: secretDescription,
+                    onChange: (e) => setSecretDescription(e.target.value),
+                  }),
+                ]),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label text-xs' }, 'Valor del Secreto (Se cifrará antes de guardarse en el disco)'),
+            h('input', {
+              type: 'password',
+              className: 'form-input font-mono text-sm',
+              placeholder: 'Pegá aquí tu clave secreta o token...',
+              value: secretValue,
+              onChange: (e) => setSecretValue(e.target.value),
+            }),
+          ]),
+          h('div', { className: 'flex justify-end' }, [
+            h('button', {
+              type: 'submit',
+              className: 'btn btn-primary',
+              disabled: savingSecret,
+            }, savingSecret ? 'Cifrando...' : '🔐 Guardar Cifrado en vault.db'),
+          ]),
+        ]),
+      ]),
+    ]),
   ]);
 }
 
 // =============================================================================
-// Telegram View Component
+// Telegram View Component (Standard ADA Design System)
 // =============================================================================
 function TelegramView({ showToast }) {
   const [status, setStatus] = useState(null);
@@ -1811,11 +1993,23 @@ function TelegramView({ showToast }) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showConfigCard, setShowConfigCard] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+  const [allowedChatsInput, setAllowedChatsInput] = useState('');
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [history, setHistory] = useState([]);
 
   const fetchStatus = useCallback(async () => {
     try {
-      const data = await api.getTelegramStatus();
+      const [data, hist] = await Promise.all([
+        api.getTelegramStatus(),
+        api.getTelegramHistory().catch(() => ({ messages: [] })),
+      ]);
       setStatus(data);
+      setHistory(hist?.messages || []);
+      if (!data.token_set) {
+        setShowConfigCard(true);
+      }
     } catch (err) {
       showToast('Error al obtener estado de Telegram: ' + err.message, 'danger');
     } finally {
@@ -1825,7 +2019,7 @@ function TelegramView({ showToast }) {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 8000);
+    const interval = setInterval(fetchStatus, 4000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
@@ -1875,15 +2069,39 @@ function TelegramView({ showToast }) {
     }
   };
 
+  const handleSaveConfig = async (e) => {
+    if (e) e.preventDefault();
+    if (!tokenInput.trim() && !status?.token_set) {
+      showToast('Ingresá un token de Telegram válido', 'warning');
+      return;
+    }
+    setSavingConfig(true);
+    try {
+      showToast('Guardando configuración de Telegram...', 'info');
+      const res = await api.saveTelegramConfig({
+        token: tokenInput.trim(),
+        allowed_chat_ids: allowedChatsInput,
+      });
+      showToast(res.message || 'Configuración guardada', 'success');
+      setTokenInput('');
+      setShowConfigCard(false);
+      fetchStatus();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'danger');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
   const handleTestConnection = async () => {
     setTesting(true);
     setTestResult(null);
     try {
-      showToast('Verificando token con la API de Telegram (getMe)...', 'info');
-      const res = await api.testTelegram();
+      showToast('Verificando token con la API oficial de Telegram (getMe)...', 'info');
+      const res = await api.testTelegram(tokenInput.trim() ? { token: tokenInput.trim() } : {});
       if (res.ok) {
         setTestResult(res.bot);
-        showToast(`Conexión exitosa con @${res.bot?.username || 'bot'}`, 'success');
+        showToast(`¡Conexión exitosa! Bot: @${res.bot?.username || 'bot'}`, 'success');
       } else {
         showToast('Error de API Telegram: ' + (res.error || 'Token inválido'), 'danger');
         setTestResult({ error: res.error });
@@ -1896,129 +2114,322 @@ function TelegramView({ showToast }) {
   };
 
   if (loading && !status) {
-    return h('div', { className: 'loading-state' }, 'Cargando estado de Telegram Bot...');
+    return h('div', { className: 'initial-loader' }, [
+      h('div', { className: 'loader-spinner mb-4' }),
+      h('p', { className: 'text-muted' }, 'Cargando estado del servicio Telegram Bot...'),
+    ]);
   }
 
   const isRunning = status?.running === true;
 
-  return h('div', { className: 'telegram-view animate-fade-in' }, [
-    // Header Hero Banner
-    h('div', { className: 'hero-banner mb-6' }, [
-      h('div', { className: 'hero-content' }, [
-        h('div', { className: 'hero-badge' }, [
-          h('span', { className: `status-dot ${isRunning ? 'status-online' : 'status-offline'}` }),
-          h('span', null, isRunning ? 'Daemon de Telegram en Ejecución (Long-polling)' : 'Daemon de Telegram Detenido'),
-        ]),
-        h('h2', { className: 'hero-title' }, '📱 Servidor & Bot de Telegram'),
-        h('p', { className: 'hero-subtitle' },
-          'Servicio de mensajería independiente que reenvía texto, fotos y comandos a los endpoints de razonamiento de ADA.'
-        ),
-      ]),
-      h('div', { className: 'hero-actions' }, [
-        isRunning
-          ? h('button', {
-              className: 'btn btn-danger',
-              onClick: handleStop,
-              disabled: actionLoading,
-            }, '⏹️ Detener Bot')
-          : h('button', {
-              className: 'btn btn-primary',
-              onClick: handleStart,
-              disabled: actionLoading || !status?.token_set,
-            }, '▶️ Iniciar Bot'),
-        h('button', {
-          className: 'btn btn-secondary',
-          onClick: handleRestart,
-          disabled: actionLoading || !isRunning,
-        }, '🔄 Reiniciar'),
-        h('button', {
-          className: 'btn btn-outline',
-          onClick: handleTestConnection,
-          disabled: testing || !status?.token_set,
-        }, testing ? '⌛ Probando...' : '🔍 Probar Conexión (getMe)'),
-      ]),
-    ]),
-
-    // Metrics Grid
-    h('div', { className: 'metrics-grid mb-6' }, [
-      h('div', { className: 'metric-card' }, [
-        h('div', { className: 'metric-header' }, [
-          h('span', { className: 'metric-title' }, 'Estado del Servicio'),
-          h('span', { className: 'metric-icon' }, '⚡'),
-        ]),
-        h('div', { className: 'metric-value' }, isRunning ? 'ONLINE' : 'OFFLINE'),
-        h('div', { className: 'metric-subtitle' }, isRunning ? 'Polling activo cada ' + status.poll_seconds + 's' : 'Proceso detenido'),
-      ]),
-      h('div', { className: 'metric-card' }, [
-        h('div', { className: 'metric-header' }, [
-          h('span', { className: 'metric-title' }, 'Token de Bot'),
-          h('span', { className: 'metric-icon' }, '🔑'),
-        ]),
-        h('div', { className: 'metric-value font-mono', style: { fontSize: '1.1rem' } }, status?.token_masked || 'No configurado'),
-        h('div', { className: 'metric-subtitle' }, status?.token_set ? 'Token cargado en entorno' : 'Falta TELEGRAM_BOT_TOKEN'),
-      ]),
-      h('div', { className: 'metric-card' }, [
-        h('div', { className: 'metric-header' }, [
-          h('span', { className: 'metric-title' }, 'Chats Autorizados'),
-          h('span', { className: 'metric-icon' }, '🛡️'),
-        ]),
-        h('div', { className: 'metric-value' }, (status?.allowed_chat_ids?.length || 0) > 0 ? `${status.allowed_chat_ids.length} chat(s)` : 'Todos (Público)'),
-        h('div', { className: 'metric-subtitle' }, (status?.allowed_chat_ids?.length || 0) > 0 ? status.allowed_chat_ids.join(', ') : 'Sin restricción de ID'),
-      ]),
-      h('div', { className: 'metric-card' }, [
-        h('div', { className: 'metric-header' }, [
-          h('span', { className: 'metric-title' }, 'Carpeta de Descargas'),
-          h('span', { className: 'metric-icon' }, '📥'),
-        ]),
-        h('div', { className: 'metric-value font-mono', style: { fontSize: '1rem' } }, status?.inbox || 'telegram_inbox'),
-        h('div', { className: 'metric-subtitle' }, 'Almacenamiento de imágenes recibidas'),
-      ]),
-    ]),
-
-    // Test API Identity Card (if available)
-    testResult && !testResult.error ? h('div', { className: 'card mb-6 animate-fade-in' }, [
+  return h('section', { className: 'tab-view active', id: 'tab-telegram' }, [
+    // 1. Control Bar Card
+    h('div', { className: 'card mb-6', key: 'telegram-control-card' }, [
       h('div', { className: 'card-header' }, [
-        h('h3', { className: 'card-title' }, '🤖 Identidad del Bot Verificada por Telegram'),
-        h('span', { className: 'badge badge-success' }, 'Verificado'),
+        h('div', { className: 'flex items-center gap-3' }, [
+          h('span', { className: 'text-xl' }, '📱'),
+          h('div', null, [
+            h('div', { className: 'flex items-center gap-2' }, [
+              h('h3', { className: 'card-title' }, 'Control del Servidor Telegram Bot'),
+              h('span', { className: `badge ${isRunning ? 'badge-success' : 'badge-danger'}` },
+                isRunning ? 'En ejecución (Long-polling)' : 'Detenido'
+              ),
+            ]),
+            h('p', { className: 'text-xs text-muted mt-1' },
+              'Daemon independiente desacoplado que reenvía texto, fotos y comandos a los endpoints de razonamiento de ADA.'
+            ),
+          ]),
+        ]),
+        h('div', { className: 'flex items-center gap-2' }, [
+          h('button', {
+            className: `btn btn-sm ${showConfigCard ? 'btn-primary' : 'btn-outline'}`,
+            onClick: () => setShowConfigCard(!showConfigCard),
+          }, '🔑 ' + (status?.token_set ? 'Cambiar Token' : 'Configurar Token')),
+          isRunning
+            ? h('button', {
+                className: 'btn btn-sm btn-danger',
+                onClick: handleStop,
+                disabled: actionLoading,
+              }, '⏹ Detener Bot')
+            : h('button', {
+                className: 'btn btn-sm btn-primary',
+                onClick: handleStart,
+                disabled: actionLoading || !status?.token_set,
+              }, '▶ Iniciar Bot'),
+          h('button', {
+            className: 'btn btn-sm btn-secondary',
+            onClick: handleRestart,
+            disabled: actionLoading || !isRunning,
+          }, '🔄 Reiniciar'),
+          h('button', {
+            className: 'btn btn-sm btn-outline',
+            onClick: handleTestConnection,
+            disabled: testing || (!status?.token_set && !tokenInput.trim()),
+          }, testing ? '⌛ Probando...' : '🔍 Probar Conexión (getMe)'),
+          h('button', {
+            className: 'btn btn-sm btn-ghost',
+            onClick: fetchStatus,
+          }, '🔄'),
+        ]),
+      ]),
+    ]),
+
+    // 2. Token Configuration Form Card (Collapsible)
+    showConfigCard ? h('div', { className: 'card mb-6 animate-fade-in', key: 'token-config-card' }, [
+      h('div', { className: 'card-header' }, [
+        h('div', { className: 'flex items-center gap-2' }, [
+          h('h3', { className: 'card-title' }, '🔑 Configuración de Token & Autenticación de Telegram'),
+          h('span', { className: 'badge badge-success' }, 'Cifrado en vault.db (AES-256)'),
+        ]),
+        h('button', { className: 'btn btn-sm btn-ghost', onClick: () => setShowConfigCard(false) }, '✕ Cerrar'),
       ]),
       h('div', { className: 'card-body' }, [
-        h('div', { className: 'grid grid-cols-2 gap-4' }, [
-          h('div', null, [
-            h('span', { className: 'text-muted block text-xs uppercase mb-1' }, 'Nombre del Bot'),
-            h('span', { className: 'font-semibold text-lg' }, testResult.first_name || 'ADA Bot'),
+        h('form', { onSubmit: handleSaveConfig, className: 'flex flex-col gap-4' }, [
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Token del Bot (entregado por @BotFather)'),
+            h('input', {
+              type: 'text',
+              className: 'form-input font-mono',
+              placeholder: status?.token_masked ? `Token actual cargado (${status.token_masked}) - Ingresá uno nuevo para actualizar` : 'Ej: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz',
+              value: tokenInput,
+              onChange: (e) => setTokenInput(e.target.value),
+            }),
+            h('span', { className: 'text-xs text-muted mt-1 block' }, 'Se guardará cifrado en ~/Desktop/ADA_Data/vault.db mediante utils.credentials.'),
           ]),
-          h('div', null, [
-            h('span', { className: 'text-muted block text-xs uppercase mb-1' }, 'Username'),
-            h('span', { className: 'badge badge-accent' }, `@${testResult.username}`),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Chat IDs Autorizados (Opcional, separados por comas)'),
+            h('input', {
+              type: 'text',
+              className: 'form-input font-mono',
+              placeholder: 'Ej: 123456789, 987654321 (dejar vacío para acceso libre)',
+              value: allowedChatsInput,
+              onChange: (e) => setAllowedChatsInput(e.target.value),
+            }),
+            h('span', { className: 'text-xs text-muted mt-1 block' }, 'Si agregás IDs, el bot solo responderá a esos usuarios específicos.'),
           ]),
-          h('div', null, [
-            h('span', { className: 'text-muted block text-xs uppercase mb-1' }, 'ID de Telegram'),
-            h('span', { className: 'font-mono text-sm' }, testResult.id),
-          ]),
-          h('div', null, [
-            h('span', { className: 'text-muted block text-xs uppercase mb-1' }, 'Grupos Permitidos'),
-            h('span', { className: 'text-sm' }, testResult.can_join_groups ? 'Sí' : 'No'),
+          h('div', { className: 'flex justify-end gap-2' }, [
+            h('button', {
+              type: 'button',
+              className: 'btn btn-secondary',
+              onClick: handleTestConnection,
+              disabled: testing || (!status?.token_set && !tokenInput.trim()),
+            }, testing ? 'Probando...' : '🔍 Probar Token'),
+            h('button', {
+              type: 'submit',
+              className: 'btn btn-primary',
+              disabled: savingConfig,
+            }, savingConfig ? 'Guardando...' : '💾 Guardar Configuración'),
           ]),
         ]),
       ]),
     ]) : null,
 
-    // Standalone CLI Execution Guide Card
-    h('div', { className: 'card' }, [
+    // 3. 4 Stat KPI Cards Grid
+    h('div', { className: 'grid grid-cols-4 gap-4 mb-6', key: 'telegram-stats' }, [
+      // KPI 1: Estado del Proceso
+      h('div', { className: 'card stat-card', key: 'stat-status' }, [
+        h('div', { className: 'stat-header' }, [
+          h('span', { className: 'stat-label' }, 'Estado del Proceso'),
+          h('span', { className: `status-indicator ${isRunning ? 'online' : 'offline'}` }),
+        ]),
+        h('div', { className: `stat-value ${isRunning ? 'text-success' : 'text-muted'}` }, isRunning ? 'ONLINE' : 'OFFLINE'),
+        h('div', { className: 'stat-footer' }, isRunning ? `Polling cada ${status.poll_seconds}s activo` : 'Daemon detenido'),
+      ]),
+
+      // KPI 2: Token Configurado
+      h('div', { className: 'card stat-card', key: 'stat-token' }, [
+        h('div', { className: 'stat-header' }, [
+          h('span', { className: 'stat-label' }, 'Token de Bot'),
+          h('span', { className: 'badge ' + (status?.token_set ? 'badge-primary' : 'badge-warning') },
+            status?.token_set ? 'Cargado' : 'Falta Token'
+          ),
+        ]),
+        h('div', { className: 'stat-value font-mono text-base', style: { fontSize: '1.05rem', wordBreak: 'break-all' } },
+          status?.token_masked || 'No configurado'
+        ),
+        h('div', { className: 'stat-footer' }, status?.token_set ? 'Token cifrado en vault.db' : 'Falta configurar token'),
+      ]),
+
+      // KPI 3: Chats Autorizados
+      h('div', { className: 'card stat-card', key: 'stat-chats' }, [
+        h('div', { className: 'stat-header' }, [
+          h('span', { className: 'stat-label' }, 'Seguridad de Acceso'),
+          h('span', { className: 'badge badge-accent' },
+            (status?.allowed_chat_ids?.length || 0) > 0 ? 'Filtro Activo' : 'Público'
+          ),
+        ]),
+        h('div', { className: 'stat-value' },
+          (status?.allowed_chat_ids?.length || 0) > 0 ? `${status.allowed_chat_ids.length} Chat(s)` : 'Acceso Libre'
+        ),
+        h('div', { className: 'stat-footer' },
+          (status?.allowed_chat_ids?.length || 0) > 0 ? `IDs: ${status.allowed_chat_ids.join(', ')}` : 'Sin restricción de ID'
+        ),
+      ]),
+
+      // KPI 4: Mensajes Recibidos
+      h('div', { className: 'card stat-card', key: 'stat-inbox' }, [
+        h('div', { className: 'stat-header' }, [
+          h('span', { className: 'stat-label' }, 'Mensajes Recibidos'),
+          h('span', { className: 'badge badge-outline' }, `${history.length} Total`),
+        ]),
+        h('div', { className: 'stat-value' }, `${history.length} Interacción(es)`),
+        h('div', { className: 'stat-footer' }, 'Sesiones activas vía Telegram'),
+      ]),
+    ]),
+
+    // 4. Bot Identity Card (if test succeeds)
+    testResult && !testResult.error ? h('div', { className: 'card mb-6', key: 'telegram-identity-card' }, [
       h('div', { className: 'card-header' }, [
-        h('h3', { className: 'card-title' }, '💻 Ejecución como Proceso Aislado'),
-        h('span', { className: 'badge badge-info' }, 'CLI & Background'),
+        h('div', { className: 'flex items-center gap-2' }, [
+          h('h3', { className: 'card-title' }, '🤖 Identidad del Bot Verificada por Telegram'),
+          h('span', { className: 'badge badge-success' }, 'Conexión Exitosa'),
+        ]),
       ]),
       h('div', { className: 'card-body' }, [
-        h('p', { className: 'text-sm text-muted mb-4' },
-          'Telegram está diseñado como un servidor/bot completamente independiente en la raíz `telegram/bot.py`. Podés ejecutarlo directamente en una terminal separada, en un contenedor Docker o como un servicio systemd:'
-        ),
-        h('pre', { className: 'code-block' },
-          `# 1. Exportar el token entregado por BotFather\nexport TELEGRAM_BOT_TOKEN="tu-token-aqui"\nexport TELEGRAM_ALLOWED_CHAT_IDS="123456789" # opcional\n\n# 2. Iniciar el bot de Telegram de forma aislada\n.venv/bin/python telegram/bot.py`
-        ),
-        h('div', { className: 'flex justify-between items-center mt-4 text-xs text-muted' }, [
-          h('span', null, '💡 Se comunicará con ADA vía REST HTTP en http://127.0.0.1:5005'),
-          h('span', { className: 'badge badge-outline' }, 'Endpoints: /api/chat & /api/status'),
+        h('div', { className: 'grid grid-cols-4 gap-4' }, [
+          h('div', { className: 'p-3 bg-surface-elevated rounded-lg' }, [
+            h('span', { className: 'text-xs text-muted uppercase font-bold block mb-1' }, 'Nombre del Bot'),
+            h('span', { className: 'font-semibold text-base' }, testResult.first_name || 'ADA Bot'),
+          ]),
+          h('div', { className: 'p-3 bg-surface-elevated rounded-lg' }, [
+            h('span', { className: 'text-xs text-muted uppercase font-bold block mb-1' }, 'Username Oficial'),
+            h('span', { className: 'badge badge-accent text-sm' }, `@${testResult.username}`),
+          ]),
+          h('div', { className: 'p-3 bg-surface-elevated rounded-lg' }, [
+            h('span', { className: 'text-xs text-muted uppercase font-bold block mb-1' }, 'ID de Telegram'),
+            h('span', { className: 'font-mono text-sm' }, testResult.id),
+          ]),
+          h('div', { className: 'p-3 bg-surface-elevated rounded-lg' }, [
+            h('span', { className: 'text-xs text-muted uppercase font-bold block mb-1' }, 'Soporte de Grupos'),
+            h('span', { className: 'badge ' + (testResult.can_join_groups ? 'badge-success' : 'badge-warning') },
+              testResult.can_join_groups ? 'Habilitado' : 'Deshabilitado'
+            ),
+          ]),
+        ]),
+      ]),
+    ]) : null,
+
+    // 5. Live Received Messages & Conversations Table
+    h('div', { className: 'card mb-6', key: 'telegram-conversations-card' }, [
+      h('div', { className: 'card-header' }, [
+        h('div', { className: 'flex items-center gap-2' }, [
+          h('h3', { className: 'card-title' }, '💬 Mensajes & Sesiones de Conversación en Vivo'),
+          h('span', { className: 'badge badge-primary' }, `${history.length} Registrados`),
+        ]),
+        h('button', { className: 'btn btn-sm btn-ghost', onClick: fetchStatus }, '🔄 Refrescar'),
+      ]),
+      h('div', { className: 'card-body p-0' }, [
+        history.length === 0
+          ? h('div', { className: 'p-6 text-center text-muted' }, [
+              h('p', { className: 'text-base mb-1' }, '📭 Aún no se han registrado mensajes recibidos por Telegram.'),
+              h('p', { className: 'text-xs' }, 'Iniciá el bot y enviá un mensaje desde la app de Telegram. Al responder, vas a ver aquí el Conversation ID, usuario (@username), texto y respuesta en tiempo real.'),
+            ])
+          : h('div', { className: 'overflow-x-auto' }, [
+              h('table', { className: 'table w-full', style: { width: '100%', borderCollapse: 'collapse' } }, [
+                h('thead', null, [
+                  h('tr', { style: { borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' } }, [
+                    h('th', { className: 'p-3 text-xs text-muted uppercase' }, 'Conversation ID'),
+                    h('th', { className: 'p-3 text-xs text-muted uppercase' }, 'Usuario / Remitente'),
+                    h('th', { className: 'p-3 text-xs text-muted uppercase' }, 'Chat ID'),
+                    h('th', { className: 'p-3 text-xs text-muted uppercase' }, 'Mensaje Recibido'),
+                    h('th', { className: 'p-3 text-xs text-muted uppercase' }, 'Respuesta de ADA'),
+                    h('th', { className: 'p-3 text-xs text-muted uppercase' }, 'Fecha / Hora'),
+                  ]),
+                ]),
+                h('tbody', null,
+                  history.map((item, idx) =>
+                    h('tr', {
+                      key: item.id || idx,
+                      style: { borderBottom: '1px solid var(--border-subtle)' },
+                      className: 'hover:bg-surface-elevated'
+                    }, [
+                      h('td', { className: 'p-3' }, [
+                        h('span', { className: 'badge badge-accent font-mono text-xs' }, item.conversation_id || 'telegram_unknown'),
+                      ]),
+                      h('td', { className: 'p-3' }, [
+                        h('div', { className: 'flex flex-col' }, [
+                          h('span', { className: 'font-semibold text-sm text-white' }, item.first_name || 'Usuario'),
+                          item.username ? h('span', { className: 'text-xs text-accent' }, item.username) : null,
+                        ]),
+                      ]),
+                      h('td', { className: 'p-3 font-mono text-xs text-muted' }, item.chat_id || '-'),
+                      h('td', { className: 'p-3 text-sm text-secondary', style: { maxWidth: '260px', wordBreak: 'break-word' } }, item.message),
+                      h('td', { className: 'p-3 text-sm text-white', style: { maxWidth: '320px', wordBreak: 'break-word' } }, item.reply),
+                      h('td', { className: 'p-3 text-xs text-muted whitespace-nowrap' }, item.timestamp),
+                    ])
+                  )
+                ),
+              ]),
+            ]),
+      ]),
+    ]),
+
+    // 6. Instructions & Execution Card
+    h('div', { className: 'grid grid-cols-2 gap-6', key: 'telegram-details' }, [
+      // Left Card: CLI Execution
+      h('div', { className: 'card', key: 'cli-guide' }, [
+        h('div', { className: 'card-header' }, [
+          h('div', { className: 'flex items-center gap-2' }, [
+            h('h3', { className: 'card-title' }, '💻 Ejecución como Proceso Aislado'),
+            h('span', { className: 'badge badge-primary' }, 'CLI & Background'),
+          ]),
+        ]),
+        h('div', { className: 'card-body' }, [
+          h('p', { className: 'text-sm text-muted mb-3' },
+            'Telegram está diseñado como un servidor/bot completamente independiente en `telegram/bot.py`. Podés ejecutarlo directamente en una terminal separada, en un contenedor o como servicio systemd:'
+          ),
+          h('pre', {
+            className: 'p-4 rounded-lg bg-base font-mono text-xs text-secondary overflow-x-auto border border-subtle leading-relaxed',
+            style: { background: '#0a0d14' }
+          },
+            `# 1. Configurar token en la Bóveda Cifrada (vault.db)\n.venv/bin/python -c "from utils.credentials import SecureVault; SecureVault().set('telegram_bot_token', 'TU_TOKEN')"\n\n# 2. Iniciar el bot de Telegram de forma aislada\n.venv/bin/python telegram/bot.py`
+          ),
+          h('div', { className: 'flex justify-between items-center mt-3 text-xs text-muted' }, [
+            h('span', null, '💡 Se comunica con ADA vía REST HTTP'),
+            h('span', { className: 'badge badge-outline' }, 'http://127.0.0.1:5005'),
+          ]),
+        ]),
+      ]),
+
+      // Right Card: Features & Capabilities
+      h('div', { className: 'card', key: 'features-guide' }, [
+        h('div', { className: 'card-header' }, [
+          h('div', { className: 'flex items-center gap-2' }, [
+            h('h3', { className: 'card-title' }, '⚡ Capacidades del Bot'),
+            h('span', { className: 'badge badge-accent' }, 'Disponibles'),
+          ]),
+        ]),
+        h('div', { className: 'card-body' }, [
+          h('ul', { className: 'flex flex-col gap-3 text-sm text-secondary' }, [
+            h('li', { className: 'flex items-start gap-2' }, [
+              h('span', { className: 'text-success' }, '✓'),
+              h('div', null, [
+                h('strong', { className: 'text-white' }, 'Consultas en Lenguaje Natural: '),
+                h('span', null, 'Respuestas con razonamiento paso a paso impulsadas por el LLM local.'),
+              ]),
+            ]),
+            h('li', { className: 'flex items-start gap-2' }, [
+              h('span', { className: 'text-success' }, '✓'),
+              h('div', null, [
+                h('strong', { className: 'text-white' }, 'Recepción y Análisis de Fotos: '),
+                h('span', null, 'Descarga automática en la carpeta externa y evaluación técnica/semántica.'),
+              ]),
+            ]),
+            h('li', { className: 'flex items-start gap-2' }, [
+              h('span', { className: 'text-success' }, '✓'),
+              h('div', null, [
+                h('strong', { className: 'text-white' }, 'Gestión de Compras y Alacena: '),
+                h('span', null, 'Comandos para agregar productos a la lista de compras o consultar recetas.'),
+              ]),
+            ]),
+            h('li', { className: 'flex items-start gap-2' }, [
+              h('span', { className: 'text-success' }, '✓'),
+              h('div', null, [
+                h('strong', { className: 'text-white' }, 'Identificación de Sesión y Usuario: '),
+                h('span', null, 'Cada remitente posee su conversation_id, nombre y @username en tiempo real.'),
+              ]),
+            ]),
+          ]),
         ]),
       ]),
     ]),

@@ -225,7 +225,7 @@ class HealthDoctor:
         )
 
     def _check_memory(self) -> HealthCheckItem:
-        db_path = self.config.get("db_path", "memory.db")
+        db_path = self.config.get("db_path", str(Path.home() / "Desktop" / "ADA_Data" / "memory.db"))
         try:
             conn = sqlite3.connect(str(Path(db_path).expanduser()))
             cursor = conn.cursor()
@@ -286,8 +286,6 @@ class HealthDoctor:
             )
 
     def _check_telegram(self) -> HealthCheckItem:
-        import os
-        token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip() or self.config.get("telegram", {}).get("token", "").strip()
         from ada.interfaces.web.server import get_telegram_service_status
         status = get_telegram_service_status()
 
@@ -300,13 +298,13 @@ class HealthDoctor:
                 message="Bot de Telegram activo y recibiendo mensajes",
                 details=status,
             )
-        elif token or status.get("configured"):
+        elif status.get("token_set") or status.get("configured"):
             return HealthCheckItem(
                 id="telegram_bot",
                 name="Servicio Telegram Bot",
                 category="services",
                 status="warning",
-                message="Token de Telegram presente pero el servicio del bot está detenido",
+                message="Token cargado en vault.db pero el daemon de Telegram está detenido",
                 details=status,
                 can_auto_fix=True,
                 fix_action_id="start_telegram",
@@ -317,8 +315,8 @@ class HealthDoctor:
                 id="telegram_bot",
                 name="Servicio Telegram Bot",
                 category="services",
-                status="ok",
-                message="Telegram Bot no configurado (opcional - requiere TELEGRAM_BOT_TOKEN)",
+                status="warning",
+                message="Bot de Telegram detenido (falta cargar el token en la Bóveda vault.db)",
                 details=status,
             )
 

@@ -8,25 +8,46 @@ from pathlib import Path
 def _path(value, base):
     if not value:
         return value
-    path = Path(os.path.expanduser(str(value)))
+    val_str = str(value)
+    if val_str.startswith("~"):
+        return str(Path(os.path.expanduser(val_str)).resolve())
+    path = Path(val_str)
     return str(path if path.is_absolute() else (base / path).resolve())
 
 
 def load_config(path=None, project_root=None):
-    root = Path(project_root or Path(__file__).resolve().parents[2])
-    config_path = Path(path or os.environ.get("ADA_CONFIG", root / "config.json")).expanduser()
+    root = Path(project_root or Path(__file__).resolve().parents[1])
+    if path:
+        config_path = Path(path).expanduser()
+    elif os.environ.get("ADA_CONFIG"):
+        config_path = Path(os.environ["ADA_CONFIG"]).expanduser()
+    elif (root / "ada" / "config.json").exists():
+        config_path = root / "ada" / "config.json"
+    else:
+        config_path = root / "config.json"
+
+    default_data_dir = Path.home() / "Desktop" / "ADA_Data"
+    default_db = str(default_data_dir / "memory.db")
     if not config_path.exists():
-        return {"db_path": str(root / "memory.db"), "allowed_roots": [str(Path.home() / "Desktop")]}
+        return {"db_path": default_db, "allowed_roots": [str(default_data_dir), str(Path.home() / "Desktop")]}
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Configuración ADA inválida en {config_path}: {exc}") from exc
     if not isinstance(config, dict):
         raise ValueError("La configuración ADA debe ser un objeto JSON.")
-    config.setdefault("db_path", str(root / "memory.db"))
+    config.setdefault("data_dir", str(default_data_dir))
+    config["data_dir"] = _path(config["data_dir"], root)
+    config.setdefault("db_path", str(Path(config["data_dir"]) / "memory.db"))
     config["db_path"] = _path(config["db_path"], root)
+    if config["db_path"] != ":memory:":
+        try:
+            Path(config["db_path"]).parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
     for key in (
         "photo_root",
+        "inbox",
         "food_profile",
         "lightroom_script",
         "lightroom_db",
@@ -36,7 +57,7 @@ def load_config(path=None, project_root=None):
     ):
         if key in config:
             config[key] = _path(config[key], root)
-    config.setdefault("allowed_roots", [str(Path.home() / "Desktop")])
+    config.setdefault("allowed_roots", [str(default_data_dir), str(Path.home() / "Desktop")])
     if not isinstance(config["allowed_roots"], list):
         raise ValueError("allowed_roots debe ser una lista de carpetas.")
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]

@@ -54,7 +54,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-sqlite",
-        "memory.db"
+        "~/Desktop/ADA_Data/memory.db"
       ],
       "description": "Servidor MCP de base de datos SQLite estándar",
       "status": "active"

@@ -18,7 +18,7 @@ def run(args: Dict[str, Any]) -> Dict[str, Any]:
         else:
             domain = "shopping"
 
-    db_path = args.get("db_path") or args.get("config", {}).get("db_path") or "memory.db"
+    db_path = args.get("db_path") or args.get("config", {}).get("db_path")
     with get_db(db_path) as conn:
         cfg = args.get("config") or {}
         profile_path = args.get("profile") or cfg.get("food_profile") or cfg.get("profile")

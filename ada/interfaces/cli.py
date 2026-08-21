@@ -25,12 +25,13 @@ PROJECT_ROOT = _find_project_root()
 
 
 def load_config():
-    cfg_path = PROJECT_ROOT / "config.json"
+    cfg_path = PROJECT_ROOT / "ada" / "config.json" if (PROJECT_ROOT / "ada" / "config.json").exists() else PROJECT_ROOT / "config.json"
+    default_db = str(Path.home() / "Desktop" / "ADA_Data" / "memory.db")
     try:
         return load_validated_config(cfg_path, PROJECT_ROOT)
     except (OSError, ValueError) as exc:
         logging.getLogger("ada.cli").warning("config_load_failed path=%s error=%s", cfg_path, exc)
-        return {"name": "ADA", "max_threads": 4, "use_mps": False, "db_path": str(PROJECT_ROOT / "memory.db")}
+        return {"name": "ADA", "max_threads": 4, "use_mps": False, "db_path": default_db}
 
 
 def main():
@@ -120,7 +121,8 @@ def main():
 
             serve_web()
         return
-    mem = Memory(cfg.get("db_path", str(Path(__file__).parent / "memory.db")))
+    default_db = str(Path.home() / "Desktop" / "ADA_Data" / "memory.db")
+    mem = Memory(cfg.get("db_path", default_db))
     if args.cmd == "index":
         index_folder(args.dir, mem)
     elif args.cmd == "suggest":
@@ -143,7 +145,7 @@ def main():
                     break
             if path:
                 print("Heuristic: calling index on", path)
-                mem = Memory(cfg.get("db_path", str(Path(__file__).parent / "memory.db")))
+                mem = Memory(cfg.get("db_path", default_db))
                 index_folder(path, mem)
                 return
         if "suggest" in lowered or "organize" in lowered or "orden" in lowered:
@@ -155,7 +157,7 @@ def main():
                     break
             if path:
                 print("Heuristic: calling suggest on", path)
-                mem = Memory(cfg.get("db_path", str(Path(__file__).parent / "memory.db")))
+                mem = Memory(cfg.get("db_path", default_db))
                 suggest_organization(path, mem)
                 return
         # Otherwise, use the agent parser to interpret the prompt.
@@ -192,7 +194,7 @@ def main():
         if action == "index":
             path = parsed.get("path")
             if path:
-                mem = Memory(cfg.get("db_path", str(Path(__file__).parent / "memory.db")))
+                mem = Memory(default_db)
                 index_folder(path, mem)
             else:
                 print("No path detected for indexing")
@@ -200,7 +202,7 @@ def main():
         if action == "suggest":
             path = parsed.get("path")
             if path:
-                mem = Memory(cfg.get("db_path", str(Path(__file__).parent / "memory.db")))
+                mem = Memory(default_db)
                 suggest_organization(path, mem)
             else:
                 print("No path detected for suggest")
