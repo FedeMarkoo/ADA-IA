@@ -28,14 +28,22 @@ class FilesystemHandlers:
             return {"error": f"Ruta no existe: {target}"}
         if not target.is_dir():
             return {"error": f"La ruta no es un directorio: {target}"}
+
+        recursive = bool(args.get("recursive", False))
+        children = target.rglob("*") if recursive else target.iterdir()
         items = []
-        for child in sorted(target.iterdir()):
+        for child in sorted(children):
             items.append({
-                "name": child.name,
+                "name": str(child.relative_to(target)) if recursive else child.name,
                 "is_dir": child.is_dir(),
                 "size_bytes": child.stat().st_size if child.is_file() else None,
             })
-        return {"path": str(target), "total_items": len(items), "items": items}
+        return {
+            "path": str(target),
+            "recursive": recursive,
+            "total_items": len(items),
+            "items": items,
+        }
 
     def read_file(self, args: Dict[str, Any]) -> Dict[str, Any]:
         target = self.check_path(args.get("path", ""))
