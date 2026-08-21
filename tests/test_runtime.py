@@ -73,6 +73,45 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(manager.select_model("chat"), "fast")
         self.assertTrue(manager.model_recommendations()["model_stats"])
 
+    def test_automatic_modes_choose_only_installed_hardware_safe_models(self):
+        manager = ModelManager({"local_runtime": {"auto_start": False}})
+        names = [
+            "llama3.2:3b",
+            "qwen2.5:7b",
+            "qwen3:8b",
+            "deepseek-r1:8b",
+            "deepseek-r1:14b",
+            "deepseek-r1:32b",
+            "qwen2.5-coder:14b",
+            "deepseek-coder-v2:16b",
+        ]
+        installed = [manager._profile_for_model(name) for name in names]
+        hardware = {"ram_gb": 14.9, "cpu_cores": 8, "gpu_backend": "cpu"}
+
+        light = manager.automatic_policy("light", installed, hardware)
+        hybrid = manager.automatic_policy("hybrid", installed, hardware)
+        turbo = manager.automatic_policy("turbo", installed, hardware)
+
+        self.assertEqual(light["chat"]["preferred"], "llama3.2:3b")
+        self.assertEqual(light["router"]["preferred"], "llama3.2:3b")
+        self.assertEqual(hybrid["chat"]["preferred"], "qwen2.5:7b")
+        self.assertEqual(hybrid["reasoning"]["preferred"], "deepseek-r1:8b")
+        self.assertEqual(hybrid["coding"]["preferred"], "qwen2.5:7b")
+        self.assertEqual(turbo["reasoning"]["preferred"], "deepseek-r1:14b")
+        self.assertEqual(turbo["coding"]["preferred"], "deepseek-coder-v2:16b")
+        self.assertNotIn("deepseek-r1:32b", str(turbo))
+
+    def test_task_role_switches_between_chat_reasoning_and_coding(self):
+        self.assertEqual(ModelManager.role_for_task({"prompt": "hola", "complexity": 2}), "chat")
+        self.assertEqual(ModelManager.role_for_task({"prompt": "resolvé este problema", "complexity": 8}), "reasoning")
+        self.assertEqual(ModelManager.role_for_task({"prompt": "refactorizá este código", "complexity": 4}), "coding")
+
+    def test_mode_runtime_settings_scale_with_available_cpu(self):
+        profile = {"cpu_cores": 8, "ram_gb": 14.9}
+        self.assertEqual(ModelManager.runtime_settings_for_mode("light", profile)["ollama_num_thread"], 4)
+        self.assertEqual(ModelManager.runtime_settings_for_mode("hybrid", profile)["ollama_num_thread"], 6)
+        self.assertEqual(ModelManager.runtime_settings_for_mode("turbo", profile)["ollama_num_thread"], 8)
+
 
 if __name__ == "__main__":
     unittest.main()

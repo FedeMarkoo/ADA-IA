@@ -53,6 +53,77 @@ class RealChatFolderResolutionTests(unittest.TestCase):
             self.assertEqual(calls, [])
             self.assertNotIn("Pictures", response["path"])
 
+    def test_colloquial_user_phrase_resolves_without_model_or_pictures_alias(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "GoogleDrive"
+            sofia = base / "Fotos" / "Eventos Sociales" / "2026-08-08 - XV Sofia"
+            sofia.mkdir(parents=True)
+
+            class FakeAgent:
+                cfg = {"base_dir": str(base), "allowed_roots": [str(base)]}
+                mem = None
+
+                def parse_prompt(self, text):
+                    raise AssertionError("La frase coloquial debe usar el resolver local")
+
+                def decide_and_run(self, task):
+                    raise AssertionError("Resolver una ruta no debe ejecutar una capability")
+
+            service = WebChatService(FakeAgent(), FakeAgent.cfg)
+            state = SimpleNamespace(conversation=[], pending_action=None, pending_path_action=None, current_path=None)
+            response, status = service.handle(
+                "che ada, donde estan las fotos de sofia? no me acuerdo la carpeta",
+                state,
+                "es",
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(response["reply"], f"La ruta es {sofia}.")
+            self.assertEqual(Path(state.current_path), sofia)
+
+            response, status = service.handle(
+                "me refiero a las del cumple de 15 de sofia, las tengo en google drive, buscame la carpeta exacta",
+                state,
+                "es",
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(response["reply"], f"La ruta es {sofia}.")
+
+    def test_count_photo_followup_resolves_direct_child_from_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "GoogleDrive"
+            sofia = base / "Fotos" / "Eventos Sociales" / "2026-08-08 - XV Sofia"
+            originals = sofia / "Originales"
+            originals.mkdir(parents=True)
+            for name in ("uno.jpg", "dos.NEF", "tres.png"):
+                (originals / name).write_bytes(b"test")
+            (originals / "notas.txt").write_text("no es una foto", encoding="utf-8")
+
+            class FakeAgent:
+                cfg = {"base_dir": str(base), "allowed_roots": [str(base)]}
+                mem = None
+
+                def parse_prompt(self, text):
+                    raise AssertionError("El seguimiento debe resolverse localmente")
+
+                def decide_and_run(self, task):
+                    payload = task["payload"]
+                    extensions = {value.lower() for value in payload.get("extensions", [])}
+                    files = [
+                        str(path) for path in Path(payload["dir"]).iterdir()
+                        if path.is_file() and (not extensions or path.suffix.lower() in extensions)
+                    ]
+                    return {"result": {"ok": True, "action": "list_files", "dir": payload["dir"], "files": files, "count": len(files)}}
+
+            service = WebChatService(FakeAgent(), FakeAgent.cfg)
+            state = SimpleNamespace(conversation=[], pending_action=None, pending_path_action=None, current_path=None)
+            service.handle("cual es la ruta de las fotos de sofia?", state, "es")
+            response, status = service.handle("y cuantas fotos hay en originales?", state, "es")
+
+            self.assertEqual(status, 200)
+            self.assertEqual(response["reply"], f"Hay 3 fotos en {originals}.")
+            self.assertEqual(Path(state.current_path), originals)
+
     def test_root_phrase_uses_configured_drive_base(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "GoogleDrive"
@@ -114,6 +185,21 @@ class RealChatFolderResolutionTests(unittest.TestCase):
             self.assertEqual(result["source"], "folder_index")
             self.assertEqual(Path(result["path"]), sofia)
             self.assertEqual(memory.get_folder_context("web-session"), str(sofia.parent))
+            memory.close()
+
+    def test_stale_folder_index_is_not_reported_as_an_existing_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "GoogleDrive"
+            base.mkdir()
+            missing = base / "Fotos" / "Originales"
+            memory = Memory(str(Path(tmp) / "memory.db"))
+            memory.index_folders(missing.parent, [missing])
+
+            result = FolderResolver({"base_dir": str(base)}, memory).resolve("fotos en originales")
+
+            self.assertEqual(result["status"], "none")
+            self.assertEqual(result["reason"], "stale_index")
+            self.assertIn(str(missing), result["stale_paths"])
             memory.close()
 
 
