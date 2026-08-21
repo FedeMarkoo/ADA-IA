@@ -1,3 +1,4 @@
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -8,9 +9,10 @@ from telegram.bot import TelegramListener
 
 class ChatPathRegressionTests(unittest.TestCase):
     def test_common_path_aliases_resolve(self):
-        self.assertEqual(_resolve_path_alias("Escritorio"), "~/Desktop".replace("~", __import__("os").path.expanduser("~")))
-        self.assertEqual(_resolve_path_alias("el escritorio"), __import__("os").path.expanduser("~/Desktop"))
-        self.assertEqual(_resolve_path_alias("~/Desktop"), __import__("os").path.expanduser("~/Desktop"))
+        desktop = os.path.expanduser("~/Desktop")
+        self.assertEqual(_resolve_path_alias("Escritorio"), desktop)
+        self.assertEqual(_resolve_path_alias("el escritorio"), desktop)
+        self.assertEqual(_resolve_path_alias("~/Desktop"), desktop)
 
     def test_pending_path_is_resumed_on_follow_up_message(self):
         calls = []
@@ -30,14 +32,14 @@ class ChatPathRegressionTests(unittest.TestCase):
 
         first, status = service.handle("Listame los archivos", state, "es")
         self.assertEqual(status, 200)
-        self.assertTrue(hasattr(state, "pending_path_action"))
-        self.assertIn("ruta", first["reply"].lower() + "carpeta" + first["reply"].lower())
+        self.assertTrue(getattr(state, "pending_path_action", None))
+        self.assertIn("ruta", first["reply"].lower())
 
         second, status = service.handle("Escritorio", state, "es")
         self.assertEqual(status, 200)
         self.assertEqual(second["reply"], "archivos encontrados")
         self.assertFalse(getattr(state, "pending_path_action", None))
-        self.assertEqual(calls[0]["payload"]["dir"], __import__("os").path.expanduser("~/Desktop"))
+        self.assertEqual(calls[0]["payload"]["dir"], os.path.expanduser("~/Desktop"))
 
 
 class TelegramRegressionTests(unittest.TestCase):
@@ -52,19 +54,18 @@ class TelegramRegressionTests(unittest.TestCase):
         self.assertNotIn(123, bot._processed_update_ids)
         self.assertIn(4095, bot._processed_update_ids)
 
-    def test_internal_chat_does_not_retry_side_effecting_request(self):
+    def test_duplicate_update_is_not_processed_twice(self):
         bot = TelegramListener({"telegram": {"token": "test"}})
         bot._invoke_internal_chat = Mock(return_value="respuesta")
         bot.send_message = Mock()
-        bot.handle_update({
+        update = {
             "update_id": 1,
             "message": {"chat": {"id": 10}, "from": {"id": 20}, "text": "hola"},
-        })
-        bot.handle_update({
-            "update_id": 1,
-            "message": {"chat": {"id": 10}, "from": {"id": 20}, "text": "hola"},
-        })
-        self.assertEqual(bot._invoke_internal_chat.call_count, 2)
+        }
+        bot.handle_update(update)
+        bot.handle_update(update)
+        self.assertEqual(bot._invoke_internal_chat.call_count, 1)
+        self.assertEqual(bot.send_message.call_count, 1)
 
 
 if __name__ == "__main__":
