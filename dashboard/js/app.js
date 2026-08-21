@@ -1523,11 +1523,12 @@ function ChatView({ showToast }) {
   const [lang, setLang] = useState('auto');
   const [isStreaming, setIsStreaming] = useState(false);
   const chatBottomRef = useRef(null);
+  const sendingRef = useRef(false);
 
   useEffect(() => {
     api.getConversation().then(data => {
       if (data.messages && data.messages.length) {
-        setMessages(data.messages);
+        setMessages(data.messages.filter(m => m.kind !== 'status'));
       }
     }).catch(() => {});
   }, []);
@@ -1537,7 +1538,8 @@ function ChatView({ showToast }) {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || isStreaming) return;
+    if (!input.trim() || isStreaming || sendingRef.current) return;
+    sendingRef.current = true;
     const userText = input.trim();
     setInput('');
 
@@ -1567,11 +1569,16 @@ function ChatView({ showToast }) {
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
+        let eventName = 'message';
         for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventName = line.slice(7).trim();
+            continue;
+          }
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.text) {
+              if (data.text && (eventName === 'reply' || eventName === 'error' || eventName === 'message')) {
                 setMessages(prev => {
                   const updated = [...prev];
                   updated[assistantIdx] = { role: 'assistant', text: data.text };
@@ -1589,6 +1596,7 @@ function ChatView({ showToast }) {
         return updated;
       });
     } finally {
+      sendingRef.current = false;
       setIsStreaming(false);
     }
   };

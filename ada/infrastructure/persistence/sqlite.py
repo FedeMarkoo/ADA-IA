@@ -106,6 +106,11 @@ class Memory:
                 instructions TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP, meta TEXT
             );
+            CREATE TABLE IF NOT EXISTS folder_aliases (
+                alias TEXT PRIMARY KEY, path TEXT NOT NULL, confidence REAL NOT NULL DEFAULT 1.0,
+                use_count INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE IF NOT EXISTS conversation_messages (
                 id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 session TEXT NOT NULL DEFAULT 'main', role TEXT NOT NULL,
@@ -746,6 +751,24 @@ class Memory:
     def clear_conversation(self, session="main"):
         with self._lock:
             self.conn.execute("DELETE FROM conversation_messages WHERE session=?", (session,))
+            self.conn.commit()
+
+    def get_folder_alias(self, alias):
+        row = self.conn.execute(
+            "SELECT alias, path, confidence, use_count FROM folder_aliases WHERE alias=?", (alias,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def save_folder_alias(self, alias, path, confidence=1.0):
+        with self._lock:
+            self.conn.execute(
+                """INSERT INTO folder_aliases(alias, path, confidence, use_count)
+                   VALUES (?, ?, ?, 1)
+                   ON CONFLICT(alias) DO UPDATE SET path=excluded.path,
+                   confidence=excluded.confidence, use_count=folder_aliases.use_count+1,
+                   updated_at=CURRENT_TIMESTAMP""",
+                (alias, path, float(confidence)),
+            )
             self.conn.commit()
 
     def close(self):

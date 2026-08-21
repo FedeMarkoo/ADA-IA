@@ -996,11 +996,9 @@ def chat_stream():
     @stream_with_context
     def events():
         received = tr("status_received", data.get("lang"))
-        state.conversation.extend([{"role": "assistant", "text": received, "kind": "status"}])
         yield _sse("status", {"text": received})
 
         processing = tr("processing", data.get("lang"))
-        state.conversation.extend([{"role": "assistant", "text": processing, "kind": "status"}])
         yield _sse("status", {"text": processing})
         future = _runtime()["chat_executor"].submit(
             _run_chat_in_worker,
@@ -1013,7 +1011,6 @@ def chat_stream():
             while not future.done():
                 if time.monotonic() - last_update >= 5:
                     update = tr("status_progress", data.get("lang"))
-                    state.conversation.extend([{"role": "assistant", "text": update, "kind": "status"}])
                     yield _sse("status", {"text": update})
                     last_update = time.monotonic()
                 time.sleep(0.25)

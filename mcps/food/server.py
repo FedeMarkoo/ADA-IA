@@ -3,7 +3,7 @@
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

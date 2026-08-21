@@ -49,6 +49,12 @@
       "description": "Servidor MCP oficial de Google Gmail vía SSE",
       "status": "active"
     },
+    "google-drive": {
+      "transport": "streamable-http",
+      "url": "https://drivemcp.googleapis.com/mcp/v1",
+      "description": "Servidor MCP oficial de Google Drive",
+      "status": "active"
+    },
     "sqlite-memory": {
       "command": "npx",
       "args": [
