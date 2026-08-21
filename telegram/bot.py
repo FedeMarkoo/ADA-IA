@@ -10,6 +10,7 @@ import sys
 import threading
 import urllib.parse
 import urllib.request
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
@@ -84,6 +85,8 @@ class TelegramListener:
         )
         self.inbox = Path(os.path.expanduser(str(telegram.get("inbox", "~/Desktop/ADA_Data/telegram_inbox"))))
         self.stop_event = threading.Event()
+        self._processed_update_ids: Set[int] = set()
+        self._processed_update_order = deque(maxlen=2048)
 
     @staticmethod
     def _allowed_chat_ids(value: Any) -> Set[str]:
@@ -113,31 +116,47 @@ class TelegramListener:
             try:
                 updates = self._get_updates(offset)
                 for update in updates:
-                    offset = update.get("update_id", 0) + 1
+                    update_id = update.get("update_id")
+                    if update_id is not None:
+                        update_id = int(update_id)
+                        if update_id in self._processed_update_ids:
+                            logger.warning("telegram_update_duplicate_skipped update_id=%s", update_id)
+                            offset = max(offset or 0, update_id + 1)
+                            continue
+                    offset = (update_id + 1) if update_id is not None else offset
                     self.handle_update(update)
+                    if update_id is not None:
+                        self._remember_update(update_id)
             except Exception as exc:
                 logger.exception("adapter error: %s", exc)
                 self.stop_event.wait(max(self.poll_seconds, 3))
 
-    def _api(self, method: str, payload: Optional[Dict[str, Any]] = None) -> Any:
-        def call():
-            data = None
-            url = f"{self.api_url}/{method}"
-            if payload:
-                data = json.dumps(payload).encode("utf-8")
-            request = urllib.request.Request(
-                url,
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST" if data else "GET",
-            )
-            with urllib.request.urlopen(request, timeout=35) as response:
-                result = json.loads(response.read().decode("utf-8"))
-            if not result.get("ok"):
-                raise RuntimeError(result.get("description", "Telegram API error"))
-            return result.get("result")
+    def _remember_update(self, update_id: int) -> None:
+        if update_id in self._processed_update_ids:
+            return
+        if len(self._processed_update_order) == self._processed_update_order.maxlen:
+            oldest = self._processed_update_order.popleft()
+            self._processed_update_ids.discard(oldest)
+        self._processed_update_order.append(update_id)
+        self._processed_update_ids.add(update_id)
 
-        return self._retry(call, f"telegram_api method={method}")
+    def _api(self, method: str, payload: Optional[Dict[str, Any]] = None) -> Any:
+        """Call Telegram without retrying side-effecting methods such as sendMessage."""
+        data = None
+        url = f"{self.api_url}/{method}"
+        if payload:
+            data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST" if data else "GET",
+        )
+        with urllib.request.urlopen(request, timeout=35) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        if not result.get("ok"):
+            raise RuntimeError(result.get("description", "Telegram API error"))
+        return result.get("result")
 
     def _retry(self, function, operation: str, attempts: int = 3) -> Any:
         last_error = None
@@ -177,7 +196,7 @@ class TelegramListener:
         first_name = sender.get("first_name") or sender.get("last_name") or username or f"User_{chat_id}"
 
         if chat_id:
-            logger.info("chat_id=%s from=%s (@%s)", chat_id, first_name, username)
+            logger.info("chat_id=%s from=%s (@%s) update_id=%s", chat_id, first_name, username, update.get("update_id"))
         if not chat_id or (self.allowed_chat_ids and chat_id not in self.allowed_chat_ids):
             return
 
@@ -228,36 +247,32 @@ class TelegramListener:
         username = sender.get("username", "")
         first_name = sender.get("first_name", "") or sender.get("last_name", "") or username or f"User_{chat_id}"
         conversation_id = f"telegram_{chat_id}" if chat_id else "telegram_default"
-
-        def call():
-            payload = json.dumps({
-                "message": text,
-                "lang": "es",
-                "source": "telegram",
-                "session_id": conversation_id,
-                "conversation_id": conversation_id,
+        payload = json.dumps({
+            "message": text,
+            "lang": "es",
+            "source": "telegram",
+            "session_id": conversation_id,
+            "conversation_id": conversation_id,
+            "chat_id": str(chat_id),
+            "username": f"@{username}" if username and not username.startswith("@") else username,
+            "first_name": first_name,
+            "user_id": str(sender.get("id", chat_id)),
+            "metadata": {
                 "chat_id": str(chat_id),
                 "username": f"@{username}" if username and not username.startswith("@") else username,
                 "first_name": first_name,
-                "user_id": str(sender.get("id", chat_id)),
-                "metadata": {
-                    "chat_id": str(chat_id),
-                    "username": f"@{username}" if username and not username.startswith("@") else username,
-                    "first_name": first_name,
-                    "channel": "telegram",
-                }
-            }).encode("utf-8")
-            request = urllib.request.Request(
-                f"{self.base_url}/api/chat",
-                data=payload,
-                headers={"Content-Type": "application/json", "X-ADA-Source": "telegram"},
-                method="POST",
-            )
-            with urllib.request.urlopen(request, timeout=300) as response:
-                result = json.loads(response.read().decode("utf-8"))
-            return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
-
-        return self._retry(call, "telegram_internal_chat")
+                "channel": "telegram",
+            }
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.base_url}/api/chat",
+            data=payload,
+            headers={"Content-Type": "application/json", "X-ADA-Source": "telegram"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=300) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
 
     def send_message(self, chat_id: str, text: str) -> None:
         text = str(text)
