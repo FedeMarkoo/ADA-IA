@@ -23,7 +23,6 @@ logger = logging.getLogger("ada.telegram")
 
 
 def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
-    # 1. Explicit config argument if key exists
     if config:
         tg_cfg = config.get("telegram", {}) if isinstance(config.get("telegram"), dict) else {}
         if "token" in tg_cfg or "bot_token" in tg_cfg:
@@ -31,12 +30,10 @@ def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
         if "telegram_token" in config:
             return str(config.get("telegram_token") or "").strip()
 
-    # 2. Environment variable
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if token:
         return token
 
-    # 3. Encrypted SecureVault (vault.db)
     try:
         from utils.credentials import SecureVault
         token = SecureVault().get("telegram_bot_token") or SecureVault().get("telegram_token")
@@ -96,7 +93,6 @@ class TelegramListener:
 
     @property
     def enabled(self) -> bool:
-        """Bot is enabled as long as a token is available, regardless of 'enabled' flag in config."""
         return bool(self.token)
 
     def start(self) -> Optional[threading.Thread]:
@@ -125,8 +121,6 @@ class TelegramListener:
                             continue
                     offset = (update_id + 1) if update_id is not None else offset
                     self.handle_update(update)
-                    if update_id is not None:
-                        self._remember_update(update_id)
             except Exception as exc:
                 logger.exception("adapter error: %s", exc)
                 self.stop_event.wait(max(self.poll_seconds, 3))
@@ -188,6 +182,14 @@ class TelegramListener:
         return self._retry(call, "telegram_get_updates")
 
     def handle_update(self, update: Dict[str, Any]) -> None:
+        update_id = update.get("update_id")
+        if update_id is not None:
+            update_id = int(update_id)
+            if update_id in self._processed_update_ids:
+                logger.warning("telegram_update_duplicate_skipped update_id=%s", update_id)
+                return
+            self._remember_update(update_id)
+
         message = update.get("message") or {}
         chat = message.get("chat") or {}
         sender = message.get("from") or {}
@@ -196,7 +198,7 @@ class TelegramListener:
         first_name = sender.get("first_name") or sender.get("last_name") or username or f"User_{chat_id}"
 
         if chat_id:
-            logger.info("chat_id=%s from=%s (@%s) update_id=%s", chat_id, first_name, username, update.get("update_id"))
+            logger.info("chat_id=%s from=%s (@%s) update_id=%s", chat_id, first_name, username, update_id)
         if not chat_id or (self.allowed_chat_ids and chat_id not in self.allowed_chat_ids):
             return
 
@@ -220,9 +222,7 @@ class TelegramListener:
             path = self._download_photo(photos[-1])
             text = f"{text}\nAnalizá la imagen descargada: {path}".strip()
         if not text:
-            self.send_message(
-                chat_id, "Puedo procesar texto y fotos. Enviame un mensaje o una imagen con una consulta."
-            )
+            self.send_message(chat_id, "Puedo procesar texto y fotos. Enviame un mensaje o una imagen con una consulta.")
             return
 
         try:
@@ -290,7 +290,6 @@ class TelegramListener:
         return str(target.resolve())
 
 
-# Alias for clarity
 TelegramBot = TelegramListener
 
 
