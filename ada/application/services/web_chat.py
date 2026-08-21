@@ -114,7 +114,10 @@ class WebChatService:
         meaningful = [term for term in re.findall(r"[\wáéíóúüñ]+", clean) if term not in generic and len(term) > 1]
         if not meaningful or not re.search(r"\b(de|del|en|fotos?|carpetas?)\b", clean):
             return _resolve_path_alias(text)
-        return self._dynamic_path(text) or _resolve_path_alias(text)
+        # A named-folder phrase must never fall back to the generic
+        # "fotos -> ~/Pictures" alias: that sends the request to the wrong
+        # filesystem root when the user's photos live in Google Drive.
+        return self._dynamic_path(text)
 
     @staticmethod
     def _remember(state, user_text, reply):
