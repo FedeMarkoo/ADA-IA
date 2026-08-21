@@ -2,8 +2,7 @@
 
 The web adapter is intentionally limited to request validation and JSON
 serialization. Session state is supplied by the adapter, while routing,
-confirmation and capability execution live here with the other application
-services.
+confirmation and capability execution live here with the other application services.
 """
 
 import logging
@@ -77,6 +76,13 @@ class WebChatService:
             payload.setdefault("timeout", 60)
         if action == "filesystem":
             filesystem_action = parsed.get("action")
+            lowered = text.lower()
+            # Natural-language folder questions are unambiguous even when the
+            # model/router classified them as a generic file listing.
+            if re.search(r"\b(carpetas?|directorios?)\b", lowered) and re.search(
+                r"\b(qué|que|hay|listar|lista|listame|listá|mostrar|mostrá|ver|cu[aá]les)\b", lowered
+            ):
+                filesystem_action = "list_dirs"
             if filesystem_action in {"list_dirs", "list_files"}:
                 payload["action"] = filesystem_action
                 payload.setdefault("recursive", True)
