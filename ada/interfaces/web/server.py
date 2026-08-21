@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from ada.application.agent import Agent
 from ada.application.services.web_chat import WebChatService
 from ada.config import load_config, validate_config
-from ada.infrastructure.runtime.resources import hardware_profile
+from ada.infrastructure.runtime.resources import hardware_profile, recommended_threads
 from ada.interfaces.i18n import tr
 from ada.ollama.client import OllamaClient
 from ada.models.catalog import ModelCatalog
@@ -78,8 +78,9 @@ def protect_mutating_requests():
     if origin and not re.match(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$", origin, re.I):
         return jsonify({"error": "invalid_origin"}), 403
     if request.path.startswith("/api/"):
-        if (request.content_type or "").split(";", 1)[0].lower() != "application/json":
-            return jsonify({"error": "content_type_must_be_json"}), 415
+        if request.method in ["POST", "PUT", "PATCH"]:
+            if (request.content_type or "").split(";", 1)[0].lower() != "application/json":
+                return jsonify({"error": "content_type_must_be_json"}), 415
         cookie_csrf = request.cookies.get("ada_csrf", "")
         # Enforce CSRF only when request originates from a browser session with ada_csrf cookie
         if cookie_csrf:
@@ -156,6 +157,7 @@ chat_executor = ThreadPoolExecutor(max_workers=_chat_workers(cfg), thread_name_p
 
 app.extensions["ada_runtime"] = {
     "cfg": cfg,
+    "config_path": cfg_path,
     "agent": agent,
     "web_chat": web_chat,
     "session_states": session_states,
@@ -242,6 +244,16 @@ def index():
     response.set_cookie("ada_csrf", _csrf_token(), samesite="Strict", secure=False)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return Response(status=204)
+
+
+@app.route("/api/health")
+def health():
+    return jsonify({"status": "healthy", "version": ADA_VERSION, "timestamp": time.time()})
 
 
 @app.route("/api/status")
@@ -425,14 +437,104 @@ def ollama_pull_stream():
     )
 
 
+@app.route("/api/ollama/config", methods=["GET", "POST"])
+def ollama_config_api():
+    runtime = _runtime()
+    active_agent = runtime["agent"]
+    cfg_data = runtime.get("cfg", {})
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        if "cpu_limit_percent" in data:
+            cfg_data["cpu_limit_percent"] = max(10, min(100, int(data["cpu_limit_percent"])))
+        if "ollama_num_thread" in data:
+            val = data["ollama_num_thread"]
+            cfg_data["ollama_num_thread"] = int(val) if val else None
+        if "ollama_num_ctx" in data:
+            val = data["ollama_num_ctx"]
+            cfg_data["ollama_num_ctx"] = int(val) if val else None
+        if "ollama_keep_alive" in data:
+            cfg_data["ollama_keep_alive"] = str(data["ollama_keep_alive"])
+        if "ollama_temperature" in data:
+            cfg_data["ollama_temperature"] = float(data["ollama_temperature"])
+
+        # Persist to disk
+        config_path = os.path.join(os.path.dirname(__file__), "..", "..", "config.json")
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(cfg_data, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+        active_agent.model_manager.reload(cfg_data)
+        return jsonify({"ok": True, "config": {
+            "cpu_limit_percent": cfg_data.get("cpu_limit_percent", 50),
+            "ollama_num_thread": cfg_data.get("ollama_num_thread"),
+            "ollama_num_ctx": cfg_data.get("ollama_num_ctx", 4096),
+            "ollama_keep_alive": cfg_data.get("ollama_keep_alive", "5m"),
+            "ollama_temperature": cfg_data.get("ollama_temperature", 0.2),
+            "recommended_threads": recommended_threads(cfg_data),
+            "hardware": hardware_profile(),
+        }})
+
+    return jsonify({
+        "cpu_limit_percent": cfg_data.get("cpu_limit_percent", 50),
+        "ollama_num_thread": cfg_data.get("ollama_num_thread"),
+        "ollama_num_ctx": cfg_data.get("ollama_num_ctx", 4096),
+        "ollama_keep_alive": cfg_data.get("ollama_keep_alive", "5m"),
+        "ollama_temperature": cfg_data.get("ollama_temperature", 0.2),
+        "recommended_threads": recommended_threads(cfg_data),
+        "hardware": hardware_profile(),
+    })
+
+
+@app.route("/api/ollama/details")
+def ollama_details():
+    model_name = request.args.get("model")
+    if not model_name:
+        return jsonify({"error": "model_required"}), 400
+    runtime = _runtime()
+    client = runtime.get("ollama_client") or OllamaClient()
+    return jsonify(client.show_model(model_name))
+
+
 # ==============================================================================
 # Models & Benchmark Endpoints
 # ==============================================================================
 
-@app.route("/api/models/catalog")
+@app.route("/api/models/catalog", methods=["GET", "POST", "DELETE"])
 def models_catalog_api():
     runtime = _runtime()
     catalog_mgr = runtime.get("model_catalog") or ModelCatalog(runtime.get("cfg"))
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        name = data.get("name")
+        if not name:
+            return jsonify({"error": "name_required"}), 400
+        roles = data.get("roles", ["chat"])
+        desc = data.get("description", "")
+        tier = data.get("quality_tier", "medium")
+        min_ram = float(data.get("min_ram_gb", 4))
+        auto_pull = bool(data.get("auto_pull", False))
+
+        result = catalog_mgr.upsert_model(
+            name=name,
+            roles=roles,
+            description=desc,
+            quality_tier=tier,
+            min_ram_gb=min_ram,
+            auto_pull=auto_pull,
+        )
+        return jsonify({"ok": True, "model": result, "catalog": catalog_mgr.get_catalog()})
+
+    if request.method == "DELETE":
+        data = request.get_json(silent=True) or {}
+        name = data.get("name") or request.args.get("name")
+        if not name:
+            return jsonify({"error": "name_required"}), 400
+        deleted = catalog_mgr.delete_model_from_catalog(name)
+        return jsonify({"ok": deleted, "name": name, "catalog": catalog_mgr.get_catalog()})
+
     return jsonify({
         "catalog": catalog_mgr.get_catalog(),
         "roles": catalog_mgr.get_roles(),
@@ -446,20 +548,45 @@ def models_policy_api():
     cfg_data = runtime.get("cfg", {})
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
-        new_policy = data.get("model_policy")
-        if isinstance(new_policy, dict):
-            cfg_data["model_policy"] = new_policy
-            active_agent.model_manager.reload(cfg_data)
-            return jsonify({"ok": True, "model_policy": new_policy})
-        return jsonify({"error": "invalid_policy"}), 400
+        mode = str(data.get("selection_mode") or ("manual" if data.get("model_policy") else "")).lower()
+        if mode not in {"manual", "light", "hybrid", "turbo"}:
+            return jsonify({"error": "invalid_selection_mode"}), 400
+        if mode == "manual":
+            new_policy = data.get("manual_policy") or data.get("model_policy")
+            if not isinstance(new_policy, dict):
+                return jsonify({"error": "invalid_policy"}), 400
+        else:
+            new_policy = active_agent.model_manager.automatic_policy(mode)
+
+        candidate = dict(cfg_data)
+        candidate["model_selection_mode"] = mode
+        candidate["model_policy"] = new_policy
+        # Cold-start timings are dominated by disk/RAM loading and should not
+        # silently rewrite a user's automatic profile.
+        candidate["adaptive_models"] = False
+        candidate.update(active_agent.model_manager.runtime_settings_for_mode(mode))
+        validate_config(candidate)
+
+        cfg_data.clear()
+        cfg_data.update(candidate)
+        active_agent.cfg = cfg_data
+        active_agent.model_manager.reload(cfg_data)
+        active_agent.router.config = cfg_data
+        active_agent.policy.config = cfg_data
+        runtime["web_chat"].config = cfg_data
+        runtime["cfg"] = cfg_data
+        target = runtime.get("config_path")
+        if target:
+            Path(target).write_text(json.dumps(cfg_data, indent=2, ensure_ascii=False), encoding="utf-8")
+        summary = active_agent.model_manager.selection_summary()
+        return jsonify({"ok": True, **summary, "manual_policy": cfg_data.get("model_policy", {})})
+
+    summary = active_agent.model_manager.selection_summary()
     return jsonify({
         "models": cfg_data.get("models", {}),
-        "model_policy": cfg_data.get("model_policy", {}),
-        "active": {
-            "chat": active_agent.model_manager.select_model("chat"),
-            "vision": active_agent.model_manager.select_model("vision"),
-            "router": active_agent.model_manager.select_model("router"),
-        }
+        "model_policy": summary["policy"],
+        "manual_policy": cfg_data.get("model_policy", {}),
+        **summary,
     })
 
 
@@ -1123,6 +1250,8 @@ def _progress_text(event):
         return "[request] mensaje recibido; iniciando ejecución..."
     if phase == "route_local":
         return f"[router] ruta local seleccionada: filesystem.{event.get('action')}"
+    if phase == "route_rule":
+        return f"[router] intención resuelta localmente: {event.get('action')}"
     if phase == "folder_resolver_started":
         return f"[FolderResolver] buscando desde {event.get('context_path') or 'base_dir'}..."
     if phase == "folder_resolver_finished":
@@ -1239,6 +1368,7 @@ def create_app(config=None, agent_instance=None):
     mcp_mgr = MCPManager(runtime_cfg)
     runtime_app.extensions["ada_runtime"] = {
         "cfg": runtime_cfg,
+        "config_path": None if isinstance(config, dict) else cfg_path,
         "agent": runtime_agent,
         "web_chat": WebChatService(runtime_agent, runtime_cfg),
         "session_states": {},
