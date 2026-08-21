@@ -1,0 +1,47 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from mcps.filesystem.handlers import FilesystemHandlers
+from mcps.filesystem.server import create_filesystem_server
+
+
+class FilesystemMCPTests(unittest.TestCase):
+    def test_list_files_is_non_recursive_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "top.txt").write_text("top")
+            (root / "nested").mkdir()
+            (root / "nested" / "deep.txt").write_text("deep")
+
+            result = FilesystemHandlers([tmp]).list_files({"path": tmp})
+
+            self.assertFalse(result["recursive"])
+            self.assertEqual(result["total_items"], 2)
+            self.assertEqual({item["name"] for item in result["items"]}, {"top.txt", "nested"})
+
+    def test_list_files_can_be_recursive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "top.txt").write_text("top")
+            (root / "nested").mkdir()
+            (root / "nested" / "deep.txt").write_text("deep")
+
+            result = FilesystemHandlers([tmp]).list_files({"path": tmp, "recursive": True})
+
+            self.assertTrue(result["recursive"])
+            self.assertEqual(result["total_items"], 3)
+            self.assertIn("nested/deep.txt", {item["name"] for item in result["items"]})
+
+    def test_mcp_schema_exposes_recursive_default_false(self):
+        server = create_filesystem_server([tempfile.gettempdir()])
+        tool = next(tool for tool in server.tools if tool["name"] == "filesystem.list_files")
+        schema = tool["inputSchema"]
+
+        self.assertEqual(schema["properties"]["recursive"]["type"], "boolean")
+        self.assertFalse(schema["properties"]["recursive"]["default"])
+        self.assertEqual(schema["required"], ["path"])
+
+
+if __name__ == "__main__":
+    unittest.main()
