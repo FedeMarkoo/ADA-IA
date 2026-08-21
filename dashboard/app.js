@@ -71,13 +71,16 @@ export const api = {
   getStatus() { return this.request('/api/status'); },
   getDebug() { return this.request('/api/debug'); },
   setDebug(enabled) { return this.request('/api/debug', { method: 'POST', body: JSON.stringify({ enabled }) }); },
-  
-  // Ollama Lifecycle
+
+  // Ollama Lifecycle & Config
   getOllamaStatus() { return this.request('/api/ollama/status'); },
   startOllama() { return this.request('/api/ollama/start', { method: 'POST' }); },
   stopOllama() { return this.request('/api/ollama/stop', { method: 'POST' }); },
   restartOllama() { return this.request('/api/ollama/restart', { method: 'POST' }); },
   getOllamaModels() { return this.request('/api/ollama/models'); },
+  getOllamaConfig() { return this.request('/api/ollama/config'); },
+  saveOllamaConfig(config) { return this.request('/api/ollama/config', { method: 'POST', body: JSON.stringify(config) }); },
+  getOllamaDetails(model) { return this.request(`/api/ollama/details?model=${encodeURIComponent(model)}`); },
   unloadOllamaModel(model) {
     return this.request('/api/ollama/unload', { method: 'POST', body: JSON.stringify({ model }) });
   },
@@ -110,7 +113,12 @@ export const api = {
 
   // Models & Policy
   getModelsCatalog() { return this.request('/api/models/catalog'); },
+  addCatalogModel(data) { return this.request('/api/models/catalog', { method: 'POST', body: JSON.stringify(data) }); },
+  deleteCatalogModel(name) { return this.request('/api/models/catalog', { method: 'DELETE', body: JSON.stringify({ name }) }); },
   getModelsPolicy() { return this.request('/api/models/policy'); },
+  saveModelsSelection(data) {
+    return this.request('/api/models/policy', { method: 'POST', body: JSON.stringify(data) });
+  },
   saveModelsPolicy(policy) {
     return this.request('/api/models/policy', { method: 'POST', body: JSON.stringify({ model_policy: policy }) });
   },
@@ -185,24 +193,59 @@ const { useState, useEffect, useRef, useCallback, createElement: h } = window.Re
 // React Components
 // =============================================================================
 
+// Small, dependency-free icon set. Keeping icons as SVG makes the interface
+// visually consistent and prevents platform-specific emoji rendering.
+const ICON_PATHS = {
+  overview: ['M3 3h7v7H3z', 'M14 3h7v4h-7z', 'M14 11h7v10h-7z', 'M3 14h7v7H3z'],
+  engine: ['M9 3h6', 'M10 3v3', 'M14 3v3', 'M7 6h10a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a2 2 0 0 1 2-2Z', 'M9 11h.01', 'M15 11h.01', 'M9 15h6'],
+  models: ['M12 2 4 6v12l8 4 8-4V6Z', 'm4 6 8 4 8-4', 'M12 10v12'],
+  tools: ['M8 3v4', 'M16 3v4', 'M5 7h14', 'M6 7v5a6 6 0 0 0 12 0V7', 'M12 18v3'],
+  chat: ['M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z', 'M8 9h8', 'M8 13h5'],
+  telegram: ['m22 2-7 20-4-9-9-4Z', 'm22 2-11 11'],
+  activity: ['M3 12h4l2-7 4 14 2-7h6'],
+  settings: ['M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', 'M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V20h-3v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 14.7a1.7 1.7 0 0 0-1.55-1H5v-3h.09a1.7 1.7 0 0 0 1.55-1A1.7 1.7 0 0 0 6.3 7.8l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0 0 10.3 6a1.7 1.7 0 0 0 1-1.55V4h3v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19 9.3a1.7 1.7 0 0 0 1.55 1H21v3h-.09a1.7 1.7 0 0 0-1.51 1.7Z'],
+  refresh: ['M20 6v5h-5', 'M4 18v-5h5', 'M18.5 9A7 7 0 0 0 6.2 6.2L4 8', 'M5.5 15A7 7 0 0 0 17.8 17.8L20 16'],
+  bolt: ['m13 2-8 12h7l-1 8 8-12h-7Z'],
+  bug: ['M8 2l1.5 2', 'M16 2l-1.5 2', 'M9 9h6', 'M9 13h6', 'M12 4a5 5 0 0 1 5 5v5a5 5 0 0 1-10 0V9a5 5 0 0 1 5-5Z', 'M3 13h4', 'M17 13h4'],
+  restart: ['M20 11a8 8 0 1 0-2.34 5.66', 'M20 4v7h-7'],
+  menu: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
+  close: ['m6 6 12 12', 'M18 6 6 18'],
+  more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
+  check: ['m5 12 4 4L19 6'],
+  alert: ['M12 3 2.7 20h18.6Z', 'M12 9v4', 'M12 17h.01'],
+};
+
+function Icon({ name, size = 18 }) {
+  const paths = ICON_PATHS[name] || ICON_PATHS.activity;
+  return h('svg', {
+    className: 'ui-icon', width: size, height: size, viewBox: '0 0 24 24',
+    fill: 'none', stroke: 'currentColor', strokeWidth: 1.8,
+    strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true', focusable: 'false',
+  }, paths.map((d, index) => h('path', { d, key: index })));
+}
+
 // 1. Sidebar Component
-function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
+function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus, isOpen, onClose }) {
   const isOnline = isOllamaAvailable(statusData) || runtimeStatus?.available === true;
+  const systemReady = isOnline && statusData?.agent_enabled !== false;
+  const toolCount = (statusData?.mcp_servers || []).reduce((total, server) => total + (Number(server.tool_count) || 0), 0);
 
   const navItems = [
-    { id: 'overview', label: 'Overview', group: 'SISTEMA', icon: '📊' },
-    { id: 'ollama', label: 'Ollama Hub', badge: isOnline ? 'Online' : 'Offline', badgeClass: isOnline ? 'badge-success' : 'badge-danger', group: 'SISTEMA', icon: '🦙' },
-    { id: 'models', label: 'Modelos & Roles', group: 'SISTEMA', icon: '🧠' },
-    { id: 'mcps', label: 'MCPs & Tools', badge: '19 tools', badgeClass: 'badge-accent', group: 'SISTEMA', icon: '🔌' },
-    { id: 'chat', label: 'ADA Chat', group: 'AGENTE & OPERACIONES', icon: '💬' },
-    { id: 'telegram', label: 'Telegram Bot', group: 'AGENTE & OPERACIONES', icon: '📱' },
-    { id: 'memory', label: 'Memoria & Auditoría', group: 'AGENTE & OPERACIONES', icon: '🗃️' },
-    { id: 'settings', label: 'Configuración', group: 'AGENTE & OPERACIONES', icon: '⚙️' },
+    { id: 'overview', label: 'Resumen', group: 'OPERAR', icon: 'overview' },
+    { id: 'chat', label: 'Conversar con ADA', group: 'OPERAR', icon: 'chat' },
+    { id: 'ollama', label: 'Motor local', badge: isOnline ? 'Activo' : 'Detenido', badgeClass: isOnline ? 'badge-success' : 'badge-danger', group: 'CONFIGURAR', icon: 'engine' },
+    { id: 'models', label: 'Modelos y roles', group: 'CONFIGURAR', icon: 'models' },
+    { id: 'mcps', label: 'Herramientas', badge: toolCount ? String(toolCount) : null, badgeClass: 'badge-accent', group: 'CONFIGURAR', icon: 'tools' },
+    { id: 'telegram', label: 'Telegram', group: 'CANALES Y DATOS', icon: 'telegram' },
+    { id: 'memory', label: 'Actividad y memoria', group: 'CANALES Y DATOS', icon: 'activity' },
+    { id: 'settings', label: 'Preferencias', group: 'CANALES Y DATOS', icon: 'settings' },
   ];
 
   let currentGroup = '';
 
-  return h('aside', { className: 'sidebar', id: 'sidebar' }, [
+  return h(React.Fragment, null, [
+    h('button', { className: `sidebar-scrim ${isOpen ? 'visible' : ''}`, onClick: onClose, 'aria-label': 'Cerrar navegación', key: 'scrim' }),
+    h('aside', { className: `sidebar ${isOpen ? 'mobile-open' : ''}`, id: 'sidebar', 'aria-label': 'Navegación principal', key: 'sidebar' }, [
     h('div', { className: 'sidebar-header', key: 'header' }, [
       h('div', { className: 'brand' }, [
         h('div', { className: 'brand-orb' }, [
@@ -210,9 +253,10 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
           h('span', { className: 'orb-letter' }, 'A'),
         ]),
         h('div', { className: 'brand-info' }, [
-          h('span', { className: 'brand-title' }, 'ADA HUB'),
-          h('span', { className: 'brand-tag' }, 'v0.1.0 · Panel de Control'),
+          h('span', { className: 'brand-title' }, 'ADA'),
+          h('span', { className: 'brand-tag' }, 'Gestor local'),
         ]),
+        h('button', { className: 'icon-button sidebar-close', onClick: onClose, 'aria-label': 'Cerrar navegación' }, h(Icon, { name: 'close' })),
       ]),
     ]),
     h('nav', { className: 'sidebar-nav', key: 'nav' }, 
@@ -228,9 +272,10 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
             className: `nav-item ${activeTab === item.id ? 'active' : ''}`,
             id: `nav-${item.id}`,
             onClick: () => onSelectTab(item.id),
+            'aria-current': activeTab === item.id ? 'page' : undefined,
           }, [
-            h('span', { className: 'nav-item-icon', key: 'icon' }, item.icon),
-            h('span', { key: 'lbl' }, item.label),
+            h('span', { className: 'nav-item-icon', key: 'icon' }, h(Icon, { name: item.icon })),
+            h('span', { className: 'nav-item-label', key: 'lbl' }, item.label),
             item.badge ? h('span', { className: `badge ${item.badgeClass || ''}`, key: 'badge' }, item.badge) : null,
           ])
         );
@@ -239,30 +284,42 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
     ),
     h('div', { className: 'sidebar-footer', key: 'footer' }, [
       h('div', { className: 'runtime-pill', id: 'runtime-status-pill' }, [
-        h('span', { className: `status-dot ${isOnline ? 'online' : 'offline'}` }),
-        h('span', { className: 'status-text' }, isOnline ? 'Ollama Online' : 'Ollama Inactivo'),
+        h('span', { className: `status-dot ${systemReady ? 'online' : 'offline'}` }),
+        h('span', { className: 'status-text' }, systemReady ? 'Sistema operativo' : 'Requiere atención'),
       ]),
+    ]),
     ]),
   ]);
 }
 
 // 2. Header Component
-function Header({ title, subtitle, onWarmup, onRefresh, onRestartAll, isRefreshing, isRestarting, identity, debugEnabled, onToggleDebug }) {
+function Header({ title, subtitle, onWarmup, onRefresh, onRestartAll, isRefreshing, isRestarting, identity, debugEnabled, onToggleDebug, onOpenNavigation }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return h('header', { className: 'top-header' }, [
     h('div', { className: 'header-left', key: 'left' }, [
+      h('button', { className: 'icon-button mobile-menu', onClick: onOpenNavigation, 'aria-label': 'Abrir navegación' }, h(Icon, { name: 'menu' })),
+      h('div', { className: 'header-copy' }, [
       h('h1', { className: 'page-title', id: 'page-title' }, title),
-      h('span', { className: 'page-subtitle', id: 'page-subtitle' }, `${subtitle} · ADA v${identity?.version || '—'} · inicio ${identity?.started_at ? new Date(identity.started_at).toLocaleString() : '—'}`),
+      h('span', { className: 'page-subtitle', id: 'page-subtitle' }, subtitle),
+      ]),
     ]),
     h('div', { className: 'header-actions', key: 'actions' }, [
-      h('button', { className: 'btn btn-ghost', id: 'btn-warmup', onClick: onWarmup, title: 'Precargar motor' }, [
-        h('span', null, '⚡ Warmup'),
-      ]),
-      h('button', { className: `btn ${debugEnabled ? 'btn-danger' : 'btn-ghost'}`, onClick: onToggleDebug, title: 'Guardar log técnico detallado' }, debugEnabled ? '🐞 Debug ON' : '🐞 Debug'),
       h('button', { className: 'btn btn-secondary', id: 'btn-refresh', onClick: onRefresh, title: 'Actualizar datos' }, [
-        h('span', null, isRefreshing ? 'Actualizando...' : '🔄 Actualizar'),
+        h(Icon, { name: 'refresh', key: 'icon' }),
+        h('span', { className: 'desktop-label', key: 'label' }, isRefreshing ? 'Actualizando…' : 'Actualizar'),
       ]),
-      h('button', { className: 'btn btn-danger', id: 'btn-restart-all', onClick: onRestartAll, disabled: isRestarting, title: 'Reiniciar servicios de ADA' }, [
-        h('span', null, isRestarting ? 'Reiniciando...' : '↻ Reiniciar todo'),
+      h('div', { className: 'action-menu' }, [
+        h('button', { className: 'icon-button', onClick: () => setMenuOpen(open => !open), 'aria-label': 'Más acciones', 'aria-expanded': menuOpen }, h(Icon, { name: 'more' })),
+        menuOpen ? h('div', { className: 'action-menu-popover' }, [
+          h('div', { className: 'action-menu-meta' }, [
+            h('strong', null, `ADA ${identity?.version ? `v${identity.version}` : ''}`),
+            h('span', null, identity?.started_at ? `Activa desde ${new Date(identity.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Instancia local'),
+          ]),
+          h('button', { onClick: () => { setMenuOpen(false); onWarmup(); } }, [h(Icon, { name: 'bolt' }), h('span', null, 'Preparar motor')]),
+          h('button', { onClick: () => { setMenuOpen(false); onToggleDebug(); } }, [h(Icon, { name: 'bug' }), h('span', null, debugEnabled ? 'Desactivar diagnóstico' : 'Activar diagnóstico')]),
+          h('div', { className: 'action-menu-separator' }),
+          h('button', { className: 'danger-action', onClick: () => { setMenuOpen(false); onRestartAll(); }, disabled: isRestarting }, [h(Icon, { name: 'restart' }), h('span', null, isRestarting ? 'Reiniciando…' : 'Reiniciar servicios')]),
+        ]) : null,
       ]),
     ]),
   ]);
@@ -381,244 +438,212 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const checkItems = healthData?.items || [];
   const hasPendingFixes = healthData?.can_auto_heal_all;
 
-  const ITEM_ICONS = {
-    ollama_daemon: '🦙',
-    models_installed: '🧠',
-    ada_agent: '🤖',
-    mcps_subsystem: '🔌',
-    sqlite_memory: '🗄️',
-    hardware_resources: '💻',
-  };
+  const effectiveItems = checkItems.map(item => ({
+    ...item,
+    effectiveStatus: item.id === 'ada_agent' && statusData?.agent_enabled === false
+      ? 'stopped'
+      : item.id === 'mcps_subsystem' && statusData?.mcp_servers?.length && statusData.mcp_servers.every(server => server.status !== 'active')
+        ? 'stopped'
+        : item.status,
+  }));
+  const attentionItems = effectiveItems.filter(item => item.effectiveStatus !== 'ok');
+  const okCount = effectiveItems.filter(item => item.effectiveStatus === 'ok').length;
+  const mcpCount = statusData?.mcp_servers?.length || 0;
+  const activeMcpCount = (statusData?.mcp_servers || []).filter(server => server.status === 'active').length;
+  const toolCount = (statusData?.mcp_servers || []).reduce((total, server) => total + (Number(server.tool_count) || 0), 0);
+  const installedCount = statusData?.runtime?.models?.installed?.length || 0;
+  const roles = statusData?.model_recommendations?.roles || {};
+  const resourceCheck = checkItems.find(item => item.id === 'hardware_resources');
+  const ramPercent = resourceCheck?.details?.ram_percent;
+  const isHealthy = overallStatus === 'healthy' && attentionItems.length === 0;
 
-  return h('section', { className: 'tab-view active', id: 'tab-overview' }, [
-    // Health Doctor Auto-Healing Banner
-    h('div', { className: 'doctor-banner mb-6', key: 'doctor-banner' }, [
-      h('div', { className: 'doctor-header' }, [
-        h('div', { className: 'doctor-score-box' }, [
-          h('div', { className: `doctor-score-ring ${overallStatus}` }, `${healthScore}%`),
-          h('div', { className: 'doctor-title-group' }, [
-            h('h3', null, [
-              'Healthcheck General del Sistema',
-              h('span', {
-                className: `badge ${overallStatus === 'healthy' ? 'badge-success' : overallStatus === 'degraded' ? 'badge-warning' : 'badge-danger'}`
-              }, overallStatus === 'healthy' ? '100% Operativo' : overallStatus === 'degraded' ? 'Degradado / Alertas' : 'Requiere Atención')
-            ]),
-            h('p', null, hasPendingFixes ? 'Hay componentes que no están levantados. Podés repararlos con un solo clic.' : 'Todos los subsistemas y motores están operando correctamente.'),
-          ]),
+  const statusLabel = (status) => status === 'ok' ? 'Operativo' : status === 'warning' ? 'Atención' : status === 'stopped' ? 'Detenido' : 'Error';
+  const statusClass = (status) => status === 'ok' ? 'badge-success' : status === 'warning' ? 'badge-warning' : 'badge-danger';
+
+  return h('section', { className: 'tab-view active overview-v2', id: 'tab-overview' }, [
+    h('section', { className: `system-summary ${isHealthy ? 'healthy' : 'attention'}`, key: 'summary', 'aria-labelledby': 'system-summary-title' }, [
+      h('div', { className: 'system-summary-icon' }, h(Icon, { name: isHealthy ? 'check' : 'alert', size: 22 })),
+      h('div', { className: 'system-summary-copy' }, [
+        h('div', { className: 'eyebrow' }, 'ESTADO GENERAL'),
+        h('h2', { id: 'system-summary-title' }, isHealthy ? 'ADA está lista para trabajar' : `${attentionItems.length || 1} ${attentionItems.length === 1 ? 'punto requiere' : 'puntos requieren'} atención`),
+        h('p', null, isHealthy
+          ? 'Motor, agente, memoria y herramientas responden correctamente.'
+          : 'El resto del sistema sigue disponible. Revisá el pendiente antes de depender de ese canal.'),
+      ]),
+      h('div', { className: 'system-summary-actions' }, [
+        h('span', { className: 'health-ratio' }, `${okCount} de ${effectiveItems.length || '—'} comprobaciones · ${healthScore}%`),
+        hasPendingFixes ? h('button', {
+          className: 'btn btn-primary',
+          onClick: handleAutoHeal,
+          disabled: isHealing,
+        }, [
+          h(Icon, { name: 'bolt', key: 'icon' }),
+          h('span', { key: 'label' }, isHealing ? 'Resolviendo…' : 'Resolver pendientes'),
+        ]) : h('button', { className: 'btn btn-secondary', onClick: loadHealth }, [
+          h(Icon, { name: 'refresh', key: 'icon' }),
+          h('span', { key: 'label' }, 'Volver a comprobar'),
         ]),
+      ]),
+    ]),
+
+    attentionItems.length ? h('section', { className: 'attention-panel', key: 'attention', 'aria-labelledby': 'attention-title' }, [
+      h('div', { className: 'section-heading' }, [
         h('div', null, [
-          hasPendingFixes ? h('button', {
-            className: 'btn-heal-all',
-            onClick: handleAutoHeal,
-            disabled: isHealing,
-          }, isHealing ? 'Reparando componentes...' : '🚀 Auto-Reparar / Levantar Todo lo que Falte') : h('button', {
-            className: 'btn btn-sm btn-ghost',
-            onClick: loadHealth,
-          }, '🔍 Re-verificar Salud'),
+          h('div', { className: 'eyebrow' }, 'PRIORIDAD'),
+          h('h2', { id: 'attention-title' }, 'Requiere tu atención'),
         ]),
+        h('span', { className: 'badge badge-warning' }, `${attentionItems.length} pendiente${attentionItems.length === 1 ? '' : 's'}`),
       ]),
-
-      // Diagnostic Grid Checklist
-      h('div', { className: 'doctor-items-grid' },
-        checkItems.map(item => {
-          const effectiveStatus = item.id === 'ada_agent' && statusData?.agent_enabled === false
-            ? 'stopped'
-            : item.id === 'mcps_subsystem' && statusData?.mcp_servers?.length && statusData.mcp_servers.every(server => server.status !== 'active')
-              ? 'stopped'
-              : item.status;
-          const isOk = effectiveStatus === 'ok';
-          const isWarn = effectiveStatus === 'warning';
-          const statusBadge = isOk ? 'badge-success' : isWarn ? 'badge-warning' : 'badge-danger';
-          const statusLabel = isOk ? 'OK' : isWarn ? 'Alerta' : effectiveStatus === 'stopped' ? 'Apagado' : 'Error';
-          const icon = ITEM_ICONS[item.id] || '⚙️';
-
-          return h('div', { className: 'doctor-item-card', key: item.id }, [
-            h('div', { className: 'doctor-item-top' }, [
-              h('div', { className: 'doctor-item-name' }, [
-                h('span', { className: 'text-base' }, icon),
-                h('span', null, item.name),
-              ]),
-              h('span', { className: `badge ${statusBadge}` }, statusLabel),
-            ]),
-            h('p', { className: 'doctor-item-msg' }, effectiveStatus === 'stopped' ? (item.id === 'ada_agent' ? 'ADA Agent Core está apagado.' : 'Todos los servidores MCP están apagados.') : item.message),
-            item.can_auto_fix && item.status !== 'ok' ? h('div', { className: 'doctor-item-actions' }, [
-              h('button', {
-                className: 'btn btn-sm btn-primary',
-                onClick: () => handleFixItem(item.fix_action_id),
-                disabled: fixingAction === item.fix_action_id,
-              }, fixingAction === item.fix_action_id ? 'Levantando...' : `⚡ ${item.fix_label || 'Levantar'}`),
-            ]) : null,
-          ]);
-        })
-      ),
-    ]),
-
-    // Top Hardware & Status Stats
-    h('div', { className: 'grid grid-cols-4 gap-4 mb-6', key: 'stats-grid' }, [
-      h('div', { className: 'card stat-card', key: 'ollama-card' }, [
-        h('div', { className: 'stat-header' }, [
-          h('span', { className: 'stat-label' }, 'Ollama Engine'),
-          h('span', { className: `status-indicator ${isOllamaRunning ? 'online' : 'offline'}` }),
-        ]),
-        h('div', { className: 'stat-value' }, isOllamaRunning ? 'En Línea' : 'Detenido'),
-        h('div', { className: 'stat-footer' }, 'http://127.0.0.1:11434'),
-      ]),
-      h('div', { className: 'card stat-card', key: 'ram-card' }, [
-        h('div', { className: 'stat-header' }, [
-          h('span', { className: 'stat-label' }, 'Memoria RAM'),
-          h('span', { className: 'stat-badge' }, `${hardware.ram_gb || '--'} GB Total`),
-        ]),
-        h('div', { className: 'stat-value' }, `${hardware.ram_percent || 0}%`),
-        h('div', { className: 'progress-bar-bg' }, [
-          h('div', { className: 'progress-bar-fill', style: { width: `${hardware.ram_percent || 0}%` } }),
-        ]),
-      ]),
-      h('div', { className: 'card stat-card', key: 'cpu-card' }, [
-        h('div', { className: 'stat-header' }, [
-          h('span', { className: 'stat-label' }, 'CPU Cores'),
-          h('span', { className: 'stat-badge' }, hardware.platform || 'Linux'),
-        ]),
-        h('div', { className: 'stat-value' }, `${hardware.cpu_count || '--'} Cores`),
-        h('div', { className: 'stat-footer' }, 'Procesador del sistema'),
-      ]),
-      h('div', { className: 'card stat-card', key: 'agent-card' }, [
-        h('div', { className: 'stat-header' }, [
-          h('span', { className: 'stat-label' }, 'Agente ADA Core'),
-          h('span', { className: `stat-badge ${statusData?.agent_enabled === false ? 'badge-danger' : 'badge-primary'}` }, statusData?.agent_enabled === false ? 'Apagado' : 'Activo'),
-        ]),
-        h('div', { className: 'stat-value' }, statusData?.agent_enabled === false ? 'Detenido' : 'Listo'),
-        h('div', { className: 'stat-footer' }, 'SQLite FTS5 Habilitado'),
-      ]),
-    ]),
-
-    // Central Lifecycle Services Control Matrix
-    h('div', { className: 'card mb-6', key: 'control-matrix-card' }, [
-      h('div', { className: 'card-header' }, [
-        h('div', { className: 'flex items-center gap-2' }, [
-          h('h3', { className: 'card-title' }, 'Centro de Control de Servicios & Ciclo de Vida'),
-          h('span', { className: 'badge badge-accent' }, 'Control en Tiempo Real'),
-        ]),
-      ]),
-      h('div', { className: 'card-body' }, [
-        h('div', { className: 'grid grid-cols-3 gap-4' }, [
-          // Ollama Control Box
-          h('div', { className: 'service-box', key: 'box-ollama' }, [
-            h('div', { className: 'service-box-header' }, [
-              h('div', { className: 'flex items-center gap-2' }, [
-                h('span', { className: 'text-lg' }, '🦙'),
-                h('span', { className: 'font-bold' }, 'Ollama Daemon'),
-              ]),
-              h('span', { className: `badge ${isOllamaRunning ? 'badge-success' : 'badge-danger'}` },
-                isOllamaRunning ? 'Activo' : 'Inactivo'
-              ),
-            ]),
-            h('p', { className: 'text-xs text-muted mt-1' }, 'Servicio local de inferencia de modelos LLM.'),
-            h('div', { className: 'service-box-actions mt-4 flex gap-2' }, [
-              !isOllamaRunning ? h('button', { className: 'btn btn-sm btn-primary', onClick: handleOllamaStart }, '▶ Iniciar') : null,
-              isOllamaRunning ? h('button', { className: 'btn btn-sm btn-secondary', onClick: handleOllamaStop }, '⏹ Detener') : null,
-              h('button', { className: 'btn btn-sm btn-ghost', onClick: handleOllamaRestart }, '🔄 Reiniciar'),
-            ]),
+      h('div', { className: 'attention-list' }, attentionItems.map(item => h('article', { className: 'attention-item', key: item.id }, [
+        h('div', { className: `attention-marker ${item.effectiveStatus}` }, h(Icon, { name: item.effectiveStatus === 'warning' ? 'alert' : 'activity' })),
+        h('div', { className: 'attention-copy' }, [
+          h('div', { className: 'attention-title-row' }, [
+            h('h3', null, item.name),
+            h('span', { className: `badge ${statusClass(item.effectiveStatus)}` }, statusLabel(item.effectiveStatus)),
           ]),
+          h('p', null, item.effectiveStatus === 'stopped'
+            ? (item.id === 'ada_agent' ? 'El núcleo de ADA está detenido.' : 'Este servicio está detenido.')
+            : item.message),
+        ]),
+        item.can_auto_fix ? h('button', {
+          className: 'btn btn-secondary',
+          onClick: () => handleFixItem(item.fix_action_id),
+          disabled: fixingAction === item.fix_action_id,
+        }, fixingAction === item.fix_action_id ? 'Iniciando…' : (item.fix_label || 'Resolver')) : null,
+      ]))),
+    ]) : null,
 
-          // ADA Agent Control Box
-          h('div', { className: 'service-box', key: 'box-agent' }, [
-            h('div', { className: 'service-box-header' }, [
-              h('div', { className: 'flex items-center gap-2' }, [
-                h('span', { className: 'text-lg' }, '🧠'),
-                h('span', { className: 'font-bold' }, 'ADA Agent Core'),
-              ]),
-              h('span', { className: `badge ${isAgentRunning ? 'badge-success' : 'badge-danger'}` }, isAgentRunning ? 'Operativo' : 'Apagado'),
-            ]),
-            h('p', { className: 'text-xs text-muted mt-1' }, 'Orquestador multiagente, memoria y router.'),
-            h('div', { className: 'service-box-actions mt-4 flex gap-2' }, [
-              !isAgentRunning ? h('button', { className: 'btn btn-sm btn-primary', onClick: async () => { await api.startAgent(); onRefresh(); } }, '▶ Iniciar') : h('button', { className: 'btn btn-sm btn-secondary', onClick: async () => { await api.stopAgent(); onRefresh(); } }, '⏹ Apagar'),
-              h('button', { className: 'btn btn-sm btn-ghost', onClick: handleAgentRestart }, '🔄 Reiniciar'),
-              h('button', { className: 'btn btn-sm btn-ghost', onClick: () => api.clearConversation().then(() => showToast('Memoria reiniciada', 'info')) }, '🧹 Limpiar'),
-            ]),
+    h('section', { className: 'overview-section', key: 'services', 'aria-labelledby': 'services-title' }, [
+      h('div', { className: 'section-heading' }, [
+        h('div', null, [
+          h('div', { className: 'eyebrow' }, 'SERVICIOS ESENCIALES'),
+          h('h2', { id: 'services-title' }, 'Lo necesario para operar'),
+        ]),
+      ]),
+      h('div', { className: 'service-grid' }, [
+        h('article', { className: 'service-card', key: 'ollama' }, [
+          h('div', { className: 'service-card-top' }, [
+            h('span', { className: 'service-icon' }, h(Icon, { name: 'engine' })),
+            h('span', { className: `badge ${isOllamaRunning ? 'badge-success' : 'badge-danger'}` }, isOllamaRunning ? 'Activo' : 'Detenido'),
           ]),
-
-          // MCPs Engine Control Box
-          h('div', { className: 'service-box', key: 'box-mcps' }, [
-            h('div', { className: 'service-box-header' }, [
-              h('div', { className: 'flex items-center gap-2' }, [
-                h('span', { className: 'text-lg' }, '🔌'),
-                h('span', { className: 'font-bold' }, 'MCPs Servers (5)'),
-              ]),
-              h('span', { className: `badge ${areMCPsRunning ? 'badge-accent' : 'badge-danger'}` }, areMCPsRunning ? 'Conectados' : 'Apagados'),
-            ]),
-            h('p', { className: 'text-xs text-muted mt-1' }, 'Servidores Model Context Protocol y herramientas.'),
-            h('div', { className: 'service-box-actions mt-4 flex gap-2' }, [
-              areMCPsRunning ? h('button', { className: 'btn btn-sm btn-secondary', onClick: async () => { await api.stopAllMCPServers(); onRefresh(); } }, '⏹ Apagar Todos') : h('button', { className: 'btn btn-sm btn-primary', onClick: async () => { await api.startAllMCPServers(); onRefresh(); } }, '▶ Iniciar Todos'),
-              h('button', { className: 'btn btn-sm btn-ghost', onClick: handleMCPsRestartAll }, '🔄 Reiniciar Todos'),
-              h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('mcps') }, '⚙️ Ver Servidores'),
-            ]),
+          h('h3', null, 'Motor local'),
+          h('p', null, isOllamaRunning
+            ? `Responde en ${statusData?.ollama_health?.latency_ms ?? '—'} ms`
+            : 'La inferencia local no está disponible.'),
+          h('div', { className: 'service-card-actions' }, [
+            !isOllamaRunning ? h('button', { className: 'btn btn-primary', onClick: handleOllamaStart }, 'Iniciar motor') : null,
+            h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('ollama') }, 'Administrar'),
+          ]),
+        ]),
+        h('article', { className: 'service-card', key: 'agent' }, [
+          h('div', { className: 'service-card-top' }, [
+            h('span', { className: 'service-icon' }, h(Icon, { name: 'chat' })),
+            h('span', { className: `badge ${isAgentRunning ? 'badge-success' : 'badge-danger'}` }, isAgentRunning ? 'Listo' : 'Detenido'),
+          ]),
+          h('h3', null, 'Agente ADA'),
+          h('p', null, isAgentRunning ? 'Conversación, router y memoria disponibles.' : 'ADA no puede procesar nuevas solicitudes.'),
+          h('div', { className: 'service-card-actions' }, [
+            !isAgentRunning ? h('button', { className: 'btn btn-primary', onClick: async () => { await api.startAgent(); onRefresh(); } }, 'Iniciar ADA') : null,
+            h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('chat') }, 'Abrir conversación'),
+          ]),
+        ]),
+        h('article', { className: 'service-card', key: 'tools' }, [
+          h('div', { className: 'service-card-top' }, [
+            h('span', { className: 'service-icon' }, h(Icon, { name: 'tools' })),
+            h('span', { className: `badge ${areMCPsRunning ? 'badge-success' : 'badge-danger'}` }, `${activeMcpCount}/${mcpCount} activos`),
+          ]),
+          h('h3', null, 'Herramientas'),
+          h('p', null, toolCount ? `${toolCount} capacidades disponibles para ADA.` : 'No hay herramientas disponibles.'),
+          h('div', { className: 'service-card-actions' }, [
+            !areMCPsRunning ? h('button', { className: 'btn btn-primary', onClick: async () => { await api.startAllMCPServers(); onRefresh(); } }, 'Iniciar herramientas') : null,
+            h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('mcps') }, 'Ver herramientas'),
           ]),
         ]),
       ]),
     ]),
 
-    // Bottom Grid: Models & Quick Actions
-    h('div', { className: 'grid grid-cols-2 gap-6 mb-6', key: 'details-grid' }, [
-      h('div', { className: 'card', key: 'assigned-models' }, [
-        h('div', { className: 'card-header' }, [
-          h('h3', { className: 'card-title' }, 'Modelos Asignados Activos'),
-          h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('models') }, 'Gestionar'),
+    h('div', { className: 'overview-split', key: 'details' }, [
+      h('section', { className: 'overview-section overview-panel', 'aria-labelledby': 'resources-title' }, [
+        h('div', { className: 'section-heading compact' }, [
+          h('div', null, [
+            h('div', { className: 'eyebrow' }, 'RECURSOS'),
+            h('h2', { id: 'resources-title' }, 'Capacidad local'),
+          ]),
         ]),
-        h('div', { className: 'card-body' }, [
-          h('div', { className: 'model-role-row', key: 'chat-role' }, [
-            h('span', { className: 'role-badge role-chat' }, 'Chat Principal'),
-            h('span', { className: 'model-name-pill' }, 'llama3.2:3b'),
-          ]),
-          h('div', { className: 'model-role-row', key: 'vision-role' }, [
-            h('span', { className: 'role-badge role-vision' }, 'Visión & OCR'),
-            h('span', { className: 'model-name-pill' }, 'qwen2.5vl:3b'),
-          ]),
-          h('div', { className: 'model-role-row', key: 'router-role' }, [
-            h('span', { className: 'role-badge role-router' }, 'Router Rápido'),
-            h('span', { className: 'model-name-pill' }, 'llama3.2:3b'),
-          ]),
+        h('dl', { className: 'metrics-list' }, [
+          h('div', { key: 'ram' }, [h('dt', null, 'Memoria RAM'), h('dd', null, ramPercent != null ? `${ramPercent.toFixed(1)}% en uso` : `${hardware.ram_gb || '—'} GB`)]),
+          h('div', { key: 'cpu' }, [h('dt', null, 'Procesamiento'), h('dd', null, `${hardware.cpu_cores || hardware.cpu_count || '—'} núcleos · ${hardware.gpu_backend === 'cpu' ? 'sin GPU dedicada' : hardware.gpu_backend || '—'}`)]),
+          h('div', { key: 'disk' }, [h('dt', null, 'Espacio disponible'), h('dd', null, hardware.disk_free_gb != null ? `${hardware.disk_free_gb} GB` : '—')]),
+          h('div', { key: 'models' }, [h('dt', null, 'Modelos instalados'), h('dd', null, String(installedCount))]),
         ]),
       ]),
-      h('div', { className: 'card', key: 'quick-actions' }, [
-        h('div', { className: 'card-header' }, [
-          h('h3', { className: 'card-title' }, 'Acciones Rápidas'),
+      h('section', { className: 'overview-section overview-panel', 'aria-labelledby': 'roles-title' }, [
+        h('div', { className: 'section-heading compact' }, [
+          h('div', null, [
+            h('div', { className: 'eyebrow' }, 'ASIGNACIÓN ACTUAL'),
+            h('h2', { id: 'roles-title' }, 'Modelos por tarea'),
+          ]),
+          h('button', { className: 'btn btn-ghost btn-sm', onClick: () => onSwitchTab('models') }, 'Editar'),
         ]),
-        h('div', { className: 'card-body quick-actions-grid' }, [
-          h('button', { className: 'quick-action-btn', onClick: () => onSwitchTab('ollama') }, [
-            h('span', { className: 'qa-icon' }, '📥'),
-            h('span', { className: 'qa-title' }, 'Descargar Modelo'),
-            h('span', { className: 'qa-sub' }, 'Pull de nuevo LLM en Ollama'),
-          ]),
-          h('button', { className: 'quick-action-btn', onClick: () => onSwitchTab('models') }, [
-            h('span', { className: 'qa-icon' }, '⚡'),
-            h('span', { className: 'qa-title' }, 'Test de Velocidad'),
-            h('span', { className: 'qa-sub' }, 'Medir tokens/segundo'),
-          ]),
-          h('button', { className: 'quick-action-btn', onClick: () => onSwitchTab('mcps') }, [
-            h('span', { className: 'qa-icon' }, '🔌'),
-            h('span', { className: 'qa-title' }, 'Ver Herramientas'),
-            h('span', { className: 'qa-sub' }, 'Activar/Desactivar tools'),
-          ]),
-          h('button', { className: 'quick-action-btn', onClick: () => onSwitchTab('chat') }, [
-            h('span', { className: 'qa-icon' }, '💬'),
-            h('span', { className: 'qa-title' }, 'Abrir Chat'),
-            h('span', { className: 'qa-sub' }, 'Interactuar con ADA'),
-          ]),
+        h('dl', { className: 'role-list' }, [
+          h('div', { key: 'chat' }, [h('dt', null, 'Conversación'), h('dd', null, roles.chat || 'Sin asignar')]),
+          h('div', { key: 'vision' }, [h('dt', null, 'Visión'), h('dd', null, roles.vision || 'Sin asignar')]),
+          h('div', { key: 'router' }, [h('dt', null, 'Router'), h('dd', null, roles.router || 'Sin asignar')]),
         ]),
       ]),
     ]),
   ]);
 }
 
-// 4. Ollama Tab View (With Full Start / Stop / Restart Controls)
+// 4. Ollama Tab View (Advanced Resource Controls, Diagnostics, Real-Time Download % & Model Management)
 function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark }) {
   const [pullInput, setPullInput] = useState('');
   const [pulling, setPulling] = useState(false);
-  const [pullProgress, setPullProgress] = useState({ percent: 0, status: '', text: '' });
+  const [pullProgress, setPullProgress] = useState({ percent: 0, status: '', text: '', completed_fmt: '', total_fmt: '' });
+
+  // Ollama Advanced Config State
+  const [ollamaConfig, setOllamaConfig] = useState({
+    cpu_limit_percent: 50,
+    ollama_num_thread: 4,
+    ollama_num_ctx: 4096,
+    ollama_keep_alive: '5m',
+    ollama_temperature: 0.2,
+    recommended_threads: 4,
+    hardware: { cpu_cores: 8, ram_gb: 16, gpu_backend: 'cpu' },
+  });
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [modelDetailsModal, setModelDetailsModal] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [catalog, setCatalog] = useState([]);
 
   const models = modelsData?.models || [];
   const running = modelsData?.running || [];
   const isOnline = isOllamaAvailable(statusData);
+
+  useEffect(() => {
+    api.getOllamaConfig().then(data => {
+      if (data) setOllamaConfig(data);
+    }).catch(() => {});
+
+    api.getModelsCatalog().then(data => {
+      if (data?.catalog) setCatalog(data.catalog);
+    }).catch(() => {});
+  }, []);
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true);
+    try {
+      const res = await api.saveOllamaConfig(ollamaConfig);
+      if (res.ok) {
+        setOllamaConfig(res.config);
+        showToast('Configuración de Ollama y Límites de CPU/Contexto guardados', 'success');
+      }
+    } catch (err) {
+      showToast('Error al guardar configuración: ' + err.message, 'danger');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const handleStart = async () => {
     try {
@@ -653,22 +678,29 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
     }
   };
 
-  const handlePull = async () => {
-    if (!pullInput.trim()) {
-      showToast('Ingresá el nombre del modelo', 'warning');
-      return;
-    }
-    const modelName = pullInput.trim();
+  const startPullForModel = async (modelName) => {
+    if (!modelName || !modelName.trim()) return;
+    const targetModel = modelName.trim();
     setPulling(true);
-    setPullProgress({ percent: 0, status: `Iniciando pull de ${modelName}...`, text: '' });
+    setPullProgress({
+      percent: 0,
+      status: `Iniciando conexión con el registro para ${targetModel}...`,
+      text: '0%',
+      completed_fmt: '0 B',
+      total_fmt: 'Calculando...',
+    });
 
     try {
       const token = api.getCookie('ada_csrf');
       const res = await fetch('/api/ollama/pull/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-ADA-Token': token },
-        body: JSON.stringify({ model: modelName }),
+        body: JSON.stringify({ model: targetModel }),
       });
+
+      if (!res.ok) {
+        throw new Error(`Error en servidor: ${res.statusText}`);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -685,16 +717,24 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
+              if (data.error) {
+                showToast(`Error al descargar ${targetModel}: ${data.error}`, 'danger');
+                setPulling(false);
+                return;
+              }
               if (data.status) {
                 setPullProgress({
                   percent: data.percent || 0,
                   status: data.status,
-                  text: `${data.percent || 0}% (${data.completed_formatted || ''} / ${data.total_formatted || ''})`,
+                  text: `${data.percent || 0}%`,
+                  completed_fmt: data.completed_formatted || '',
+                  total_fmt: data.total_formatted || '',
                 });
               }
               if (data.done) {
-                showToast(`Modelo ${modelName} descargado exitosamente`, 'success');
+                showToast(`¡Modelo ${targetModel} descargado e instalado con éxito!`, 'success');
                 setPulling(false);
+                setPullInput('');
                 onRefresh();
               }
             } catch (_) {}
@@ -710,7 +750,7 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const handleUnload = async (name) => {
     try {
       await api.unloadOllamaModel(name);
-      showToast(`Modelo ${name} descargado de VRAM`, 'info');
+      showToast(`Modelo ${name} descargado de VRAM / Memoria`, 'info');
       onRefresh();
     } catch (err) {
       showToast('Error: ' + err.message, 'danger');
@@ -718,140 +758,341 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   };
 
   const handleDelete = async (name) => {
-    if (!confirm(`¿Eliminar modelo ${name} de disco?`)) return;
+    if (!window.confirm(`¿Estás seguro de que deseás eliminar el modelo ${name} de disco?`)) return;
     try {
       await api.deleteOllamaModel(name);
-      showToast(`Modelo ${name} eliminado`, 'info');
+      showToast(`Modelo ${name} eliminado del almacenamiento local`, 'info');
       onRefresh();
     } catch (err) {
       showToast('Error: ' + err.message, 'danger');
     }
   };
 
+  const handleShowDetails = async (name) => {
+    setLoadingDetails(true);
+    setModelDetailsModal({ name, loading: true });
+    try {
+      const details = await api.getOllamaDetails(name);
+      setModelDetailsModal({ name, data: details });
+    } catch (err) {
+      showToast('Error al obtener detalles: ' + err.message, 'danger');
+      setModelDetailsModal(null);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const maxCores = ollamaConfig.hardware?.cpu_cores || 8;
+
   return h('section', { className: 'tab-view active', id: 'tab-ollama' }, [
-    // Ollama Lifecycle Bar
+    // 1. Service Lifecycle Control Header
     h('div', { className: 'card mb-6', key: 'service-control-card' }, [
       h('div', { className: 'card-header' }, [
-        h('div', { className: 'flex items-center gap-2' }, [
-          h('h3', { className: 'card-title' }, 'Control del Servicio Ollama'),
-          h('span', { className: `badge ${isOnline ? 'badge-success' : 'badge-danger'}` },
-            isOnline ? 'En ejecución' : 'Detenido'
+        h('div', { className: 'flex items-center gap-3' }, [
+          h('div', { className: `status-dot ${isOnline ? 'online' : 'offline'}` }),
+          h('div', null, [
+            h('h3', { className: 'card-title' }, 'Motor de inferencia local'),
+            h('span', { className: 'text-xs text-muted' }, `${ollamaConfig.hardware?.gpu_backend?.toUpperCase() || 'CPU'} · ${ollamaConfig.hardware?.ram_gb || '16'} GB de RAM · ${ollamaConfig.hardware?.cpu_cores || 8} núcleos`),
+          ]),
+          h('span', { className: `badge ${isOnline ? 'badge-success' : 'badge-danger'} ml-2` },
+            isOnline ? 'En línea' : 'Detenido'
           ),
         ]),
         h('div', { className: 'flex items-center gap-2' }, [
-          !isOnline ? h('button', { className: 'btn btn-sm btn-primary', onClick: handleStart }, '▶ Iniciar Servicio') : null,
-          isOnline ? h('button', { className: 'btn btn-sm btn-secondary text-danger', onClick: handleStop }, '⏹ Detener') : null,
-          h('button', { className: 'btn btn-sm btn-ghost', onClick: handleRestart }, '🔄 Reiniciar Servicio'),
+          !isOnline ? h('button', { className: 'btn btn-sm btn-primary', onClick: handleStart }, 'Iniciar motor') : null,
+          isOnline ? h('button', { className: 'btn btn-sm btn-secondary text-danger', onClick: handleStop }, 'Detener') : null,
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: handleRestart }, 'Reiniciar'),
         ]),
       ]),
     ]),
 
-    // Pull Form Card
-    h('div', { className: 'card mb-6', key: 'pull-card' }, [
+    // 2. Hardware Resource & Inference Limits Configuration
+    h('div', { className: 'card mb-6', key: 'config-card' }, [
       h('div', { className: 'card-header' }, [
-        h('h3', { className: 'card-title' }, 'Descargar / Pull de Modelo Ollama'),
+        h('div', null, [
+          h('h3', { className: 'card-title' }, 'Rendimiento y memoria'),
+          h('span', { className: 'text-xs text-muted' }, 'Ajustá cuánto puede usar el motor. Los valores actuales priorizan calidad sobre velocidad.'),
+        ]),
+        h('button', { className: 'btn btn-sm btn-primary', onClick: handleSaveConfig, disabled: savingConfig },
+          savingConfig ? 'Guardando…' : 'Guardar cambios'
+        ),
       ]),
       h('div', { className: 'card-body' }, [
-        h('div', { className: 'pull-form' }, [
+        h('div', { className: 'grid grid-cols-3 gap-6' }, [
+          // CPU Threads & Budget
+          h('div', { className: 'form-group' }, [
+            h('div', { className: 'flex justify-between items-center' }, [
+              h('label', { className: 'form-label', htmlFor: 'ollama-threads' }, 'Hilos de CPU'),
+              h('span', { className: 'badge badge-accent' }, `${ollamaConfig.ollama_num_thread || ollamaConfig.recommended_threads} núcleos`),
+            ]),
+            h('input', {
+              type: 'range',
+              id: 'ollama-threads',
+              min: 1,
+              max: maxCores,
+              step: 1,
+              className: 'w-full',
+              value: ollamaConfig.ollama_num_thread || ollamaConfig.recommended_threads || 4,
+              onChange: (e) => setOllamaConfig({ ...ollamaConfig, ollama_num_thread: parseInt(e.target.value) }),
+            }),
+            h('span', { className: 'form-help' }, `Máximo disponible: ${maxCores} cores. Recomendado: ${ollamaConfig.recommended_threads}`),
+          ]),
+
+          // Context Window (num_ctx)
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'ollama-context' }, 'Ventana de contexto'),
+            h('select', {
+              id: 'ollama-context',
+              className: 'form-select',
+              value: ollamaConfig.ollama_num_ctx || 4096,
+              onChange: (e) => setOllamaConfig({ ...ollamaConfig, ollama_num_ctx: parseInt(e.target.value) }),
+            }, [
+              h('option', { value: 2048 }, '2,048 tokens (Ultra ligero - Bajo consumo RAM)'),
+              h('option', { value: 4096 }, '4,096 tokens (Recomendado estándar)'),
+              h('option', { value: 8192 }, '8,192 tokens (Contexto amplio / Documentos largos)'),
+              h('option', { value: 16384 }, '16,384 tokens (Modo Agéntico / Código multi-archivo)'),
+              h('option', { value: 32768 }, '32,768 tokens (Máximo contexto)'),
+            ]),
+            h('span', { className: 'form-help' }, 'Determina cuántos tokens de historial y herramientas recuerda por turno.'),
+          ]),
+
+          // Keep Alive in Memory
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'ollama-retention' }, 'Mantener el modelo en memoria'),
+            h('select', {
+              id: 'ollama-retention',
+              className: 'form-select',
+              value: ollamaConfig.ollama_keep_alive || '5m',
+              onChange: (e) => setOllamaConfig({ ...ollamaConfig, ollama_keep_alive: e.target.value }),
+            }, [
+              h('option', { value: '0m' }, '0m (Liberar RAM/VRAM inmediatamente tras responder)'),
+              h('option', { value: '2m' }, '2 minutos'),
+              h('option', { value: '5m' }, '5 minutos (Predeterminado)'),
+              h('option', { value: '15m' }, '15 minutos'),
+              h('option', { value: '30m' }, '30 minutos'),
+              h('option', { value: '-1' }, 'Indefinido (Mantener siempre en RAM)'),
+            ]),
+            h('span', { className: 'form-help' }, 'Tiempo que el modelo permanece precargado para respuestas instantáneas.'),
+          ]),
+        ]),
+      ]),
+    ]),
+
+    // 3. Download & Pull Manager (Real-Time % Progress)
+    h('div', { className: 'card mb-6', key: 'pull-card' }, [
+      h('div', { className: 'card-header' }, [
+        h('div', null, [
+          h('h3', { className: 'card-title' }, 'Descargar un modelo'),
+          h('span', { className: 'text-xs text-muted' }, 'Instalá un modelo desde la biblioteca de Ollama y seguí el progreso sin salir del gestor.'),
+        ]),
+      ]),
+      h('div', { className: 'card-body flex flex-col gap-4' }, [
+        h('div', { className: 'pull-form flex gap-3' }, [
           h('input', {
             type: 'text',
             className: 'form-input flex-1',
-            placeholder: 'Ej: deepseek-r1:8b, qwen2.5:7b, llama3.2:1b, nomic-embed-text',
+            placeholder: 'Nombre y versión, por ejemplo qwen2.5-coder:14b',
+            'aria-label': 'Nombre del modelo que querés descargar',
             value: pullInput,
             onChange: (e) => setPullInput(e.target.value),
-            onKeyDown: (e) => e.key === 'Enter' && handlePull(),
+            onKeyDown: (e) => e.key === 'Enter' && !pulling && startPullForModel(pullInput),
+            disabled: pulling,
           }),
-          h('button', { className: 'btn btn-primary', onClick: handlePull, disabled: pulling }, [
-            h('span', null, pulling ? 'Descargando...' : '📥 Descargar Modelo'),
+          h('button', { className: 'btn btn-primary', onClick: () => startPullForModel(pullInput), disabled: pulling || !pullInput.trim() }, [
+            h('span', null, pulling ? 'Descargando…' : 'Descargar'),
           ]),
         ]),
-        pulling ? h('div', { className: 'pull-progress-container' }, [
-          h('div', { className: 'pull-progress-header' }, [
-            h('span', null, pullProgress.status),
-            h('span', null, pullProgress.text),
+
+        // Active Download Progress Box
+        pulling ? h('div', { className: 'download-progress-card p-4 bg-surface-elevated rounded-lg border border-primary', style: { background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.3)' } }, [
+          h('div', { className: 'flex justify-between items-center mb-2' }, [
+            h('div', { className: 'flex items-center gap-2' }, [
+              h('span', { className: 'font-semibold text-primary' }, `Descargando: ${pullInput}`),
+              h('span', { className: 'text-xs text-muted' }, `• ${pullProgress.status || 'Descargando paquetes...'}`),
+            ]),
+            h('div', { className: 'flex items-center gap-2' }, [
+              pullProgress.total_fmt ? h('span', { className: 'text-xs font-mono text-muted' }, `${pullProgress.completed_fmt} / ${pullProgress.total_fmt}`) : null,
+              h('span', { className: 'badge badge-primary font-mono' }, `${pullProgress.percent}%`),
+            ]),
           ]),
-          h('div', { className: 'progress-bar-bg' }, [
-            h('div', { className: 'progress-bar-fill', style: { width: `${pullProgress.percent}%` } }),
+          h('div', { className: 'progress-bar-bg', style: { height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden' } }, [
+            h('div', {
+              className: 'progress-bar-fill',
+              style: {
+                width: `${pullProgress.percent}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
+                transition: 'width 0.3s ease-out',
+                boxShadow: '0 0 10px rgba(168, 85, 247, 0.5)',
+              }
+            }),
           ]),
+        ]) : null,
+
+        // Quick Pick from Recommended Catalog
+        catalog.length > 0 ? h('div', { className: 'mt-2' }, [
+          h('span', { className: 'text-xs font-semibold text-muted uppercase tracking-wide block mb-2' }, 'Sugerencias para este equipo'),
+          h('div', { className: 'flex flex-wrap gap-2' },
+            catalog.map(cat => {
+              const isInstalled = models.some(m => m.name === cat.name || m.name.startsWith(cat.name + ':'));
+              return h('button', {
+                key: cat.name,
+                className: `btn btn-sm ${isInstalled ? 'btn-ghost' : 'btn-secondary'} text-xs flex items-center gap-1.5`,
+                disabled: pulling || isInstalled,
+                onClick: () => {
+                  setPullInput(cat.name);
+                  startPullForModel(cat.name);
+                },
+              }, [
+                h('span', null, isInstalled ? '✅' : '📥'),
+                h('span', { className: 'font-mono' }, cat.name),
+                h('span', { className: 'text-muted text-2xs' }, `(${cat.min_ram_gb}GB+)`),
+              ]);
+            })
+          ),
         ]) : null,
       ]),
     ]),
 
-    // Running VRAM Models Card
+    // 4. Running VRAM / Active Models
     h('div', { className: 'card mb-6', key: 'running-card' }, [
       h('div', { className: 'card-header' }, [
         h('div', { className: 'flex items-center gap-2' }, [
-          h('h3', { className: 'card-title' }, 'Modelos en Memoria / VRAM Activos (Ollama ps)'),
-          h('span', { className: 'badge badge-accent' }, `${running.length} en VRAM`),
+          h('h3', { className: 'card-title' }, 'Modelos Activos en Memoria / VRAM (Ollama ps)'),
+          h('span', { className: 'badge badge-accent' }, `${running.length} cargado(s)`),
         ]),
       ]),
       h('div', { className: 'card-body' }, [
-        !running.length ? h('div', { className: 'empty-state-sm' }, 'No hay modelos cargados en VRAM en este momento.')
-          : h('div', { className: 'running-models-grid' }, 
-              running.map(r => h('div', { className: 'model-card border-accent', key: r.name }, [
-                h('div', { className: 'model-card-header' }, [
-                  h('span', { className: 'model-name' }, r.name),
-                  h('span', { className: 'badge badge-success' }, `VRAM: ${r.size_vram_formatted}`),
+        !running.length ? h('div', { className: 'empty-state-sm text-center py-4 text-muted text-sm' }, 'No hay ningún modelo ocupando memoria en este momento.')
+          : h('div', { className: 'grid grid-cols-2 gap-4' },
+              running.map(r => h('div', { className: 'model-card border-accent p-4 rounded-lg bg-surface-elevated', key: r.name }, [
+                h('div', { className: 'flex justify-between items-start mb-2' }, [
+                  h('div', null, [
+                    h('span', { className: 'model-name block font-semibold text-primary font-mono' }, r.name),
+                    h('span', { className: 'text-xs text-muted' }, `Expira en: ${r.expires_at || 'Al agotarse keep-alive'}`),
+                  ]),
+                  h('span', { className: 'badge badge-success' }, `VRAM/RAM: ${r.size_vram_formatted}`),
                 ]),
-                h('div', { className: 'flex justify-between items-center mt-2' }, [
-                  h('span', { className: 'text-xs text-muted' }, 'Cargado en memoria gráfica'),
-                  h('button', { className: 'btn btn-sm btn-secondary', onClick: () => handleUnload(r.name) }, 'Descargar de VRAM'),
+                h('div', { className: 'flex justify-end gap-2 mt-3 pt-2 border-t border-subtle' }, [
+                  h('button', { className: 'btn btn-sm btn-secondary text-danger', onClick: () => handleUnload(r.name) }, '🔻 Liberar Memoria'),
                 ]),
               ]))
             ),
       ]),
     ]),
 
-    // Installed Models Card
+    // 5. Installed Models List & Management
     h('div', { className: 'card', key: 'installed-card' }, [
       h('div', { className: 'card-header' }, [
         h('div', { className: 'flex items-center gap-2' }, [
-          h('h3', { className: 'card-title' }, 'Modelos Instalados en Disco'),
+          h('h3', { className: 'card-title' }, 'Biblioteca de Modelos Instalados en Disco'),
           h('span', { className: 'badge badge-primary' }, `${models.length} modelos`),
         ]),
+        h('button', { className: 'btn btn-sm btn-ghost', onClick: onRefresh }, '🔄 Actualizar Lista'),
       ]),
       h('div', { className: 'card-body' }, [
-        !models.length ? h('div', { className: 'empty-state-sm' }, 'No se encontraron modelos instalados en Ollama.')
-          : h('div', { className: 'models-grid' }, 
-              models.map(m => h('div', { className: 'model-card', key: m.name }, [
-                h('div', { className: 'model-card-header' }, [
-                  h('span', { className: 'model-name' }, m.name),
-                  h('span', { className: 'badge badge-accent' }, m.size_formatted),
-                ]),
-                h('div', { className: 'model-meta' }, [
-                  m.details?.parameter_size ? h('span', { className: 'badge', key: 'p' }, m.details.parameter_size) : null,
-                  m.details?.quantization_level ? h('span', { className: 'badge', key: 'q' }, m.details.quantization_level) : null,
-                  m.details?.family ? h('span', { className: 'badge', key: 'f' }, m.details.family) : null,
-                ]),
-                h('div', { className: 'flex justify-between items-center mt-2' }, [
-                  h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onBenchmark(m.name) }, '⚡ Probar'),
-                  h('button', { className: 'btn btn-sm btn-secondary text-danger', onClick: () => handleDelete(m.name) }, 'Eliminar'),
-                ]),
-              ]))
+        !models.length ? h('div', { className: 'empty-state-sm text-center py-6 text-muted' }, 'No se encontraron modelos descargados en este equipo.')
+          : h('div', { className: 'grid grid-cols-3 gap-4' },
+              models.map(m => {
+                const isRunning = running.some(r => r.name === m.name);
+                return h('div', { className: `model-card p-4 rounded-lg bg-surface-elevated flex flex-col justify-between ${isRunning ? 'border-primary' : ''}`, key: m.name }, [
+                  h('div', null, [
+                    h('div', { className: 'flex justify-between items-start mb-2' }, [
+                      h('span', { className: 'model-name font-mono font-bold text-white' }, m.name),
+                      h('span', { className: 'badge badge-accent' }, m.size_formatted),
+                    ]),
+                    h('div', { className: 'model-meta flex flex-wrap gap-1.5 mb-3' }, [
+                      isRunning ? h('span', { className: 'badge badge-success text-2xs', key: 'running' }, '🟢 En Memoria') : null,
+                      m.details?.parameter_size ? h('span', { className: 'badge text-2xs', key: 'p' }, m.details.parameter_size) : null,
+                      m.details?.quantization_level ? h('span', { className: 'badge text-2xs', key: 'q' }, m.details.quantization_level) : null,
+                      m.details?.family ? h('span', { className: 'badge text-2xs', key: 'f' }, m.details.family) : null,
+                    ]),
+                  ]),
+                  h('div', { className: 'flex justify-between items-center gap-2 mt-3 pt-2 border-t border-subtle' }, [
+                    h('div', { className: 'flex gap-1' }, [
+                      h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Ver Arquitectura y Modelfile', onClick: () => handleShowDetails(m.name) }, 'ℹ️ Info'),
+                      h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Testear velocidad de respuesta', onClick: () => onBenchmark(m.name) }, '⚡ Benchmark'),
+                    ]),
+                    h('button', { className: 'btn btn-sm btn-secondary text-danger text-xs', title: 'Borrar de disco', onClick: () => handleDelete(m.name) }, '🗑️ Borrar'),
+                  ]),
+                ]);
+              })
             ),
       ]),
     ]),
+
+    // Model Details Modal
+    modelDetailsModal ? h('div', { className: 'modal-overlay', style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }, onClick: () => setModelDetailsModal(null) }, [
+      h('div', { className: 'modal-content card', style: { width: '600px', maxHeight: '80vh', overflowY: 'auto' }, onClick: (e) => e.stopPropagation() }, [
+        h('div', { className: 'card-header flex justify-between items-center' }, [
+          h('h3', { className: 'card-title font-mono' }, `Detalles de ${modelDetailsModal.name}`),
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: () => setModelDetailsModal(null) }, '✕'),
+        ]),
+        h('div', { className: 'card-body' }, [
+          modelDetailsModal.data ? h('div', { className: 'flex flex-col gap-3 text-xs font-mono' }, [
+            h('div', null, [
+              h('span', { className: 'text-muted block' }, 'Familia & Formato:'),
+              h('span', { className: 'text-primary' }, `${modelDetailsModal.data.details?.family || 'N/A'} (${modelDetailsModal.data.details?.format || 'gguf'})`),
+            ]),
+            h('div', null, [
+              h('span', { className: 'text-muted block' }, 'Parámetros & Cuantización:'),
+              h('span', { className: 'text-white' }, `${modelDetailsModal.data.details?.parameter_size || 'N/A'} - ${modelDetailsModal.data.details?.quantization_level || 'N/A'}`),
+            ]),
+            modelDetailsModal.data.parameters ? h('div', null, [
+              h('span', { className: 'text-muted block mb-1' }, 'Parámetros Modelfile:'),
+              h('pre', { className: 'p-2 bg-surface rounded text-2xs overflow-x-auto' }, modelDetailsModal.data.parameters),
+            ]) : null,
+            modelDetailsModal.data.template ? h('div', null, [
+              h('span', { className: 'text-muted block mb-1' }, 'Template de Prompt:'),
+              h('pre', { className: 'p-2 bg-surface rounded text-2xs overflow-x-auto' }, modelDetailsModal.data.template.slice(0, 300) + '...'),
+            ]) : null,
+          ]) : h('div', { className: 'py-6 text-center text-muted' }, 'Cargando información del modelo...'),
+        ]),
+      ]),
+    ]) : null,
   ]);
 }
 
 // 5. Models Tab View (Roles & Benchmark)
 function ModelsView({ installedModels, showToast }) {
-  const [chatRole, setChatRole] = useState('llama3.2:3b');
-  const [visionRole, setVisionRole] = useState('qwen2.5vl:3b');
-  const [routerRole, setRouterRole] = useState('llama3.2:3b');
+  const roleLabels = {
+    chat: 'Conversación',
+    router: 'Router rápido',
+    reasoning: 'Razonamiento',
+    coding: 'Código',
+    tools: 'Herramientas',
+    vision: 'Visión y OCR',
+  };
+  const modeCards = [
+    { id: 'manual', name: 'Manual', eyebrow: 'Control total', description: 'Elegís un modelo para cada tipo de tarea.' },
+    { id: 'light', name: 'Liviano', eyebrow: 'Más rápido', description: 'Menos RAM, menos temperatura y respuestas ágiles.' },
+    { id: 'hybrid', name: 'Híbrido', eyebrow: 'Recomendado', description: 'Modelo rápido para lo simple y especialistas cuando hacen falta.' },
+    { id: 'turbo', name: 'Turbo', eyebrow: 'Máxima calidad', description: 'Usa el modelo más potente que entra con margen seguro.' },
+  ];
+  const [selectionMode, setSelectionMode] = useState('manual');
+  const [policyData, setPolicyData] = useState(null);
+  const [manualRoles, setManualRoles] = useState({ chat: '', router: '', reasoning: '', coding: '', tools: '', vision: '' });
+  const [savingMode, setSavingMode] = useState(false);
   const [benchModel, setBenchModel] = useState('');
   const [benchPrompt, setBenchPrompt] = useState('quick');
   const [benchResult, setBenchResult] = useState(null);
   const [benchLoading, setBenchLoading] = useState(false);
   const [catalog, setCatalog] = useState([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newModelForm, setNewModelForm] = useState({
+    name: '',
+    roles: 'chat',
+    description: '',
+    min_ram_gb: 8,
+    quality_tier: 'medium',
+  });
 
   useEffect(() => {
     api.getModelsPolicy().then(data => {
-      if (data.active) {
-        if (data.active.chat) setChatRole(data.active.chat);
-        if (data.active.vision) setVisionRole(data.active.vision);
-        if (data.active.router) setRouterRole(data.active.router);
-      }
+      setPolicyData(data);
+      setSelectionMode(data.mode || 'manual');
+      const source = data.manual_policy || data.policy || {};
+      setManualRoles(Object.fromEntries(Object.keys(roleLabels).map(role => [role, source?.[role]?.preferred || ''])));
     }).catch(() => {});
 
     api.getModelsCatalog().then(data => {
@@ -859,19 +1100,35 @@ function ModelsView({ installedModels, showToast }) {
     }).catch(() => {});
   }, []);
 
-  const handleSaveRoles = async () => {
-    const policy = {
-      chat: { preferred: chatRole, fallbacks: [] },
-      vision: { preferred: visionRole, fallbacks: [] },
-      router: { preferred: routerRole, fallbacks: [] },
-    };
+  const handleApplyMode = async () => {
+    const manualPolicy = Object.fromEntries(
+      Object.keys(roleLabels).map(role => [role, { preferred: manualRoles[role] || null, fallbacks: [] }])
+    );
+    setSavingMode(true);
     try {
-      await api.saveModelsPolicy(policy);
-      showToast('Roles de modelos guardados exitosamente', 'success');
+      const result = await api.saveModelsSelection({
+        selection_mode: selectionMode,
+        ...(selectionMode === 'manual' ? { manual_policy: manualPolicy } : {}),
+      });
+      setPolicyData(result);
+      showToast(`Modo ${modeCards.find(item => item.id === selectionMode)?.name} aplicado`, 'success');
     } catch (err) {
       showToast('Error: ' + err.message, 'danger');
+    } finally {
+      setSavingMode(false);
     }
   };
+
+  const previewPolicy = selectionMode === 'manual'
+    ? Object.fromEntries(Object.keys(roleLabels).map(role => [role, { preferred: manualRoles[role] || null, fallbacks: [] }]))
+    : policyData?.mode_previews?.[selectionMode] || policyData?.policy || {};
+  const previewRuntime = policyData?.runtime_presets?.[selectionMode] || policyData?.runtime_settings || {};
+  const compatibleByRole = (role) => {
+    const profiles = policyData?.installed || [];
+    const names = profiles.filter(item => (item.roles || []).includes(role)).map(item => item.name);
+    return installedModels.filter(item => names.includes(item.name));
+  };
+  const installedProfile = (name) => (policyData?.installed || []).find(item => item.name === name);
 
   const handleBenchmark = async () => {
     const target = benchModel || (installedModels[0]?.name);
@@ -893,35 +1150,84 @@ function ModelsView({ installedModels, showToast }) {
   };
 
   return h('section', { className: 'tab-view active', id: 'tab-models' }, [
-    h('div', { className: 'grid grid-cols-2 gap-6 mb-6', key: 'top-grid' }, [
-      // Role Assignment Matrix
-      h('div', { className: 'card', key: 'roles-matrix' }, [
-        h('div', { className: 'card-header' }, [
-          h('h3', { className: 'card-title' }, 'Asignación de Roles de Modelos'),
-          h('button', { className: 'btn btn-sm btn-primary', onClick: handleSaveRoles }, 'Guardar Cambios'),
+    h('div', { className: 'card mb-6 model-mode-shell', key: 'mode-selector' }, [
+      h('div', { className: 'card-header model-mode-header' }, [
+        h('div', null, [
+          h('span', { className: 'section-kicker' }, 'Política de ejecución'),
+          h('h3', { className: 'card-title' }, '¿Cómo querés que ADA elija los modelos?'),
+          h('p', { className: 'text-sm text-muted mt-1' }, 'Los modos automáticos usan solamente modelos descargados y dejan margen para el sistema.'),
         ]),
-        h('div', { className: 'card-body flex flex-col gap-4' }, [
-          h('div', { className: 'form-group' }, [
-            h('label', { className: 'form-label' }, 'Modelo de Chat Principal'),
-            h('select', { className: 'form-select', value: chatRole, onChange: (e) => setChatRole(e.target.value) },
-              installedModels.map(m => h('option', { key: m.name, value: m.name }, `${m.name} (${m.size_formatted})`))
-            ),
-            h('span', { className: 'form-help' }, 'Utilizado para responder dudas generales y razonamiento.'),
+        h('button', { className: 'btn btn-primary', onClick: handleApplyMode, disabled: savingMode || !policyData },
+          savingMode ? 'Aplicando…' : 'Aplicar configuración'
+        ),
+      ]),
+      h('div', { className: 'card-body' }, [
+        h('div', { className: 'model-mode-grid', role: 'radiogroup', 'aria-label': 'Modo de selección de modelos' },
+          modeCards.map(mode => h('button', {
+            key: mode.id,
+            type: 'button',
+            role: 'radio',
+            'aria-checked': selectionMode === mode.id,
+            className: `model-mode-card ${selectionMode === mode.id ? 'selected' : ''}`,
+            onClick: () => setSelectionMode(mode.id),
+          }, [
+            h('span', { className: 'model-mode-check', 'aria-hidden': 'true' }, selectionMode === mode.id ? '✓' : ''),
+            h('span', { className: 'model-mode-eyebrow' }, mode.eyebrow),
+            h('strong', null, mode.name),
+            h('span', { className: 'model-mode-description' }, mode.description),
+          ]))
+        ),
+        selectionMode === 'manual' ? h('div', { className: 'manual-role-grid mt-6' },
+          Object.entries(roleLabels).map(([role, label]) => {
+            const compatible = compatibleByRole(role);
+            const options = compatible.length ? compatible : (role === 'vision' ? [] : installedModels);
+            return h('label', { className: 'manual-role-field', key: role }, [
+              h('span', { className: 'form-label' }, label),
+              h('select', {
+                className: 'form-select',
+                'aria-label': `Modelo manual para ${label}`,
+                value: manualRoles[role] || '',
+                onChange: (event) => setManualRoles({ ...manualRoles, [role]: event.target.value }),
+              }, [
+                h('option', { value: '' }, role === 'vision' ? 'Sin modelo compatible' : 'Sin asignar'),
+                ...options.map(model => {
+                  const profile = installedProfile(model.name);
+                  const warning = profile && !profile.hardware_fit ? ' · ⚠ excede la RAM segura' : '';
+                  return h('option', { key: model.name, value: model.name }, `${model.name} · ${model.size_formatted}${warning}`);
+                }),
+              ]),
+              !compatible.length ? h('span', { className: 'form-help text-warning' }, 'No hay un modelo especializado descargado.') : null,
+            ]);
+          })
+        ) : null,
+      ]),
+    ]),
+
+    h('div', { className: 'grid grid-cols-2 gap-6 mb-6', key: 'top-grid' }, [
+      h('div', { className: 'card model-plan-card', key: 'active-plan' }, [
+        h('div', { className: 'card-header' }, [
+          h('div', null, [
+            h('h3', { className: 'card-title' }, 'Configuración resultante'),
+            h('span', { className: 'text-xs text-muted' }, 'Vista previa antes de aplicar'),
           ]),
-          h('div', { className: 'form-group' }, [
-            h('label', { className: 'form-label' }, 'Modelo de Visión & OCR'),
-            h('select', { className: 'form-select', value: visionRole, onChange: (e) => setVisionRole(e.target.value) },
-              installedModels.map(m => h('option', { key: m.name, value: m.name }, `${m.name} (${m.size_formatted})`))
-            ),
-            h('span', { className: 'form-help' }, 'Utilizado cuando se envían imágenes o capturas.'),
+          selectionMode === 'hybrid' ? h('span', { className: 'badge badge-success' }, 'Recomendado') : null,
+        ]),
+        h('div', { className: 'card-body' }, [
+          h('dl', { className: 'model-plan-list' }, Object.entries(roleLabels).map(([role, label]) =>
+            h('div', { key: role }, [
+              h('dt', null, label),
+              h('dd', { className: !previewPolicy?.[role]?.preferred ? 'missing' : '' }, previewPolicy?.[role]?.preferred || 'No disponible'),
+            ])
+          )),
+          selectionMode === 'manual' ? h('p', { className: 'model-manual-runtime' }, 'Los límites de CPU y contexto se administran desde Motor local.') : h('div', { className: 'model-runtime-strip' }, [
+            h('span', null, `${previewRuntime.ollama_num_thread || '—'} hilos`),
+            h('span', null, `${Number(previewRuntime.ollama_num_ctx || 0).toLocaleString('es-AR')} tokens`),
+            h('span', null, `${previewRuntime.cpu_limit_percent || '—'}% CPU`),
           ]),
-          h('div', { className: 'form-group' }, [
-            h('label', { className: 'form-label' }, 'Modelo de Router / Clasificación'),
-            h('select', { className: 'form-select', value: routerRole, onChange: (e) => setRouterRole(e.target.value) },
-              installedModels.map(m => h('option', { key: m.name, value: m.name }, `${m.name} (${m.size_formatted})`))
-            ),
-            h('span', { className: 'form-help' }, 'Modelo rápido y ligero para enrutar intenciones.'),
-          ]),
+          policyData?.warnings?.length ? h('div', { className: 'model-policy-warning' }, [
+            h('strong', null, 'Atención'),
+            h('span', null, policyData.warnings[0]),
+          ]) : null,
         ]),
       ]),
 
@@ -933,13 +1239,13 @@ function ModelsView({ installedModels, showToast }) {
         h('div', { className: 'card-body flex flex-col gap-4' }, [
           h('div', { className: 'form-group' }, [
             h('label', { className: 'form-label' }, 'Seleccionar Modelo'),
-            h('select', { className: 'form-select', value: benchModel || installedModels[0]?.name || '', onChange: (e) => setBenchModel(e.target.value) },
+            h('select', { className: 'form-select', 'aria-label': 'Modelo para la prueba de rendimiento', value: benchModel || installedModels[0]?.name || '', onChange: (e) => setBenchModel(e.target.value) },
               installedModels.map(m => h('option', { key: m.name, value: m.name }, m.name))
             ),
           ]),
           h('div', { className: 'form-group' }, [
             h('label', { className: 'form-label' }, 'Tipo de Prueba'),
-            h('select', { className: 'form-select', value: benchPrompt, onChange: (e) => setBenchPrompt(e.target.value) }, [
+            h('select', { className: 'form-select', 'aria-label': 'Tipo de prueba de rendimiento', value: benchPrompt, onChange: (e) => setBenchPrompt(e.target.value) }, [
               h('option', { value: 'quick' }, 'Respuesta Rápida (Explicación corta)'),
               h('option', { value: 'reasoning' }, 'Razonamiento Lógico Paso a Paso'),
               h('option', { value: 'json' }, 'Estructuración en JSON'),
@@ -971,29 +1277,161 @@ function ModelsView({ installedModels, showToast }) {
       ]),
     ]),
 
-    // Catalog
+    // Catalog & DB Model Management
     h('div', { className: 'card', key: 'catalog-card' }, [
-      h('div', { className: 'card-header' }, [
-        h('h3', { className: 'card-title' }, 'Catálogo de Modelos Recomendados para tu Hardware'),
+      h('div', { className: 'card-header flex justify-between items-center' }, [
+        h('div', null, [
+          h('h3', { className: 'card-title' }, 'Catálogo de Modelos en Base de Datos (SQLite)'),
+          h('span', { className: 'text-xs text-muted' }, 'Modelos registrados en la BD para gestión y descarga automatizada.'),
+        ]),
+        h('div', { className: 'flex gap-2' }, [
+          h('button', { className: 'btn btn-sm btn-primary', onClick: () => setShowAddModal(true) }, '➕ Agregar Modelo a BD'),
+        ]),
       ]),
       h('div', { className: 'card-body' }, [
         h('div', { className: 'catalog-grid' },
-          catalog.map(c => h('div', { className: 'model-card', key: c.name }, [
-            h('div', { className: 'model-card-header' }, [
-              h('span', { className: 'model-name' }, c.name),
-              h('span', { className: `badge ${c.hardware_fit ? 'badge-success' : 'badge-warning'}` },
-                c.hardware_fit ? 'Apto para tu RAM' : 'Requiere más RAM'
-              ),
-            ]),
-            h('p', { className: 'text-xs text-muted' }, c.description),
-            h('div', { className: 'model-meta' }, [
-              h('span', { className: 'badge badge-accent' }, `Roles: ${(c.roles || []).join(', ')}`),
-              h('span', { className: 'badge' }, `Mínimo: ${c.min_ram_gb} GB RAM`),
-            ]),
-          ]))
+          catalog.map(c => {
+            const isInstalled = installedModels.some(m => m.name === c.name || m.name.startsWith(c.name + ':'));
+            return h('div', { className: 'model-card flex flex-col justify-between', key: c.name }, [
+              h('div', null, [
+                h('div', { className: 'model-card-header' }, [
+                  h('span', { className: 'model-name font-mono' }, c.name),
+                  h('span', { className: `badge ${c.hardware_fit ? 'badge-success' : 'badge-warning'}` },
+                    c.hardware_fit ? 'Apto para tu RAM' : 'Requiere más RAM'
+                  ),
+                ]),
+                h('p', { className: 'text-xs text-muted my-2' }, c.description || 'Sin descripción'),
+                h('div', { className: 'model-meta mb-3' }, [
+                  h('span', { className: 'badge badge-accent' }, `Roles: ${(c.roles || []).join(', ')}`),
+                  h('span', { className: 'badge' }, `Mín: ${c.min_ram_gb} GB RAM`),
+                  isInstalled ? h('span', { className: 'badge badge-success' }, '🟢 Instalado') : null,
+                ]),
+              ]),
+              h('div', { className: 'flex justify-between items-center pt-2 border-t border-subtle mt-2' }, [
+                !isInstalled ? h('button', {
+                  className: 'btn btn-sm btn-primary text-xs',
+                  onClick: async () => {
+                    showToast(`Iniciando descarga en gestor para ${c.name}...`, 'info');
+                    window.location.hash = '#ollama';
+                  }
+                }, '📥 Descargar en Ollama') : h('span', { className: 'text-xs text-success font-semibold' }, '✓ Listo para uso'),
+                h('button', {
+                  className: 'btn btn-sm btn-ghost text-danger text-xs',
+                  title: 'Quitar del catálogo BD',
+                  onClick: async () => {
+                    if (!confirm(`¿Eliminar ${c.name} del catálogo de la Base de Datos?`)) return;
+                    try {
+                      await api.deleteCatalogModel(c.name);
+                      showToast(`Modelo ${c.name} removido de la BD`, 'info');
+                      const data = await api.getModelsCatalog();
+                      setCatalog(data.catalog || []);
+                    } catch (err) {
+                      showToast('Error: ' + err.message, 'danger');
+                    }
+                  }
+                }, '✕ Quitar'),
+              ]),
+            ]);
+          })
         ),
       ]),
     ]),
+
+    // Add Model to SQLite DB Modal
+    showAddModal ? h('div', { className: 'modal-overlay', style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }, onClick: () => setShowAddModal(false) }, [
+      h('div', { className: 'modal-content card', style: { width: '500px' }, onClick: (e) => e.stopPropagation() }, [
+        h('div', { className: 'card-header flex justify-between items-center' }, [
+          h('h3', { className: 'card-title' }, 'Registrar Nuevo Modelo en BD'),
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: () => setShowAddModal(false) }, '✕'),
+        ]),
+        h('div', { className: 'card-body flex flex-col gap-4' }, [
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Tag / Nombre en Ollama'),
+            h('input', {
+              type: 'text',
+              className: 'form-input font-mono',
+              placeholder: 'Ej: phi4:14b, mistral:7b, qwen2.5:14b',
+              value: newModelForm.name,
+              onChange: (e) => setNewModelForm({ ...newModelForm, name: e.target.value }),
+            }),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Roles (separados por coma)'),
+            h('input', {
+              type: 'text',
+              className: 'form-input',
+              placeholder: 'chat, reasoning, coding, tools',
+              value: newModelForm.roles,
+              onChange: (e) => setNewModelForm({ ...newModelForm, roles: e.target.value }),
+            }),
+          ]),
+          h('div', { className: 'grid grid-cols-2 gap-4' }, [
+            h('div', { className: 'form-group' }, [
+              h('label', { className: 'form-label' }, 'Mínimo RAM (GB)'),
+              h('input', {
+                type: 'number',
+                className: 'form-input',
+                value: newModelForm.min_ram_gb,
+                onChange: (e) => setNewModelForm({ ...newModelForm, min_ram_gb: e.target.value }),
+              }),
+            ]),
+            h('div', { className: 'form-group' }, [
+              h('label', { className: 'form-label' }, 'Tier / Categoría'),
+              h('select', {
+                className: 'form-select',
+                value: newModelForm.quality_tier,
+                onChange: (e) => setNewModelForm({ ...newModelForm, quality_tier: e.target.value }),
+              }, [
+                h('option', { value: 'tiny' }, 'Tiny (< 3B)'),
+                h('option', { value: 'small' }, 'Small (3B - 7B)'),
+                h('option', { value: 'medium' }, 'Medium (7B - 9B)'),
+                h('option', { value: 'large' }, 'Large (14B - 20B)'),
+                h('option', { value: 'huge' }, 'Huge (> 30B)'),
+              ]),
+            ]),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Descripción'),
+            h('input', {
+              type: 'text',
+              className: 'form-input',
+              placeholder: 'Descripción de capacidades y especialidad',
+              value: newModelForm.description,
+              onChange: (e) => setNewModelForm({ ...newModelForm, description: e.target.value }),
+            }),
+          ]),
+          h('div', { className: 'flex justify-end gap-2 mt-2' }, [
+            h('button', { className: 'btn btn-secondary', onClick: () => setShowAddModal(false) }, 'Cancelar'),
+            h('button', {
+              className: 'btn btn-primary',
+              onClick: async () => {
+                if (!newModelForm.name.trim()) {
+                  showToast('Ingresá el nombre del modelo', 'warning');
+                  return;
+                }
+                const rolesArray = newModelForm.roles.split(',').map(r => r.trim()).filter(Boolean);
+                try {
+                  await api.addCatalogModel({
+                    name: newModelForm.name.trim(),
+                    roles: rolesArray.length ? rolesArray : ['chat'],
+                    description: newModelForm.description.trim(),
+                    quality_tier: newModelForm.quality_tier,
+                    min_ram_gb: parseFloat(newModelForm.min_ram_gb) || 4,
+                  });
+                  showToast(`Modelo ${newModelForm.name} guardado en BD`, 'success');
+                  setShowAddModal(false);
+                  setNewModelForm({ name: '', roles: 'chat', description: '', min_ram_gb: 8, quality_tier: 'medium' });
+                  const data = await api.getModelsCatalog();
+                  setCatalog(data.catalog || []);
+                } catch (err) {
+                  showToast('Error al guardar: ' + err.message, 'danger');
+                }
+              }
+            }, '💾 Guardar en BD'),
+          ]),
+        ]),
+      ]),
+    ]) : null,
   ]);
 }
 
@@ -1240,6 +1678,7 @@ function MCPsView({ showToast }) {
             type: 'text',
             className: 'vscode-search-input',
             placeholder: '🔍 Filtrar servidores...',
+            'aria-label': 'Filtrar servidores',
             value: searchQuery,
             onChange: (e) => setSearchQuery(e.target.value),
           }),
@@ -1348,6 +1787,7 @@ function MCPsView({ showToast }) {
                 type: 'text',
                 className: 'form-input form-input-sm max-w-sm',
                 placeholder: 'Filtrar herramientas de este servidor...',
+                'aria-label': 'Filtrar herramientas del servidor seleccionado',
                 value: toolSearch,
                 onChange: (e) => setToolSearch(e.target.value),
               }),
@@ -1431,6 +1871,7 @@ function MCPsView({ showToast }) {
                           type: 'text',
                           className: 'tester-input',
                           placeholder: `Argumentos JSON (opcional), ej: {"path": "."}`,
+                          'aria-label': `Argumentos JSON para ${t.name}`,
                           value: testInputs[t.name] || '',
                           onChange: (e) => setTestInputs({ ...testInputs, [t.name]: e.target.value }),
                         }),
@@ -1670,6 +2111,7 @@ function ChatView({ showToast }) {
         h('div', { className: 'chat-options' }, [
           h('select', {
             className: 'form-select form-select-sm',
+            'aria-label': 'Idioma de la conversación',
             value: lang,
             onChange: (e) => setLang(e.target.value),
           }, [
@@ -1685,6 +2127,7 @@ function ChatView({ showToast }) {
         h('textarea', {
           className: 'chat-textarea',
           placeholder: 'Escribí tu mensaje o solicitud...',
+          'aria-label': 'Mensaje para ADA',
           rows: 2,
           value: input,
           onChange: (e) => setInput(e.target.value),
@@ -1873,6 +2316,7 @@ function SettingsView({ showToast }) {
           h('input', {
             type: 'text',
             className: 'form-input',
+            'aria-label': 'Nombre del asistente',
             value: config.name || '',
             onChange: (e) => setConfig({ ...config, name: e.target.value }),
           }),
@@ -1882,6 +2326,7 @@ function SettingsView({ showToast }) {
           h('input', {
             type: 'text',
             className: 'form-input',
+            'aria-label': 'URL del servicio Ollama',
             value: config.ollama_url || '',
             onChange: (e) => setConfig({ ...config, ollama_url: e.target.value }),
           }),
@@ -1891,6 +2336,7 @@ function SettingsView({ showToast }) {
           h('input', {
             type: 'text',
             className: 'form-input',
+            'aria-label': 'Carpeta de fotos',
             value: config.photo_root || '',
             onChange: (e) => setConfig({ ...config, photo_root: e.target.value }),
           }),
@@ -1900,6 +2346,7 @@ function SettingsView({ showToast }) {
           h('input', {
             type: 'text',
             className: 'form-input',
+            'aria-label': 'Carpetas permitidas',
             value: (config.allowed_roots || []).join(', '),
             onChange: (e) => setConfig({ ...config, allowed_roots: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }),
           }),
@@ -1964,6 +2411,7 @@ function SettingsView({ showToast }) {
               h('label', { className: 'form-label text-xs' }, 'Tipo de Secreto / Servicio'),
               h('select', {
                 className: 'form-select font-mono text-sm',
+                'aria-label': 'Tipo de secreto o servicio',
                 value: selectedPreset,
                 onChange: (e) => setSelectedPreset(e.target.value),
               }, [
@@ -1983,6 +2431,7 @@ function SettingsView({ showToast }) {
                   h('input', {
                     type: 'text',
                     className: 'form-input font-mono text-sm',
+                    'aria-label': 'Nombre de la clave personalizada',
                     placeholder: 'ej: stripe_api_key',
                     value: customKeyName,
                     onChange: (e) => setCustomKeyName(e.target.value),
@@ -1993,6 +2442,7 @@ function SettingsView({ showToast }) {
                   h('input', {
                     type: 'text',
                     className: 'form-input text-sm',
+                    'aria-label': 'Descripción opcional del secreto',
                     placeholder: 'ej: Token principal',
                     value: secretDescription,
                     onChange: (e) => setSecretDescription(e.target.value),
@@ -2004,6 +2454,7 @@ function SettingsView({ showToast }) {
             h('input', {
               type: 'password',
               className: 'form-input font-mono text-sm',
+              'aria-label': 'Valor del secreto',
               placeholder: 'Pegá aquí tu clave secreta o token...',
               value: secretValue,
               onChange: (e) => setSecretValue(e.target.value),
@@ -2489,6 +2940,7 @@ export function App() {
   const [isRestarting, setIsRestarting] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [navigationOpen, setNavigationOpen] = useState(false);
 
   const showToast = (msg, type = 'info') => {
     const id = Date.now();
@@ -2541,18 +2993,19 @@ export function App() {
   const selectTab = (tab) => {
     if (!validTabs.includes(tab)) return;
     setActiveTab(tab);
+    setNavigationOpen(false);
     window.history.replaceState(null, '', `#${tab}`);
   };
 
   const titles = {
-    overview: ['Overview del Sistema', 'Panel general de recursos, motores y estado del agente'],
-    ollama: ['Ollama Hub', 'Administración de modelos locales, descarga y monitoreo de VRAM'],
-    models: ['Modelos & Roles', 'Asignación de roles por tarea y benchmark de velocidad'],
-    mcps: ['MCPs & Herramientas', 'Servidores Model Context Protocol y catálogo de tools'],
-    chat: ['ADA Chat', 'Asistente interactivo local con razonamiento paso a paso'],
-    telegram: ['Telegram Bot (Daemon Independiente)', 'Servicio de mensajería y bot de asistencia vía Telegram'],
-    memory: ['Memoria & Auditoría', 'Explorador de base de datos SQLite y registro de auditoría'],
-    settings: ['Configuración', 'Parámetros del sistema y políticas de seguridad'],
+    overview: ['Resumen', 'Estado y decisiones importantes de tu asistente local'],
+    ollama: ['Motor local', 'Modelos instalados, consumo y configuración de inferencia'],
+    models: ['Modelos y roles', 'Qué modelo usa ADA para cada tipo de tarea'],
+    mcps: ['Herramientas', 'Capacidades e integraciones disponibles para ADA'],
+    chat: ['Conversar con ADA', 'Probá solicitudes y revisá la respuesta del agente'],
+    telegram: ['Telegram', 'Configuración y actividad del canal de mensajería'],
+    memory: ['Actividad y memoria', 'Historial persistente, métricas y auditoría'],
+    settings: ['Preferencias', 'Comportamiento, seguridad y credenciales del sistema'],
   };
 
   const currentTitle = titles[activeTab] || titles.overview;
@@ -2587,6 +3040,8 @@ export function App() {
       onSelectTab: selectTab,
       statusData,
       runtimeStatus: statusData?.runtime,
+      isOpen: navigationOpen,
+      onClose: () => setNavigationOpen(false),
     }),
     h('main', { className: 'main-wrapper', key: 'main' }, [
       h(Header, {
@@ -2601,6 +3056,7 @@ export function App() {
         identity: statusData?.identity,
         debugEnabled,
         onToggleDebug: toggleDebug,
+        onOpenNavigation: () => setNavigationOpen(true),
       }),
       h('div', { className: 'content-container', key: 'content' }, [
         activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: selectTab, showToast, onRefresh: refreshAll }) : null,
@@ -2614,19 +3070,21 @@ export function App() {
       ]),
     ]),
     // Toast Container
-    h('div', { className: 'toast-container', key: 'toasts' },
-      toasts.map(t => h('div', { className: `toast toast-${t.type}`, key: t.id }, t.msg))
+    h('div', { className: 'toast-container', key: 'toasts', 'aria-live': 'polite', 'aria-atomic': 'false' },
+      toasts.map(t => h('div', { className: `toast toast-${t.type}`, key: t.id, role: t.type === 'danger' ? 'alert' : 'status' }, t.msg))
     ),
   ]);
 }
 
 // Auto-mount on load
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => {
+  const mountApp = () => {
     const rootElem = document.getElementById('root');
     if (rootElem && window.ReactDOM) {
       const root = window.ReactDOM.createRoot(rootElem);
       root.render(h(App));
     }
-  });
+  };
+  if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', mountApp, { once: true });
+  else mountApp();
 }
