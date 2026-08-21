@@ -19,11 +19,15 @@ def create_filesystem_server(allowed_dirs: Optional[List[str]] = None) -> StdioM
 
     server.register_tool(
         name="filesystem.list_files",
-        description="Lista archivos y directorios dentro de las carpetas autorizadas.",
+        description="Lista archivos y directorios dentro de las carpetas autorizadas. Por defecto solo inspecciona el nivel indicado; use recursive=true para incluir subdirectorios.",
         parameters={
             "type": "object",
-            "properties": {"path": {"type": "string", "description": "Ruta del directorio"}},
+            "properties": {
+                "path": {"type": "string", "description": "Ruta del directorio"},
+                "recursive": {"type": "boolean", "description": "Si es true, incluye elementos de todos los subdirectorios. Por defecto false.", "default": False},
+            },
             "required": ["path"],
+            "additionalProperties": False,
         },
         handler=handlers.list_files,
         risk_level="safe",
