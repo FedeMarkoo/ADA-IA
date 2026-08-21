@@ -263,9 +263,18 @@ class ModelManager:
         profile = profile or hardware_profile()
         cores = max(1, int(profile.get("cpu_cores") or 1))
         settings = {
-            "light": {"cpu_limit_percent": 50, "ollama_num_thread": min(4, cores), "ollama_num_ctx": 4096, "ollama_keep_alive": "2m"},
-            "hybrid": {"cpu_limit_percent": 75, "ollama_num_thread": min(6, cores), "ollama_num_ctx": 8192, "ollama_keep_alive": "10m"},
-            "turbo": {"cpu_limit_percent": 100, "ollama_num_thread": cores, "ollama_num_ctx": 8192, "ollama_keep_alive": "30m"},
+            "light": {
+                "cpu_limit_percent": 50, "ollama_num_thread": min(4, cores), "ollama_num_ctx": 4096,
+                "ollama_keep_alive": "2m", "model_timeout": 25, "chat_timeout_seconds": 35, "chat_max_tokens": 384,
+            },
+            "hybrid": {
+                "cpu_limit_percent": 75, "ollama_num_thread": min(6, cores), "ollama_num_ctx": 4096,
+                "ollama_keep_alive": "10m", "model_timeout": 50, "chat_timeout_seconds": 65, "chat_max_tokens": 768,
+            },
+            "turbo": {
+                "cpu_limit_percent": 100, "ollama_num_thread": cores, "ollama_num_ctx": 8192,
+                "ollama_keep_alive": "30m", "model_timeout": 90, "chat_timeout_seconds": 110, "chat_max_tokens": 1200,
+            },
         }
         return dict(settings.get(mode, {}))
 

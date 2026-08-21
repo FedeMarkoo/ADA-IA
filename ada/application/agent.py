@@ -150,7 +150,10 @@ class Agent:
         prompt = self.prompt_builder.task(task, self.lang)
         model_role = self.model_manager.role_for_task(task)
         model_name = self.model_manager.ensure_model(task, role=model_role)
-        call_options = {"timeout": self.cfg.get("model_timeout", 180)}
+        call_options = {
+            "timeout": self.cfg.get("model_timeout", 180),
+            "max_tokens": self.cfg.get("chat_max_tokens", 768),
+        }
         if provider == "ollama" and model_name:
             call_options["ollama_model"] = model_name
         try:
