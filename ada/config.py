@@ -64,6 +64,13 @@ def load_config(path=None, project_root=None):
     config.setdefault("confirm_risky", True)
     config.setdefault("memory_encryption", False)
     config.setdefault("allowed_commands", [])
+    # Agent work is allowed to take minutes. These limits are intentionally
+    # independent from the selected model/performance mode.
+    config.setdefault("timeout_profile", "patient")
+    config.setdefault("router_timeout", 30)
+    config.setdefault("model_timeout", 300)
+    config.setdefault("chat_timeout_seconds", 900)
+    config.setdefault("food_advisor_timeout", 180)
     validate_config(config)
     return config
 
@@ -78,14 +85,14 @@ def validate_config(config):
     for key in list_keys:
         if key in config and not isinstance(config[key], list):
             raise ValueError(f"{key} debe ser una lista.")
-    for key in ("local_runtime", "models", "model_policy", "gpt4all", "telegram"):
+    for key in ("local_runtime", "models", "model_policy", "model_role_max_tokens", "gpt4all", "telegram"):
         if key in config and not isinstance(config[key], dict):
             raise ValueError(f"{key} debe ser un objeto.")
     bool_keys = ("confirm_risky", "adaptive_models", "auto_pull_models")
     for key in bool_keys:
         if key in config and not isinstance(config[key], bool):
             raise ValueError(f"{key} debe ser booleano.")
-    string_keys = ("db_path", "photo_root", "food_profile", "instagram_profile_dir", "web_framework")
+    string_keys = ("db_path", "photo_root", "food_profile", "instagram_profile_dir", "web_framework", "timeout_profile")
     for key in string_keys:
         if key in config and config[key] is not None and not isinstance(config[key], str):
             raise ValueError(f"{key} debe ser texto.")
@@ -114,6 +121,24 @@ def validate_config(config):
             raise ValueError("chat_workers debe ser entero.") from exc
         if not 1 <= chat_workers <= 32:
             raise ValueError("chat_workers debe estar entre 1 y 32.")
+    timeout_keys = ("router_timeout", "model_timeout", "chat_timeout_seconds", "food_advisor_timeout")
+    for key in timeout_keys:
+        if key not in config:
+            continue
+        try:
+            value = float(config[key])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{key} debe ser numérico.") from exc
+        if not 1 <= value <= 86400:
+            raise ValueError(f"{key} debe estar entre 1 segundo y 24 horas.")
+    if "model_timeout" in config and "chat_timeout_seconds" in config:
+        if float(config["chat_timeout_seconds"]) < float(config["model_timeout"]):
+            raise ValueError("chat_timeout_seconds debe ser igual o mayor que model_timeout.")
+    if "food_advisor_timeout" in config and "chat_timeout_seconds" in config:
+        if float(config["food_advisor_timeout"]) > float(config["chat_timeout_seconds"]):
+            raise ValueError("food_advisor_timeout no puede superar chat_timeout_seconds.")
+    if config.get("timeout_profile", "patient") not in {"fast", "balanced", "patient", "custom"}:
+        raise ValueError("timeout_profile debe ser fast, balanced, patient o custom.")
     framework = config.get("web_framework", "flask")
     if framework not in {"flask", "asgi"}:
         raise ValueError("web_framework debe ser 'flask' o 'asgi'.")

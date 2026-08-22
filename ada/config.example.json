@@ -3,9 +3,11 @@
   "web_framework": "asgi",
   "ollama_url": "http://127.0.0.1:11434",
   "engine_provider": "ollama",
-  "router_timeout": 8,
-  "model_timeout": 25,
-  "chat_timeout_seconds": 30,
+  "timeout_profile": "patient",
+  "router_timeout": 30,
+  "model_timeout": 300,
+  "chat_timeout_seconds": 900,
+  "food_advisor_timeout": 180,
   "folder_resolver_timeout": 4,
   "folder_probe_timeout": 0.75,
   "folder_max_probes": 40,
@@ -72,8 +74,18 @@
   },
   "telegram": {
     "enabled": false,
+    "poll_seconds": 2,
+    "request_timeout_seconds": 900,
+    "typing_indicator": true,
+    "typing_interval_seconds": 4,
     "allowed_chat_ids": [],
     "inbox": "~/Desktop/ADA_Data/telegram_inbox"
+  },
+  "triggers": {
+    "removable-device": {"enabled": false},
+    "calendar": {"enabled": false},
+    "cron": {"enabled": false},
+    "webhook": {"enabled": false}
   },
   "event_rules": {
     "filesystem.file_created": {

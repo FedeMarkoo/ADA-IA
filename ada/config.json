@@ -3,9 +3,11 @@
   "web_framework": "asgi",
   "ollama_url": "http://127.0.0.1:11434",
   "engine_provider": "ollama",
-  "router_timeout": 8,
-  "model_timeout": 50,
-  "chat_timeout_seconds": 65,
+  "timeout_profile": "patient",
+  "router_timeout": 30,
+  "model_timeout": 300,
+  "chat_timeout_seconds": 900,
+  "food_advisor_timeout": 180,
   "folder_resolver_timeout": 4,
   "folder_probe_timeout": 0.75,
   "folder_max_probes": 40,
@@ -108,11 +110,11 @@
   ],
   "model_policy": {
     "chat": {
-      "preferred": "qwen2.5:7b",
+      "preferred": "llama3.2:3b",
       "fallbacks": [
+        "qwen2.5:7b",
         "qwen3:8b",
-        "deepseek-r1:8b",
-        "llama3.2:3b"
+        "deepseek-r1:8b"
       ]
     },
     "router": {
@@ -145,8 +147,26 @@
   },
   "telegram": {
     "enabled": true,
+    "poll_seconds": 2,
+    "request_timeout_seconds": 900,
+    "typing_indicator": true,
+    "typing_interval_seconds": 4,
     "allowed_chat_ids": [],
     "inbox": "~/Desktop/ADA_Data/telegram_inbox"
+  },
+  "triggers": {
+    "removable-device": {
+      "enabled": false
+    },
+    "calendar": {
+      "enabled": false
+    },
+    "cron": {
+      "enabled": false
+    },
+    "webhook": {
+      "enabled": false
+    }
   },
   "event_rules": {
     "filesystem.file_created": {
@@ -168,11 +188,17 @@
     }
   },
   "ollama_num_thread": 6,
-  "ollama_num_ctx": 4096,
+  "ollama_num_ctx": 90000,
   "ollama_keep_alive": "10m",
   "cpu_limit_percent": 75,
   "ollama_temperature": 0.2,
   "model_selection_mode": "hybrid",
   "adaptive_models": false,
-  "chat_max_tokens": 768
+  "chat_max_tokens": 768,
+  "model_role_max_tokens": {
+    "chat": 768,
+    "reasoning": 1600,
+    "coding": 2048,
+    "tools": 1024
+  }
 }
