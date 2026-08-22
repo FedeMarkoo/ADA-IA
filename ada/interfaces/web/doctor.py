@@ -5,6 +5,7 @@ import sqlite3
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from dataclasses import dataclass, field
+from ada.infrastructure.runtime.duplicates import detect_duplicates
 
 logger = logging.getLogger("ada.doctor")
 
@@ -69,6 +70,10 @@ class HealthDoctor:
         # 7. Check Telegram Bot Service
         items.append(self._check_telegram())
 
+        # 8. Detect duplicate listeners and runtimes before they cause 409s
+        # or port conflicts.
+        items.append(self._check_duplicates())
+
         # Calculate Overall Health Score
         total = len(items)
         ok_count = sum(1 for i in items if i.status == "ok")
@@ -95,6 +100,22 @@ class HealthDoctor:
             "available_fixes": available_fixes,
             "can_auto_heal_all": len(available_fixes) > 0,
         }
+
+    def _check_duplicates(self) -> HealthCheckItem:
+        report = detect_duplicates()
+        if report["ok"]:
+            total = sum(len(items) for items in report["instances"].values())
+            return HealthCheckItem(
+                id="duplicate_runtimes", name="Instancias duplicadas", category="runtime",
+                status="ok", message=f"No hay runtimes duplicados ({total} instancia(s) detectada(s))",
+                details=report,
+            )
+        labels = ", ".join(f"{kind}: {len(items)}" for kind, items in report["duplicates"].items())
+        return HealthCheckItem(
+            id="duplicate_runtimes", name="Instancias duplicadas", category="runtime",
+            status="error", message=f"Hay más de una instancia activa ({labels})",
+            details=report, can_auto_fix=False,
+        )
 
     def _check_ollama(self) -> HealthCheckItem:
         client = self.ollama_client
@@ -289,7 +310,7 @@ class HealthDoctor:
         from ada.interfaces.web.server import get_telegram_service_status
         status = get_telegram_service_status()
 
-        if status.get("running"):
+        if status.get("running") and status.get("status") != "degraded":
             return HealthCheckItem(
                 id="telegram_bot",
                 name="Servicio Telegram Bot",
@@ -297,6 +318,18 @@ class HealthDoctor:
                 status="ok",
                 message="Bot de Telegram activo y recibiendo mensajes",
                 details=status,
+            )
+        elif status.get("status") == "degraded":
+            return HealthCheckItem(
+                id="telegram_bot",
+                name="Servicio Telegram Bot",
+                category="services",
+                status="error",
+                message=f"Telegram está ejecutándose pero no puede recibir eventos: {status.get('last_error') or 'error externo'}",
+                details=status,
+                can_auto_fix=True,
+                fix_action_id="start_telegram",
+                fix_label="Reintentar Telegram",
             )
         elif status.get("token_set") or status.get("configured"):
             return HealthCheckItem(

@@ -69,6 +69,8 @@ export const api = {
   },
 
   getStatus() { return this.request('/api/status'); },
+  getCoreState() { return this.request('/api/core/state'); },
+  getTimeSeries() { return this.request('/api/metrics/timeseries?hours=24'); },
   getDebug() { return this.request('/api/debug'); },
   setDebug(enabled) { return this.request('/api/debug', { method: 'POST', body: JSON.stringify({ enabled }) }); },
 
@@ -101,6 +103,12 @@ export const api = {
   testTelegram(body = {}) { return this.request('/api/telegram/test', { method: 'POST', body: JSON.stringify(body) }); },
   getTelegramHistory() { return this.request('/api/telegram/history'); },
   saveTelegramConfig(data) { return this.request('/api/telegram/config', { method: 'POST', body: JSON.stringify(data) }); },
+
+  // Event sources and entry points
+  getTriggers() { return this.request('/api/triggers'); },
+  controlTrigger(id, action) {
+    return this.request(`/api/triggers/${encodeURIComponent(id)}/${action}`, { method: 'POST' });
+  },
 
   // Encrypted Vault (vault.db)
   getVaultKeys() { return this.request('/api/vault/keys'); },
@@ -197,11 +205,13 @@ const { useState, useEffect, useRef, useCallback, createElement: h } = window.Re
 // visually consistent and prevents platform-specific emoji rendering.
 const ICON_PATHS = {
   overview: ['M3 3h7v7H3z', 'M14 3h7v4h-7z', 'M14 11h7v10h-7z', 'M3 14h7v7H3z'],
+  core: ['M12 3a9 9 0 1 0 9 9', 'M12 7a5 5 0 1 0 5 5', 'M12 10a2 2 0 1 0 2 2', 'M12 1v2', 'M23 12h-2', 'M12 23v-2', 'M1 12h2'],
   engine: ['M9 3h6', 'M10 3v3', 'M14 3v3', 'M7 6h10a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a2 2 0 0 1 2-2Z', 'M9 11h.01', 'M15 11h.01', 'M9 15h6'],
   models: ['M12 2 4 6v12l8 4 8-4V6Z', 'm4 6 8 4 8-4', 'M12 10v12'],
   tools: ['M8 3v4', 'M16 3v4', 'M5 7h14', 'M6 7v5a6 6 0 0 0 12 0V7', 'M12 18v3'],
   chat: ['M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z', 'M8 9h8', 'M8 13h5'],
   telegram: ['m22 2-7 20-4-9-9-4Z', 'm22 2-11 11'],
+  triggers: ['M4 4v6', 'M4 14v6', 'M20 4v6', 'M20 14v6', 'M4 7h5a3 3 0 0 1 3 3v4a3 3 0 0 0 3 3h5', 'M2 12h4', 'M18 12h4'],
   activity: ['M3 12h4l2-7 4 14 2-7h6'],
   settings: ['M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', 'M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V20h-3v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 14.7a1.7 1.7 0 0 0-1.55-1H5v-3h.09a1.7 1.7 0 0 0 1.55-1A1.7 1.7 0 0 0 6.3 7.8l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0 0 10.3 6a1.7 1.7 0 0 0 1-1.55V4h3v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19 9.3a1.7 1.7 0 0 0 1.55 1H21v3h-.09a1.7 1.7 0 0 0-1.51 1.7Z'],
   refresh: ['M20 6v5h-5', 'M4 18v-5h5', 'M18.5 9A7 7 0 0 0 6.2 6.2L4 8', 'M5.5 15A7 7 0 0 0 17.8 17.8L20 16'],
@@ -232,10 +242,13 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus, isOpen, on
 
   const navItems = [
     { id: 'overview', label: 'Resumen', group: 'OPERAR', icon: 'overview' },
+    { id: 'core', label: 'Núcleo ADA', group: 'OPERAR', icon: 'core' },
+    { id: 'metrics', label: 'Métricas', group: 'OPERAR', icon: 'activity' },
     { id: 'chat', label: 'Conversar con ADA', group: 'OPERAR', icon: 'chat' },
     { id: 'ollama', label: 'Motor local', badge: isOnline ? 'Activo' : 'Detenido', badgeClass: isOnline ? 'badge-success' : 'badge-danger', group: 'CONFIGURAR', icon: 'engine' },
     { id: 'models', label: 'Modelos y roles', group: 'CONFIGURAR', icon: 'models' },
     { id: 'mcps', label: 'Herramientas', badge: toolCount ? String(toolCount) : null, badgeClass: 'badge-accent', group: 'CONFIGURAR', icon: 'tools' },
+    { id: 'triggers', label: 'Disparadores', group: 'CANALES Y DATOS', icon: 'triggers' },
     { id: 'telegram', label: 'Telegram', group: 'CANALES Y DATOS', icon: 'telegram' },
     { id: 'memory', label: 'Actividad y memoria', group: 'CANALES Y DATOS', icon: 'activity' },
     { id: 'settings', label: 'Preferencias', group: 'CANALES Y DATOS', icon: 'settings' },
@@ -595,6 +608,240 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   ]);
 }
 
+function MetricsView() {
+  const [data, setData] = useState({ samples: [] });
+  useEffect(() => { let live = true; const load = () => api.getTimeSeries().then(v => live && setData(v)).catch(() => {}); load(); const id = setInterval(load, 10000); return () => { live = false; clearInterval(id); }; }, []);
+  const samples = data.samples || [];
+  const byMetric = samples.reduce((a, s) => { (a[s.metric] ||= []).push(s); return a; }, {});
+  const latest = (name) => (byMetric[name] || []).at(-1)?.value;
+  const max = (name) => Math.max(...(byMetric[name] || []).map(s => Number(s.value)), 0);
+  const names = { ada: 'ADA', telegram: 'Telegram', ollama: 'Ollama' };
+  const servicePanel = (service) => h('article', { className: 'metrics-panel service-panel', key: service }, [
+    h('div', { className: 'metrics-panel-title' }, [h('span', { className: 'status-dot online' }), h('div', null, [h('h3', null, names[service]), h('small', null, 'Proceso local')])]),
+    h('div', { className: 'resource-values' }, [h('div', null, [h('strong', null, `${(latest(`${service}_process_cpu_percent`) || 0).toFixed(1)}%`), h('span', null, 'CPU actual')]), h('div', null, [h('strong', null, `${(latest(`${service}_process_rss_mb`) || 0).toFixed(0)} MB`), h('span', null, 'Memoria RAM')])]),
+    h('div', { className: 'metric-spark' }, (byMetric[`${service}_process_rss_mb`] || []).slice(-36).map((v, i) => h('i', { key: i, style: { height: `${Math.max(6, Math.min(100, Number(v.value) / Math.max(1, max(`${service}_process_rss_mb`)) * 100))}%` } }))),
+  ]);
+  return h('section', { className: 'tab-view active metrics-view' }, [
+    h('div', { className: 'metrics-hero' }, [h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Centro de métricas'), h('p', null, 'Estado operativo y rendimiento de los servicios de ADA')]), h('div', { className: 'metrics-freshness' }, [h('span', { className: 'status-dot online' }), h('span', null, 'Scraper activo · cada 1 segundo')])]),
+    h('div', { className: 'metrics-kpis' }, [h('article', { className: 'metric-kpi' }, [h('span', null, 'Estado del sistema'), h('strong', null, latest('ada_up') === 1 ? 'Operativo' : 'Sin datos'), h('small', null, 'Última lectura confirmada')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Muestras disponibles'), h('strong', null, samples.length.toLocaleString('es-AR')), h('small', null, 'Ventana actual de 24 horas')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Retención'), h('strong', null, `${data.retention_days || 7} días`), h('small', null, 'Almacenamiento temporal')])]),
+    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Recursos en tiempo real'), h('p', null, 'Consumo de los procesos que mantienen ADA funcionando')]),
+    h('div', { className: 'metrics-service-grid' }, ['ada', 'ollama', 'telegram'].map(servicePanel)),
+    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Uso de ADA'), h('p', null, 'Invocaciones, mensajes y resultados observados por el scraper')]),
+    h('div', { className: 'metrics-usage-grid' }, [['messages_received', 'Mensajes recibidos'], ['chat_invocations', 'Conversaciones'], ['router_invocations', 'Clasificaciones del router'], ['model_invocations', 'Llamadas a modelos'], ['capability_invocations', 'Herramientas ejecutadas'], ['chat_response_seconds', 'Latencia de respuesta']].map(([metric, title]) => h('article', { className: 'metric-kpi metric-usage', key: metric }, [h('span', null, title), h('strong', null, byMetric[metric] ? `${byMetric[metric].at(-1)?.value || 0}` : '—'), h('small', null, byMetric[metric] ? 'Última muestra real' : 'Sin actividad registrada')]))) ,
+    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Cobertura de telemetría'), h('p', null, 'Las invocaciones de modelos, router, MCPs y tools aparecerán aquí cuando registren actividad real')]),
+    h('div', { className: 'metrics-empty-panel' }, [h('strong', null, 'Esperando actividad de componentes'), h('span', null, 'No se muestran valores inventados: cada serie aparece sólo cuando ADA registra una invocación real.')]),
+  ]);
+}
+
+function CoreView({ onSwitchTab }) {
+  const [coreData, setCoreData] = useState(null);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const data = await api.getCoreState();
+        if (mounted) {
+          setCoreData(data);
+          setLoadError('');
+        }
+      } catch (error) {
+        if (mounted) setLoadError(error.message || 'No pude leer el estado del núcleo');
+      }
+    };
+    load();
+    const interval = setInterval(load, 1000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const activity = coreData?.activity || {
+    status: 'idle', phase: 'idle', label: 'Conectando con ADA', detail: 'Leyendo el estado del sistema', recent: [],
+  };
+  const activeModels = coreData?.models?.active || {};
+  const modelGroups = Object.entries(activeModels).reduce((groups, [role, model]) => {
+    if (!model) return groups;
+    const existing = groups.find(item => item.name === model);
+    if (existing) existing.roles.push(role);
+    else groups.push({ name: model, roles: [role] });
+    return groups;
+  }, []);
+  const telegram = coreData?.connectors?.telegram || {};
+  const connectors = [
+    {
+      id: 'telegram', name: 'Telegram', kind: 'Canal', online: telegram.status === 'running',
+      meta: telegram.status === 'degraded' ? 'Conflicto de listener' : telegram.running ? 'Escuchando mensajes' : (telegram.configured ? 'Detenido' : 'Sin configurar'), tab: 'telegram',
+    },
+    ...(coreData?.connectors?.mcps || []).map(server => ({
+      id: server.name,
+      name: server.name,
+      kind: 'MCP',
+      online: server.status === 'active',
+      meta: `${server.tool_count || 0} herramientas`,
+      tab: 'mcps',
+    })),
+    ...(coreData?.connectors?.triggers || []).filter(trigger => trigger.id !== 'telegram').map(trigger => ({
+      id: `trigger:${trigger.id}`,
+      sourceId: trigger.id,
+      name: trigger.name,
+      kind: 'Entrada',
+      online: trigger.running === true,
+      meta: trigger.status === 'ready' ? 'Preparado' : trigger.summary,
+      tab: 'triggers',
+    })),
+  ];
+  const working = activity.status === 'working';
+  const elapsed = activity.started_at && working
+    ? Math.max(0, Math.round((Number(coreData?.server_time || Date.now() / 1000) - Number(activity.started_at))))
+    : 0;
+  const activeConnector = (node) => working && (
+    activity.component === node.id
+    || activity.component === node.sourceId
+    || (activity.component === 'filesystem' && node.id === 'filesystem')
+    || (activity.component === 'sqlite' && node.id === 'sqlite-memory')
+    || (activity.channel === 'telegram' && node.id === 'telegram')
+  );
+  const roleLabels = {
+    chat: 'Chat', router: 'Router', reasoning: 'Razonamiento', coding: 'Código', tools: 'Herramientas', vision: 'Visión',
+  };
+  const statusText = activity.status === 'working' ? 'Trabajando' : activity.status === 'error' ? 'Requiere atención' : activity.status === 'complete' ? 'Completado' : 'En espera';
+  const center = 400;
+  const connectorRadius = 302;
+  const modelRadius = 150;
+
+  return h('section', { className: `tab-view active core-view core-status-${activity.status}`, id: 'tab-core' }, [
+    h('div', { className: 'core-toolbar', key: 'toolbar' }, [
+      h('div', { className: 'core-live-state', role: 'status', 'aria-live': 'polite' }, [
+        h('span', { className: 'core-live-dot', 'aria-hidden': 'true' }),
+        h('div', null, [
+          h('strong', null, statusText),
+          h('span', null, working && elapsed ? `${activity.label} · ${elapsed}s` : activity.label),
+        ]),
+      ]),
+      h('div', { className: 'core-mode-copy' }, [
+        h('span', null, 'Política de modelos'),
+        h('strong', null, ({ hybrid: 'Híbrido', turbo: 'Turbo', light: 'Liviano', manual: 'Manual' })[coreData?.models?.mode] || '—'),
+      ]),
+    ]),
+    loadError ? h('div', { className: 'core-load-error', role: 'alert' }, loadError) : null,
+    h('div', {
+      className: 'core-network',
+      role: 'region',
+      'aria-label': `${statusText}. ${activity.label}. ${modelGroups.length} modelos y ${connectors.length} conectores visibles.`,
+      key: 'network',
+    }, [
+      h('svg', { className: 'core-link-layer', viewBox: '0 0 800 800', 'aria-hidden': 'true' }, [
+        h('circle', { cx: center, cy: center, r: connectorRadius, className: 'core-orbit orbit-outer', key: 'outer' }),
+        h('circle', { cx: center, cy: center, r: modelRadius, className: 'core-orbit orbit-inner', key: 'inner' }),
+        ...connectors.map((node, index) => {
+          const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
+          const outerX = center + connectorRadius * Math.cos(angle);
+          const outerY = center + connectorRadius * Math.sin(angle);
+          const innerX = center + 118 * Math.cos(angle);
+          const innerY = center + 118 * Math.sin(angle);
+          return h('line', {
+            key: `line-${node.id}`, x1: innerX, y1: innerY, x2: outerX, y2: outerY,
+            className: `core-link ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+          });
+        }),
+      ]),
+      h('div', { className: 'core-sphere-wrap' }, [
+        h('div', { className: 'core-sphere-halo halo-one' }),
+        h('div', { className: 'core-sphere-halo halo-two' }),
+        h('div', { className: 'core-sphere' }, [
+          h('div', { className: 'core-sphere-grid' }),
+          h('span', { className: 'core-sphere-kicker' }, 'NÚCLEO LOCAL'),
+          h('strong', { className: 'core-sphere-name' }, 'ADA'),
+          h('span', { className: 'core-sphere-state' }, activity.label),
+          activity.model ? h('span', { className: 'core-sphere-model' }, activity.model) : null,
+        ]),
+      ]),
+      h('div', { className: 'core-model-orbit', 'aria-label': 'Modelos activos' },
+        modelGroups.map((model, index) => {
+          const angle = (-90 + (360 / Math.max(1, modelGroups.length)) * index) * Math.PI / 180;
+          const x = 50 + 19 * Math.cos(angle);
+          const y = 50 + 19 * Math.sin(angle);
+          const isActive = working && (
+            (activity.component === 'model' && (
+              activity.model === model.name || model.roles.includes(activity.role)
+            ))
+            || (activity.component === 'router' && model.roles.includes('router'))
+          );
+          return h('button', {
+            key: model.name,
+            type: 'button',
+            className: `core-model-node ${isActive ? 'active' : ''}`,
+            style: { left: `${x}%`, top: `${y}%` },
+            onClick: () => onSwitchTab('models'),
+            'aria-label': `${model.name}: ${model.roles.map(role => roleLabels[role] || role).join(', ')}`,
+          }, [
+            h('span', { className: 'core-node-signal' }),
+            h('strong', null, model.name),
+            h('span', null, model.roles.map(role => roleLabels[role] || role).join(' · ')),
+          ]);
+        })
+      ),
+      h('div', { className: 'core-connectors', 'aria-label': 'Conectores y MCP' },
+        connectors.map((node, index) => {
+          const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
+          const x = 50 + 40.5 * Math.cos(angle);
+          const y = 50 + 40.5 * Math.sin(angle);
+          return h('button', {
+            key: node.id,
+            type: 'button',
+            className: `core-connector ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+            style: { left: `${x}%`, top: `${y}%` },
+            onClick: () => onSwitchTab(node.tab),
+            'aria-label': `${node.name}, ${node.kind}, ${node.online ? 'activo' : 'inactivo'}, ${node.meta}`,
+          }, [
+            h('span', { className: 'core-node-signal' }),
+            h('strong', null, node.name),
+            h('span', null, node.kind === 'MCP' ? node.meta : node.kind),
+          ]);
+        })
+      ),
+    ]),
+    h('div', { className: 'core-activity-panel', key: 'activity' }, [
+      h('div', { className: 'core-activity-main' }, [
+        h('span', { className: 'core-activity-icon', 'aria-hidden': 'true' }, h(Icon, { name: working ? 'bolt' : activity.status === 'error' ? 'alert' : 'check' })),
+        h('div', null, [
+          h('span', { className: 'core-activity-eyebrow' }, activity.phase === 'idle' ? 'ESTADO ACTUAL' : activity.phase.replaceAll('_', ' ').toUpperCase()),
+          h('strong', null, activity.label),
+          h('p', null, activity.detail),
+        ]),
+      ]),
+      activity.prompt ? h('div', { className: 'core-current-request' }, [
+        h('span', null, 'Pedido'),
+        h('p', null, activity.prompt),
+      ]) : null,
+      h('div', { className: 'core-recent-phases', 'aria-label': 'Últimas fases' },
+        (activity.recent || []).slice(-4).map((event, index) => h('span', {
+          key: `${event.at}-${index}`,
+          className: `core-phase phase-${event.status}`,
+        }, event.label))
+      ),
+    ]),
+  ]);
+}
+
+const TIMEOUT_PRESETS = {
+  fast: {
+    label: 'Rápido', description: 'Para pedidos simples', taskLabel: '2 min por tarea',
+    router_timeout: 10, model_timeout: 60, chat_timeout_seconds: 120, food_advisor_timeout: 60,
+  },
+  balanced: {
+    label: 'Equilibrado', description: 'Uso cotidiano', taskLabel: '5 min por tarea',
+    router_timeout: 20, model_timeout: 180, chat_timeout_seconds: 300, food_advisor_timeout: 120,
+  },
+  patient: {
+    label: 'Agente paciente', description: 'Prioriza completar bien', taskLabel: '15 min por tarea',
+    router_timeout: 30, model_timeout: 300, chat_timeout_seconds: 900, food_advisor_timeout: 180,
+  },
+};
+
 // 4. Ollama Tab View (Advanced Resource Controls, Diagnostics, Real-Time Download % & Model Management)
 function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark }) {
   const [pullInput, setPullInput] = useState('');
@@ -608,6 +855,11 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
     ollama_num_ctx: 4096,
     ollama_keep_alive: '5m',
     ollama_temperature: 0.2,
+    timeout_profile: 'patient',
+    router_timeout: 30,
+    model_timeout: 300,
+    chat_timeout_seconds: 900,
+    food_advisor_timeout: 180,
     recommended_threads: 4,
     hardware: { cpu_cores: 8, ram_gb: 16, gpu_backend: 'cpu' },
   });
@@ -631,12 +883,20 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   }, []);
 
   const handleSaveConfig = async () => {
+    if (Number(ollamaConfig.chat_timeout_seconds) < Number(ollamaConfig.model_timeout)) {
+      showToast('El tiempo de la tarea completa debe ser mayor o igual al de una llamada al modelo.', 'danger');
+      return;
+    }
+    if (Number(ollamaConfig.food_advisor_timeout) > Number(ollamaConfig.chat_timeout_seconds)) {
+      showToast('El tiempo del asesor de comida no puede superar el de la tarea completa.', 'danger');
+      return;
+    }
     setSavingConfig(true);
     try {
       const res = await api.saveOllamaConfig(ollamaConfig);
       if (res.ok) {
         setOllamaConfig(res.config);
-        showToast('Configuración de Ollama y Límites de CPU/Contexto guardados', 'success');
+        showToast('Rendimiento y paciencia del agente guardados', 'success');
       }
     } catch (err) {
       showToast('Error al guardar configuración: ' + err.message, 'danger');
@@ -783,6 +1043,22 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   };
 
   const maxCores = ollamaConfig.hardware?.cpu_cores || 8;
+  const applyTimeoutPreset = (profile) => {
+    const preset = TIMEOUT_PRESETS[profile];
+    if (!preset) return;
+    setOllamaConfig({
+      ...ollamaConfig,
+      timeout_profile: profile,
+      router_timeout: preset.router_timeout,
+      model_timeout: preset.model_timeout,
+      chat_timeout_seconds: preset.chat_timeout_seconds,
+      food_advisor_timeout: preset.food_advisor_timeout,
+    });
+  };
+  const updateTimeout = (key, seconds) => {
+    const safeSeconds = Math.max(1, Math.min(86400, Number(seconds) || 1));
+    setOllamaConfig({ ...ollamaConfig, timeout_profile: 'custom', [key]: safeSeconds });
+  };
 
   return h('section', { className: 'tab-view active', id: 'tab-ollama' }, [
     // 1. Service Lifecycle Control Header
@@ -847,7 +1123,9 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
               value: ollamaConfig.ollama_num_ctx || 4096,
               onChange: (e) => setOllamaConfig({ ...ollamaConfig, ollama_num_ctx: parseInt(e.target.value) }),
             }, [
-              h('option', { value: 2048 }, '2,048 tokens (Ultra ligero - Bajo consumo RAM)'),
+            h('option', { value: 2048 }, '2,048 tokens (Ultra ligero - Bajo consumo RAM)'),
+            h('option', { value: 8192 }, '8,192 tokens (Turbo estable)'),
+            h('option', { value: 90000 }, '90,000 tokens (Experimental - alto consumo RAM)'),
               h('option', { value: 4096 }, '4,096 tokens (Recomendado estándar)'),
               h('option', { value: 8192 }, '8,192 tokens (Contexto amplio / Documentos largos)'),
               h('option', { value: 16384 }, '16,384 tokens (Modo Agéntico / Código multi-archivo)'),
@@ -868,6 +1146,7 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
               h('option', { value: '0m' }, '0m (Liberar RAM/VRAM inmediatamente tras responder)'),
               h('option', { value: '2m' }, '2 minutos'),
               h('option', { value: '5m' }, '5 minutos (Predeterminado)'),
+              h('option', { value: '10m' }, '10 minutos'),
               h('option', { value: '15m' }, '15 minutos'),
               h('option', { value: '30m' }, '30 minutos'),
               h('option', { value: '-1' }, 'Indefinido (Mantener siempre en RAM)'),
@@ -878,7 +1157,96 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
       ]),
     ]),
 
-    // 3. Download & Pull Manager (Real-Time % Progress)
+    // 3. Independent timeout policy for patient agent work
+    h('div', { className: 'card mb-6 agent-timeout-card', key: 'timeout-card' }, [
+      h('div', { className: 'card-header' }, [
+        h('div', null, [
+          h('div', { className: 'eyebrow' }, 'INDEPENDIENTE DEL MODO DE MODELO'),
+          h('h3', { className: 'card-title' }, 'Paciencia del agente'),
+          h('span', { className: 'text-xs text-muted' }, 'Define cuánto puede trabajar ADA antes de cancelar. Cambiar entre Liviano, Híbrido o Turbo ya no modifica estos tiempos.'),
+        ]),
+        h('button', { className: 'btn btn-sm btn-primary', onClick: handleSaveConfig, disabled: savingConfig },
+          savingConfig ? 'Guardando…' : 'Guardar tiempos'
+        ),
+      ]),
+      h('div', { className: 'card-body' }, [
+        h('div', { className: 'timeout-preset-grid', role: 'group', 'aria-label': 'Perfiles de paciencia' },
+          Object.entries(TIMEOUT_PRESETS).map(([key, preset]) => h('button', {
+            key,
+            type: 'button',
+            className: `timeout-preset ${ollamaConfig.timeout_profile === key ? 'active' : ''}`,
+            'aria-pressed': ollamaConfig.timeout_profile === key,
+            onClick: () => applyTimeoutPreset(key),
+          }, [
+            h('span', { className: 'timeout-preset-title' }, [
+              preset.label,
+              key === 'patient' ? h('span', { className: 'badge badge-accent' }, 'Recomendado') : null,
+            ]),
+            h('span', { className: 'timeout-preset-description' }, preset.description),
+            h('strong', null, preset.taskLabel),
+          ]))
+        ),
+        ollamaConfig.timeout_profile === 'custom'
+          ? h('div', { className: 'custom-timeout-note' }, 'Perfil personalizado · se guardarán los valores escritos abajo.')
+          : null,
+        h('div', { className: 'grid grid-cols-4 gap-4 timeout-fields' }, [
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'router-timeout' }, 'Entender el pedido'),
+            h('div', { className: 'input-with-unit' }, [
+              h('input', {
+                id: 'router-timeout', type: 'number', className: 'form-input', min: 1, max: 86400, step: 1,
+                value: ollamaConfig.router_timeout || 30,
+                onChange: (e) => updateTimeout('router_timeout', e.target.value),
+              }),
+              h('span', null, 'seg'),
+            ]),
+            h('span', { className: 'form-help' }, 'Clasificación inicial del pedido.'),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'model-timeout' }, 'Una llamada al modelo'),
+            h('div', { className: 'input-with-unit' }, [
+              h('input', {
+                id: 'model-timeout', type: 'number', className: 'form-input', min: 1 / 60, max: 1440, step: 0.5,
+                value: Number((Number(ollamaConfig.model_timeout || 300) / 60).toFixed(2)),
+                onChange: (e) => updateTimeout('model_timeout', Number(e.target.value) * 60),
+              }),
+              h('span', null, 'min'),
+            ]),
+            h('span', { className: 'form-help' }, 'Incluye carga y generación local.'),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'task-timeout' }, 'Tarea completa'),
+            h('div', { className: 'input-with-unit' }, [
+              h('input', {
+                id: 'task-timeout', type: 'number', className: 'form-input', min: 1 / 60, max: 1440, step: 1,
+                value: Number((Number(ollamaConfig.chat_timeout_seconds || 900) / 60).toFixed(2)),
+                onChange: (e) => updateTimeout('chat_timeout_seconds', Number(e.target.value) * 60),
+              }),
+              h('span', null, 'min'),
+            ]),
+            h('span', { className: 'form-help' }, 'Límite total del agente y sus pasos.'),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'food-timeout' }, 'Asesor de comida'),
+            h('div', { className: 'input-with-unit' }, [
+              h('input', {
+                id: 'food-timeout', type: 'number', className: 'form-input', min: 1 / 60, max: 1440, step: 0.5,
+                value: Number((Number(ollamaConfig.food_advisor_timeout || 180) / 60).toFixed(2)),
+                onChange: (e) => updateTimeout('food_advisor_timeout', Number(e.target.value) * 60),
+              }),
+              h('span', null, 'min'),
+            ]),
+            h('span', { className: 'form-help' }, 'Análisis nutricional y recetas.'),
+          ]),
+        ]),
+        h('div', { className: 'timeout-rule-note' }, [
+          h('span', { 'aria-hidden': 'true' }, '⏱'),
+          h('span', null, 'ADA mantiene la conexión abierta e informa que sigue trabajando cada 3 segundos. La tarea completa debe tener al menos tanto tiempo como una llamada al modelo.'),
+        ]),
+      ]),
+    ]),
+
+    // 4. Download & Pull Manager (Real-Time % Progress)
     h('div', { className: 'card mb-6', key: 'pull-card' }, [
       h('div', { className: 'card-header' }, [
         h('div', null, [
@@ -1131,7 +1499,7 @@ function ModelsView({ installedModels, showToast }) {
   const installedProfile = (name) => (policyData?.installed || []).find(item => item.name === name);
 
   const handleBenchmark = async () => {
-    const target = benchModel || (installedModels[0]?.name);
+    const target = benchModel || previewPolicy?.chat?.preferred || installedModels[0]?.name;
     if (!target) {
       showToast('Seleccioná un modelo para benchmark', 'warning');
       return;
@@ -1239,8 +1607,11 @@ function ModelsView({ installedModels, showToast }) {
         h('div', { className: 'card-body flex flex-col gap-4' }, [
           h('div', { className: 'form-group' }, [
             h('label', { className: 'form-label' }, 'Seleccionar Modelo'),
-            h('select', { className: 'form-select', 'aria-label': 'Modelo para la prueba de rendimiento', value: benchModel || installedModels[0]?.name || '', onChange: (e) => setBenchModel(e.target.value) },
-              installedModels.map(m => h('option', { key: m.name, value: m.name }, m.name))
+            h('select', { className: 'form-select', 'aria-label': 'Modelo para la prueba de rendimiento', value: benchModel || previewPolicy?.chat?.preferred || installedModels[0]?.name || '', onChange: (e) => setBenchModel(e.target.value) },
+              installedModels.map(model => {
+                const profile = installedProfile(model.name);
+                return h('option', { key: model.name, value: model.name }, `${model.name}${profile && !profile.hardware_fit ? ' · ⚠ supera RAM segura' : ''}`);
+              })
             ),
           ]),
           h('div', { className: 'form-group' }, [
@@ -2416,6 +2787,7 @@ function SettingsView({ showToast }) {
                 onChange: (e) => setSelectedPreset(e.target.value),
               }, [
                 h('option', { value: 'telegram_bot_token' }, '📱 Telegram Bot Token (telegram_bot_token)'),
+                h('option', { value: 'event_token' }, '⚡ Webhook Event Token (event_token)'),
                 h('option', { value: 'openai_api_key' }, '🤖 OpenAI API Key (openai_api_key)'),
                 h('option', { value: 'anthropic_api_key' }, '🧠 Anthropic API Key (anthropic_api_key)'),
                 h('option', { value: 'openrouter_api_key' }, '🌐 OpenRouter API Key (openrouter_api_key)'),
@@ -2470,6 +2842,111 @@ function SettingsView({ showToast }) {
         ]),
       ]),
     ]),
+  ]);
+}
+
+// =============================================================================
+// Trigger sources: every external entry point into ADA
+// =============================================================================
+function TriggersView({ showToast, onSwitchTab }) {
+  const [data, setData] = useState(null);
+  const [busyId, setBusyId] = useState('');
+
+  const refresh = useCallback(async () => {
+    try {
+      setData(await api.getTriggers());
+    } catch (error) {
+      showToast('No pude leer los disparadores: ' + error.message, 'danger');
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 4000);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
+  const control = async (trigger, action) => {
+    setBusyId(trigger.id);
+    try {
+      const result = await api.controlTrigger(trigger.id, action);
+      showToast(result.message || `${trigger.name}: ${action}`, 'success');
+      await refresh();
+    } catch (error) {
+      showToast(`${trigger.name}: ${error.message}`, 'danger');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  if (!data) return h('div', { className: 'initial-loader' }, [h('div', { className: 'loader-spinner' })]);
+  const labels = {
+    running: ['Activo', 'success'], starting: ['Iniciando', 'warning'], degraded: ['Conflicto', 'danger'], recovering: ['Recuperando', 'warning'], ready: ['Preparado', 'accent'],
+    needs_config: ['Falta configurar', 'warning'], needs_adapter: ['Adaptador pendiente', 'warning'], stopped: ['Detenido', 'outline'],
+  };
+  const kindLabels = { channel: 'Canal', device: 'Dispositivo', schedule: 'Programación', event: 'Evento HTTP' };
+
+  return h('section', { className: 'tab-view active triggers-view', id: 'tab-triggers' }, [
+    h('div', { className: 'trigger-flow', key: 'flow', 'aria-label': 'Flujo de disparadores hacia ADA' }, [
+      h('div', { className: 'trigger-flow-source' }, [
+        h(Icon, { name: 'triggers', size: 20 }),
+        h('div', { className: 'trigger-flow-copy' }, [
+          h('strong', null, 'Entradas externas'),
+          h('small', null, 'mensajes · eventos · horarios · dispositivos'),
+        ]),
+      ]),
+      h('span', { className: 'trigger-flow-line', 'aria-hidden': 'true' }),
+      h('div', { className: 'trigger-flow-gate' }, [
+        h('strong', null, 'Cola de eventos'),
+        h('span', null, 'autenticación · deduplicación · reintentos'),
+      ]),
+      h('span', { className: 'trigger-flow-line', 'aria-hidden': 'true' }),
+      h('div', { className: 'trigger-flow-core' }, [h('strong', null, 'ADA'), h('span', null, 'decide y ejecuta')]),
+    ]),
+    h('div', { className: 'trigger-summary', key: 'summary' }, [
+      h('div', null, [h('span', null, 'Fuentes previstas'), h('strong', null, data.counts?.total || 0)]),
+      h('div', null, [h('span', null, 'Ejecutándose'), h('strong', null, data.counts?.running || 0)]),
+      h('div', null, [h('span', null, 'Contratos listos'), h('strong', null, data.counts?.ready || 0)]),
+    ]),
+    h('div', { className: 'trigger-grid', key: 'grid' }, (data.triggers || []).map(trigger => {
+      const status = labels[trigger.status] || [trigger.status || 'Desconocido', 'outline'];
+      const isTelegram = trigger.id === 'telegram';
+      const running = trigger.running === true;
+      return h('article', { className: `trigger-card trigger-${trigger.status}`, key: trigger.id }, [
+        h('div', { className: 'trigger-card-head' }, [
+          h('span', { className: 'trigger-card-icon' }, h(Icon, { name: isTelegram ? 'telegram' : trigger.kind === 'schedule' ? 'activity' : 'triggers' })),
+          h('div', null, [
+            h('span', { className: 'trigger-kind' }, kindLabels[trigger.kind] || 'Disparador'),
+            h('h3', null, trigger.name),
+          ]),
+          h('span', { className: `badge badge-${status[1]}` }, status[0]),
+        ]),
+        h('p', null, trigger.description),
+        h('div', { className: 'trigger-runtime' }, [
+          h('span', null, trigger.summary || 'Preparado para integrarse al bus de eventos'),
+          isTelegram && trigger.pid ? h('code', null, `PID ${trigger.pid}`) : null,
+          trigger.endpoint ? h('code', null, trigger.endpoint) : null,
+        ]),
+        isTelegram && trigger.last_error ? h('div', { className: 'trigger-warning', role: 'status' }, trigger.last_error) : null,
+        h('div', { className: 'trigger-actions' }, isTelegram ? [
+          h('button', {
+            className: `btn btn-sm ${running ? 'btn-danger' : 'btn-primary'}`,
+            disabled: busyId === trigger.id || (!running && !trigger.configured),
+            onClick: () => control(trigger, running ? 'stop' : 'start'),
+          }, busyId === trigger.id ? 'Procesando…' : running ? 'Detener' : 'Iniciar'),
+          h('button', {
+            className: 'btn btn-sm btn-secondary', disabled: busyId === trigger.id || !running,
+            onClick: () => control(trigger, 'restart'),
+          }, 'Reiniciar'),
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('telegram') }, 'Configurar'),
+        ] : [
+          h('span', { className: 'trigger-contract' }, 'Interfaz de entrada registrada'),
+          trigger.id === 'webhook'
+            ? h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('settings') }, 'Configurar credencial')
+            : null,
+        ]),
+      ]);
+    })),
   ]);
 }
 
@@ -2610,6 +3087,7 @@ function TelegramView({ showToast }) {
   }
 
   const isRunning = status?.running === true;
+  const isDegraded = status?.status === 'degraded';
 
   return h('section', { className: 'tab-view active', id: 'tab-telegram' }, [
     // 1. Control Bar Card
@@ -2620,12 +3098,14 @@ function TelegramView({ showToast }) {
           h('div', null, [
             h('div', { className: 'flex items-center gap-2' }, [
               h('h3', { className: 'card-title' }, 'Control del Servidor Telegram Bot'),
-              h('span', { className: `badge ${isRunning ? 'badge-success' : 'badge-danger'}` },
-                isRunning ? 'En ejecución (Long-polling)' : 'Detenido'
+              h('span', { className: `badge ${isDegraded ? 'badge-danger' : isRunning ? 'badge-success' : 'badge-danger'}` },
+                isDegraded ? 'Conflicto de listener' : isRunning ? 'En ejecución (Long-polling)' : 'Detenido'
               ),
             ]),
             h('p', { className: 'text-xs text-muted mt-1' },
-              'Daemon independiente desacoplado que reenvía texto, fotos y comandos a los endpoints de razonamiento de ADA.'
+              status?.survives_dashboard_restart
+                ? 'Servicio independiente supervisado por ADA. Sigue activo aunque el dashboard se reinicie.'
+                : 'Servicio de mensajería conectado a los endpoints de razonamiento de ADA.'
             ),
           ]),
         ]),
@@ -2662,6 +3142,11 @@ function TelegramView({ showToast }) {
         ]),
       ]),
     ]),
+
+    isDegraded ? h('div', { className: 'trigger-warning mb-6', role: 'alert', key: 'telegram-health-warning' }, [
+      h('strong', null, 'Telegram está ejecutándose, pero no está saludable. '),
+      h('span', null, status.last_error || 'Revisá el log persistente del disparador.'),
+    ]) : null,
 
     // 2. Token Configuration Form Card (Collapsible)
     showConfigCard ? h('div', { className: 'card mb-6 animate-fade-in', key: 'token-config-card' }, [
@@ -2719,10 +3204,13 @@ function TelegramView({ showToast }) {
       h('div', { className: 'card stat-card', key: 'stat-status' }, [
         h('div', { className: 'stat-header' }, [
           h('span', { className: 'stat-label' }, 'Estado del Proceso'),
-          h('span', { className: `status-indicator ${isRunning ? 'online' : 'offline'}` }),
+          h('span', { className: `status-indicator ${isRunning && !isDegraded ? 'online' : 'offline'}` }),
         ]),
-        h('div', { className: `stat-value ${isRunning ? 'text-success' : 'text-muted'}` }, isRunning ? 'ONLINE' : 'OFFLINE'),
-        h('div', { className: 'stat-footer' }, isRunning ? `Polling cada ${status.poll_seconds}s activo` : 'Daemon detenido'),
+        h('div', { className: `stat-value ${isDegraded ? 'text-warning' : isRunning ? 'text-success' : 'text-muted'}` },
+          isDegraded ? 'CONFLICTO' : isRunning ? 'ONLINE' : 'OFFLINE'),
+        h('div', { className: 'stat-footer' }, isRunning
+          ? `PID ${status.pid || '—'} · polling cada ${status.poll_seconds}s`
+          : status?.desired_state === 'running' ? 'Recuperación automática pendiente' : 'Detenido desde el dashboard'),
       ]),
 
       // KPI 2: Token Configurado
@@ -2859,19 +3347,19 @@ function TelegramView({ showToast }) {
       h('div', { className: 'card', key: 'cli-guide' }, [
         h('div', { className: 'card-header' }, [
           h('div', { className: 'flex items-center gap-2' }, [
-            h('h3', { className: 'card-title' }, '💻 Ejecución como Proceso Aislado'),
-            h('span', { className: 'badge badge-primary' }, 'CLI & Background'),
+            h('h3', { className: 'card-title' }, '💻 Servicio administrado por ADA'),
+            h('span', { className: 'badge badge-primary' }, 'Persistente'),
           ]),
         ]),
         h('div', { className: 'card-body' }, [
           h('p', { className: 'text-sm text-muted mb-3' },
-            'Telegram está diseñado como un servidor/bot completamente independiente en `telegram/bot.py`. Podés ejecutarlo directamente en una terminal separada, en un contenedor o como servicio systemd:'
+            'El dashboard controla el estado deseado, pero Telegram corre fuera del proceso web. Si el gestor se reinicia, ADA adopta el PID existente o lo recupera automáticamente si terminó.'
           ),
           h('pre', {
             className: 'p-4 rounded-lg bg-base font-mono text-xs text-secondary overflow-x-auto border border-subtle leading-relaxed',
             style: { background: '#0a0d14' }
           },
-            `# 1. Configurar token en la Bóveda Cifrada (vault.db)\n.venv/bin/python -c "from utils.credentials import SecureVault; SecureVault().set('telegram_bot_token', 'TU_TOKEN')"\n\n# 2. Iniciar el bot de Telegram de forma aislada\n.venv/bin/python telegram/bot.py`
+            `Estado deseado: ${status?.desired_state || 'stopped'}\nProceso: ${status?.pid ? `PID ${status.pid}` : 'sin proceso'}\nLog persistente: ${status?.log_path || '~/Desktop/ADA_Data/runtime/triggers/telegram.log'}`
           ),
           h('div', { className: 'flex justify-between items-center mt-3 text-xs text-muted' }, [
             h('span', null, '💡 Se comunica con ADA vía REST HTTP'),
@@ -2929,7 +3417,7 @@ function TelegramView({ showToast }) {
 // Main App Component
 // =============================================================================
 export function App() {
-  const validTabs = ['overview', 'ollama', 'models', 'mcps', 'chat', 'telegram', 'memory', 'settings'];
+  const validTabs = ['overview', 'core', 'metrics', 'ollama', 'models', 'mcps', 'chat', 'triggers', 'telegram', 'memory', 'settings'];
   const [activeTab, setActiveTab] = useState(() => {
     const requested = window.location.hash.replace(/^#/, '');
     return validTabs.includes(requested) ? requested : 'overview';
@@ -2999,10 +3487,13 @@ export function App() {
 
   const titles = {
     overview: ['Resumen', 'Estado y decisiones importantes de tu asistente local'],
+    core: ['Núcleo ADA', 'Actividad en vivo de modelos, canales y herramientas'],
+    metrics: ['Métricas', 'Telemetría de ADA con retención de 7 días'],
     ollama: ['Motor local', 'Modelos instalados, consumo y configuración de inferencia'],
     models: ['Modelos y roles', 'Qué modelo usa ADA para cada tipo de tarea'],
     mcps: ['Herramientas', 'Capacidades e integraciones disponibles para ADA'],
     chat: ['Conversar con ADA', 'Probá solicitudes y revisá la respuesta del agente'],
+    triggers: ['Disparadores', 'Todos los canales, eventos y horarios que pueden activar a ADA'],
     telegram: ['Telegram', 'Configuración y actividad del canal de mensajería'],
     memory: ['Actividad y memoria', 'Historial persistente, métricas y auditoría'],
     settings: ['Preferencias', 'Comportamiento, seguridad y credenciales del sistema'],
@@ -3060,10 +3551,13 @@ export function App() {
       }),
       h('div', { className: 'content-container', key: 'content' }, [
         activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: selectTab, showToast, onRefresh: refreshAll }) : null,
+        activeTab === 'core' ? h(CoreView, { onSwitchTab: selectTab }) : null,
+        activeTab === 'metrics' ? h(MetricsView) : null,
         activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { selectTab('models'); } }) : null,
         activeTab === 'models' ? h(ModelsView, { installedModels: ollamaData.models || [], showToast }) : null,
         activeTab === 'mcps' ? h(MCPsView, { showToast }) : null,
         activeTab === 'chat' ? h(ChatView, { showToast }) : null,
+        activeTab === 'triggers' ? h(TriggersView, { showToast, onSwitchTab: selectTab }) : null,
         activeTab === 'telegram' ? h(TelegramView, { showToast }) : null,
         activeTab === 'memory' ? h(MemoryView, null) : null,
         activeTab === 'settings' ? h(SettingsView, { showToast }) : null,
