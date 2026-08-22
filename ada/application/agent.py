@@ -10,7 +10,7 @@ from ada.infrastructure.engines.model_manager import ModelManager
 from ada.infrastructure.persistence.sqlite import Memory
 from ada.capabilities.registry import capability_catalog, load_capabilities
 from ada.agents.coordinator import MultiAgentCoordinator
-from ada.application.router import IntentRouter
+from ada.application.router import IntentRouter, is_capability_discussion
 from ada.domain.policy import PolicyEngine, PolicyViolation
 from ada.application.planner import Planner
 from ada.domain.tasks import Action
@@ -25,7 +25,7 @@ logger = logging.getLogger("ada.agent")
 class Agent:
     """ADA's general-purpose agent: route, execute tools, report and remember."""
 
-    def __init__(self, cfg=None):
+    def __init__(self, cfg=None, mcp_manager=None):
         self.cfg = cfg or {}
         self.metrics = Metrics("agent")
         self.model_manager = ModelManager(self.cfg)
@@ -41,7 +41,8 @@ class Agent:
         self.policy = PolicyEngine(self.cfg)
         self.planner = Planner(self.skills, self.policy)
         self.knowledge_loader = KnowledgeLoader(self.mem)
-        self.prompt_builder = PromptBuilder(self.mem)
+        self.mcp_manager = mcp_manager
+        self.prompt_builder = PromptBuilder(self.mem, mcp_manager=mcp_manager)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
@@ -150,9 +151,10 @@ class Agent:
         prompt = self.prompt_builder.task(task, self.lang)
         model_role = self.model_manager.role_for_task(task)
         model_name = self.model_manager.ensure_model(task, role=model_role)
+        role_token_limits = self.cfg.get("model_role_max_tokens", {})
         call_options = {
-            "timeout": self.cfg.get("model_timeout", 180),
-            "max_tokens": self.cfg.get("chat_max_tokens", 768),
+            "timeout": self.cfg.get("model_timeout", 300),
+            "max_tokens": role_token_limits.get(model_role, self.cfg.get("chat_max_tokens", 768)),
         }
         if provider == "ollama" and model_name:
             call_options["ollama_model"] = model_name
@@ -173,7 +175,7 @@ class Agent:
                 try:
                     result = self.model_manager.call(
                         "ollama", prompt, complexity=task["complexity"], ollama_model=model_name or None,
-                        timeout=self.cfg.get("model_timeout", 25),
+                        timeout=self.cfg.get("model_timeout", 300),
                     )
                     self.mem.record_task(task, result, provider="ollama", success=True)
                     return {"model": "ollama (fallback)", "result": result}
@@ -278,8 +280,8 @@ class Agent:
                 temperature=0.25,
                 max_tokens=900,
                 timeout=self.cfg.get("food_advisor_timeout") or min(
-                    18,
-                    max(5, int(self.cfg.get("chat_timeout_seconds", 30)) - 5),
+                    180,
+                    max(5, int(self.cfg.get("chat_timeout_seconds", 900)) - 5),
                 ),
                 format=self.mem.json_schema("food_reply"),
             )
@@ -370,6 +372,8 @@ class Agent:
             if quoted_candidate.is_dir():
                 candidate_path = str(quoted_candidate)
         path = os.path.expanduser(candidate_path.strip().rstrip(".,;:!?\"'")) if candidate_path else None
+        if not path and is_capability_discussion(text):
+            return {"action": "ask", "complexity": self.estimate_complexity(text), "confidence": 0.98}
         if path and Path(path).suffix.lower() in {
             ".jpg",
             ".jpeg",
@@ -562,12 +566,13 @@ class Agent:
             return {"action": "suggest", "path": path, "complexity": 4}
         return {"action": "ask", "complexity": self.estimate_complexity(text)}
 
-    def parse_prompt(self, text):
+    def parse_prompt(self, text, history=None):
         """Parse explicit commands first and route open-ended requests intelligently."""
         parsed = self._parse_prompt_rules(text)
         if parsed.get("action") != "ask":
             return parsed
-        history = " ".join(item.get("text", "") for item in self.mem.conversation(limit=6))
+        if history is None:
+            history = " ".join(item.get("text", "") for item in self.mem.conversation(limit=6))
         return self.router.route(text, history=history[-3500:])
 
     def interactive_loop(self):

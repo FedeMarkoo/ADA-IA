@@ -205,11 +205,15 @@ class FolderResolver:
             }
 
         if self.memory:
-            for alias_key in (canonical,):
+            # Natural-language paths often include parent labels ("fotos,
+            # eventos sociales, sofia"). Try specific labels too instead of
+            # requiring every word to match one folder.
+            alias_keys = [canonical] + list(reversed(terms))
+            for alias_key in dict.fromkeys(alias_keys):
                 if not alias_key:
                     continue
                 alias = self.memory.get_folder_alias(alias_key)
-                if alias and self._inside_base(alias["path"]) and self._is_directory(alias["path"]):
+                if alias and self._inside_base(alias["path"]) and Path(alias["path"]).is_dir():
                     return {"status": "resolved", "path": alias["path"], "source": "memory",
                             "confidence": alias["confidence"], "elapsed_ms": round((time.monotonic() - started) * 1000),
                             "terms": terms}

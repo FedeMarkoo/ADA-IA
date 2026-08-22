@@ -8,6 +8,8 @@ confirmation and capability execution live here with the other application servi
 import logging
 import os
 import re
+import platform
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -64,11 +66,33 @@ class WebChatService:
         "lightroom": "sqlite",
     }
 
-    def __init__(self, agent, config=None):
+    def __init__(self, agent, config=None, mcp_manager=None):
         self.agent = agent
         self.config = config or getattr(agent, "cfg", {})
         self._memory = getattr(agent, "mem", None)
         self.folder_resolver = FolderResolver(self.config, self._memory)
+        self.mcp_manager = mcp_manager or getattr(agent, "mcp_manager", None)
+
+    def _capability_summary(self):
+        """Build a user-facing capability list from the live MCP registry."""
+        if not self.mcp_manager:
+            return "No tengo un inventario MCP disponible en este momento."
+        servers = self.mcp_manager.list_servers()
+        tools = self.mcp_manager.list_tools()
+        active = {s["name"] for s in servers if s.get("status") == "active"}
+        grouped = {}
+        for tool in tools:
+            if tool.get("enabled") and tool.get("server") in active:
+                grouped.setdefault(tool.get("server"), []).append(tool)
+        lines = ["Soy ADA, un agente local. Estas son mis herramientas activas ahora:"]
+        for server, server_tools in sorted(grouped.items()):
+            lines.append(f"\n**{server}**")
+            for tool in sorted(server_tools, key=lambda item: item.get("name", "")):
+                confirmation = " (requiere confirmación)" if tool.get("requires_confirmation") else ""
+                lines.append(f"- `{tool.get('name')}`: {tool.get('description', 'sin descripción')}{confirmation}")
+        if not grouped:
+            lines.append("\nNo hay herramientas MCP activas.")
+        return "\n".join(lines)
 
     @staticmethod
     def _emit(progress, phase, **details):
@@ -153,6 +177,70 @@ class WebChatService:
     def _remember(state, user_text, reply):
         state.conversation.extend([{"role": "user", "text": user_text}, {"role": "assistant", "text": reply}])
 
+    @staticmethod
+    def _conversation_context(state, limit=8):
+        """Return only this web session's recent turns, clearly attributed."""
+        items = list(getattr(state, "conversation", []) or [])[-limit:]
+        lines = []
+        for item in items:
+            text = str(item.get("text") or "").strip()
+            if not text:
+                continue
+            speaker = "Usuario" if item.get("role") == "user" else "ADA"
+            lines.append(f"{speaker}: {text}")
+        return "\n".join(lines)[-3500:]
+
+    @staticmethod
+    def _filesystem_followup(text, context_path):
+        """Recognize short references to the folder already active in this session."""
+        if not context_path:
+            return None
+        lowered = re.sub(r"\s+", " ", str(text).lower().strip(" .!?"))
+        if re.search(r"\b(resumen|resumime|resumir|panorama)\b", lowered) and re.search(
+            r"\b(lo que|contenido|carpeta|tiene|hay|eso|esto)\b", lowered
+        ):
+            return {"action": "list_dirs", "use_context": True, "summarize": True}
+        if re.fullmatch(r"(?:y\s+)?(?:listar|lista|listame|listá|mostrar|mostrame|mostrá|ver|contenido)", lowered):
+            return {"action": "list_dirs", "use_context": True, "summarize": False}
+        match = re.match(r"^(?:y\s+)?(?:que|qué)\s+(?:tiene|hay(?:\s+en)?)\s+(.+)$", lowered)
+        if match:
+            subject = match.group(1).strip()
+            referential = subject in {"ahi", "ahí", "adentro", "dentro", "eso", "esto", "esa", "esa carpeta"}
+            return {"action": "list_dirs", "use_context": referential, "summarize": False}
+        return None
+
+    @staticmethod
+    def _folder_overview(result):
+        """Create a grounded overview from directory names without inventing file contents."""
+        paths = [Path(value) for value in (result.get("dirs") or [])]
+        names = [path.name for path in paths]
+        location = Path(result.get("dir") or ".").name or str(result.get("dir") or "la carpeta")
+        groups = (
+            ("fotos y cámara", ("dcim", "camera", "panorama")),
+            ("ediciones y collages", ("edit", "collage", "photocollage")),
+            ("mensajería", ("whatsapp", "telegram")),
+            ("descargas", ("download", "descarga")),
+            ("transferencias por Bluetooth", ("bluetooth",)),
+        )
+        used = set()
+        summaries = []
+        for label, markers in groups:
+            matches = [name for name in names if any(marker in name.casefold() for marker in markers)]
+            if matches:
+                used.update(matches)
+                summaries.append(f"• {label}: {', '.join(matches)}")
+        remaining = [name for name in names if name not in used]
+        if remaining:
+            summaries.append(f"• otras carpetas: {', '.join(remaining)}")
+        count = result.get("count", len(names))
+        if not names:
+            return f"{location} no tiene subcarpetas visibles. No revisé todavía si contiene archivos sueltos."
+        return (
+            f"En {location} hay {count} carpetas principales. Por sus nombres, el contenido está organizado así:\n\n"
+            + "\n".join(summaries)
+            + "\n\nEs un resumen de la estructura; no abrí cada subcarpeta ni inferí archivos que no haya comprobado."
+        )
+
     def _payload(self, parsed, action, text):
         payload = {key: value for key, value in parsed.items() if key not in {"action", "complexity"}}
         if action == "run_script":
@@ -174,8 +262,10 @@ class WebChatService:
                 # question look like a dead request.  Recursive traversal must
                 # be an explicit user/router decision.
                 payload.setdefault("recursive", False)
+                if re.search(r"\b(subcarpetas?|adentro|dentro|recursiv[oa])\b", lowered):
+                    payload["recursive"] = True
             elif filesystem_action == "list_photos":
-                payload.update({"action": "list_files", "extensions": [".jpg", ".jpeg", ".png", ".webp"]})
+                payload.update({"action": "list_files", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".xml", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"]})
             elif filesystem_action == "group_files":
                 payload.update({"action": "move_files", "name": parsed.get("name") or "Agrupadas"})
             if not (payload.get("path") or payload.get("dir")):
@@ -210,6 +300,16 @@ class WebChatService:
         self._emit(progress, "received", message=text)
         if lang:
             self.agent.lang = lang
+
+        # Telegram's version command must never go through the LLM router.
+        if re.fullmatch(r"/(?:v|version|versi[oó]n)", text, re.I):
+            reply = "ADA versión 0.1.0"
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · sistema"}, 200
+        if re.fullmatch(r"/i", text, re.I):
+            reply = self._system_info()
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · sistema"}, 200
         if len(text.split()) <= 3 and re.fullmatch(
             r"(?:hola|hi|hello|buenas|buenos días|buenos dias|hey)", text, re.I
         ):
@@ -217,20 +317,10 @@ class WebChatService:
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · respuesta rápida"}, 200
 
-        if re.search(r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes)\b", text, re.I) or \
+        if re.search(r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes|herramientas tenes|MCPs? tenes|capacidades tenes)\b", text, re.I) or \
            re.search(r"\b(en que|en qué)\s+(me podes|me puedes|ayudas|me ayudas)\b", text, re.I) or \
            re.search(r"\b(quien|quién)\s+(sos|eres)\b", text, re.I):
-            reply = (
-                "Soy **ADA**, tu asistente y compañero local de inteligencia artificial.\n\n"
-                "Puedo ayudarte con varias tareas:\n"
-                "- 📸 **Fotos y Selección**: Analizar calidad de imágenes RAW/JPG, detectar fotos borrosas o mal expuestas y organizar lotes.\n"
-                "- 🗂️ **Gestión de Archivos**: Listar, ordenar, mover o respaldar archivos en tus carpetas autorizadas de forma segura.\n"
-                "- 🌐 **Búsqueda Web**: Buscar información actualizada en internet en tiempo real.\n"
-                "- 🍳 **Comidas y Recetas**: Armar listas de compras, sugerir recetas con lo que tenés y organizar menús.\n"
-                "- 🧠 **Razonamiento y Chat**: Responder preguntas, resumir textos, programar y resolver problemas paso a paso.\n"
-                "- 🔌 **Herramientas MCP**: Ejecutar herramientas locales mediante el protocolo MCP.\n\n"
-                "¿Qué te gustaría hacer hoy?"
-            )
+            reply = self._capability_summary()
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · asistente"}, 200
 
@@ -271,9 +361,35 @@ class WebChatService:
                 return {"reply": reply, "model": result.get("model", "tool"), "result": output}, 200
             state.pending_path_action = None
 
-        lowered = text.lower()
-        local_action = self._filesystem_intent(text)
         context_path = getattr(state, "current_path", None)
+        lowered = text.lower()
+        # Short negative feedback refers to the active task; do not discard
+        # the conversation and ask an unrelated emotional-support question.
+        if context_path and re.fullmatch(r"(?:p[eé]simo|mal[ií]simo|horrible|no sirve)", lowered.strip(" .!?")):
+            reply = (
+                "Tenés razón: la respuesta anterior no resolvió la tarea. "
+                "Tengo activa la carpeta " + str(context_path) + ". "
+                "Puedo reintentar la búsqueda o contar las fotos directamente."
+            )
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · contexto de tarea"}, 200
+        contextual_followup = self._filesystem_followup(text, context_path)
+        local_action = self._filesystem_intent(text) or (
+            contextual_followup.get("action") if contextual_followup else None
+        )
+        summarize_folder = bool(contextual_followup and contextual_followup.get("summarize"))
+        conversation_context = self._conversation_context(state)
+        cached_result = getattr(state, "last_result", None)
+        if (
+            summarize_folder
+            and isinstance(cached_result, dict)
+            and cached_result.get("action") == "list_dirs"
+            and str(cached_result.get("dir")) == str(context_path)
+        ):
+            reply = self._folder_overview(cached_result)
+            self._emit(progress, "route_local", action="summarize_cached_directory", reason="session_result")
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · contexto de carpeta", "result": cached_result}, 200
         folder = {"status": "none", "candidates": []}
         existence_question = False
 
@@ -294,7 +410,9 @@ class WebChatService:
             content_of_photos = bool(
                 re.search(r"\b(adentro|dentro|contenido)\b", lowered) and re.search(r"\bfotos?\b", lowered)
             )
-            if existence_question and context_path:
+            if contextual_followup and contextual_followup.get("use_context"):
+                folder = {"status": "resolved", "path": context_path, "source": "session_context", "confidence": 1.0}
+            elif existence_question and context_path:
                 folder = {"status": "resolved", "path": context_path, "source": "session_context", "confidence": 1.0}
             elif content_of_photos:
                 folder = self.folder_resolver.resolve_label("Fotos", context_path=context_path)
@@ -304,7 +422,12 @@ class WebChatService:
             parsed = {"action": local_action, "complexity": 1}
         else:
             self._emit(progress, "router_model_started")
-            parsed = self.agent.parse_prompt(text)
+            try:
+                parsed = self.agent.parse_prompt(text, history=conversation_context)
+            except TypeError as exc:
+                if "unexpected keyword argument 'history'" not in str(exc):
+                    raise
+                parsed = self.agent.parse_prompt(text)
             self._emit(progress, "router_model_finished", action=parsed.get("action"), confidence=parsed.get("confidence"))
 
         if folder["status"] == "ambiguous" and re.search(r"\b(fotos?|archivos?|carpetas?|documentos?|ruta)\b", lowered):
@@ -323,7 +446,7 @@ class WebChatService:
             parsed["path"] = folder["path"]
             parsed["dir"] = folder["path"]
             if local_action == "list_files" and re.search(r"\b(fotos?|im[aá]genes?)\b", lowered):
-                parsed["extensions"] = [".jpg", ".jpeg", ".png", ".webp", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"]
+                parsed["extensions"] = [".jpg", ".jpeg", ".png", ".webp", ".xml", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"]
         elif local_action and folder["status"] == "none" and folder.get("reason") != "no_folder_terms":
             if folder.get("reason") == "stale_index":
                 reply = (
@@ -348,15 +471,20 @@ class WebChatService:
             complexity = parsed.get("complexity")
             if complexity is None:
                 complexity = self.agent.estimate_complexity(text)
-            result = self.agent.decide_and_run(
-                {
-                    "type": None,
-                    "prompt": text,
-                    "complexity": complexity,
-                    "use_memory": True,
-                    "mode": "agent",
-                }
-            )
+            model_task = {
+                "type": None,
+                "prompt": text,
+                "complexity": complexity,
+                "use_memory": True,
+                "mode": "agent",
+                "conversation_context": conversation_context,
+            }
+            manager = getattr(self.agent, "model_manager", None)
+            model_role = manager.role_for_task(model_task) if manager and hasattr(manager, "role_for_task") else "chat"
+            model_name = manager.select_model(model_role, role=model_role) if manager and hasattr(manager, "select_model") else None
+            self._emit(progress, "model_started", model=model_name, role=model_role)
+            result = self.agent.decide_and_run(model_task)
+            self._emit(progress, "model_finished", model=model_name, role=model_role)
             reply = text_from_result(result.get("result", result))
             self._remember(state, text, reply)
             return {"reply": reply, "model": result.get("model") or "sin modelo"}, 200
@@ -410,15 +538,54 @@ class WebChatService:
                 and output.get("action") == "list_files"
                 and re.search(r"\b(cu[aá]nt[oa]s?|cantidad|total)\b", lowered)
             ):
-                noun = "fotos" if re.search(r"\b(fotos?|im[aá]genes?)\b", lowered) else "archivos"
-                count = output.get("count", len(output.get("files") or []))
-                reply = f"Hay {count} {noun} en {output.get('dir')}."
+                counts = output.get("photo_counts")
+                if counts and re.search(r"\b(fotos?|im[aá]genes?|evento|originales?)\b", lowered):
+                    accepted = max(counts.get("raw", 0), counts.get("xml", 0), counts.get("jpg", 0))
+                    if counts.get("jpg", 0) > 0:
+                        reply = f"Encontré {accepted} fotos aceptadas y exportadas en {output.get('dir')}."
+                    else:
+                        reply = f"Encontré {accepted} fotos aceptadas sin exportar en {output.get('dir')}."
+                else:
+                    noun = "fotos" if re.search(r"\b(fotos?|im[aá]genes?)\b", lowered) else "archivos"
+                    count = output.get("count", len(output.get("files") or []))
+                    reply = f"Hay {count} {noun} en {output.get('dir')}."
+            elif summarize_folder and isinstance(output, dict) and output.get("action") == "list_dirs":
+                reply = self._folder_overview(output)
             else:
                 reply = text_from_result(output)
         if isinstance(output, dict) and not output.get("error") and output.get("dir"):
+            state.last_result = output
             self._remember_context(state, output["dir"])
             if output.get("action") == "list_dirs" and self._memory and hasattr(self._memory, "index_folders"):
                 indexed = self._memory.index_folders(output["dir"], output.get("dirs") or [])
                 self._emit(progress, "folder_index_updated", parent=output["dir"], indexed=indexed)
         self._remember(state, text, reply)
         return {"reply": reply, "model": result.get("model", "tool"), "result": output}, 200
+
+    @staticmethod
+    def _system_info():
+        """Compact, non-invasive machine summary for the /i command."""
+        try:
+            import psutil
+            memory = psutil.virtual_memory()
+            cpu = psutil.cpu_percent(interval=0.15)
+            battery = psutil.sensors_battery()
+            battery_text = "No disponible"
+            if battery:
+                state = "cargando" if battery.power_plugged else "batería"
+                battery_text = f"{battery.percent:.0f}% ({state})"
+            memory_text = f"{memory.percent:.0f}% usado de {memory.total / (1024**3):.1f} GB"
+        except Exception:
+            memory_text = "No disponible"
+            cpu = "No disponible"
+            battery_text = "No disponible"
+        disk = shutil.disk_usage(os.path.expanduser("~"))
+        return (
+            "Información del equipo\n\n"
+            f"• Equipo: {platform.node() or 'No disponible'}\n"
+            f"• Sistema: {platform.system()} {platform.release()}\n"
+            f"• CPU: {cpu}% de uso ({os.cpu_count() or '?'} núcleos)\n"
+            f"• Memoria: {memory_text}\n"
+            f"• Batería: {battery_text}\n"
+            f"• Disco disponible: {disk.free / (1024**3):.1f} GB"
+        )

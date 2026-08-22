@@ -10,8 +10,10 @@ import re
 import sys
 import threading
 import urllib.parse
+import urllib.error
 import urllib.request
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
@@ -78,10 +80,17 @@ class TelegramListener:
         self.base_url = os.environ.get("ADA_INTERNAL_URL", base_url).rstrip("/")
         self.api_url = f"https://api.telegram.org/bot{self.token}"
         self.poll_seconds = float(telegram.get("poll_seconds", 2))
+        self.request_timeout = float(
+            telegram.get("request_timeout_seconds", self.config.get("chat_timeout_seconds", 900))
+        )
+        self.typing_enabled = bool(telegram.get("typing_indicator", True))
+        self.typing_interval = max(1.0, float(telegram.get("typing_interval_seconds", 4.0)))
         self.allowed_chat_ids = self._allowed_chat_ids(
             os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "") or telegram.get("allowed_chat_ids", [])
         )
         self.inbox = Path(os.path.expanduser(str(telegram.get("inbox", "~/Desktop/ADA_Data/telegram_inbox"))))
+        health_path = os.environ.get("ADA_TRIGGER_HEALTH_PATH") or telegram.get("health_path")
+        self.health_path = Path(health_path).expanduser() if health_path else None
         self.stop_event = threading.Event()
         self._processed_update_ids: Set[int] = set()
         self._processed_update_order = deque(maxlen=2048)
@@ -106,12 +115,31 @@ class TelegramListener:
     def stop(self) -> None:
         self.stop_event.set()
 
+    def _write_health(self, status: str, error: Optional[str] = None, **details: Any) -> None:
+        if not self.health_path:
+            return
+        payload = {
+            "status": status,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "last_error": str(error or "")[:1000] or None,
+            **details,
+        }
+        try:
+            self.health_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.health_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(temporary, self.health_path)
+        except OSError:
+            logger.exception("telegram_health_write_failed")
+
     def run(self) -> None:
         offset = None
         logger.info("telegram_bot_started base_url=%s", self.base_url)
+        self._write_health("starting")
         while not self.stop_event.is_set():
             try:
                 updates = self._get_updates(offset)
+                self._write_health("healthy", pending_updates=len(updates))
                 for update in updates:
                     update_id = update.get("update_id")
                     if update_id is not None:
@@ -123,8 +151,13 @@ class TelegramListener:
                     offset = (update_id + 1) if update_id is not None else offset
                     self.handle_update(update)
             except Exception as exc:
-                logger.exception("adapter error: %s", exc)
-                self.stop_event.wait(max(self.poll_seconds, 3))
+                conflict = "Telegram API 409" in str(exc)
+                if conflict:
+                    logger.error("telegram_listener_conflict error=%s", exc)
+                else:
+                    logger.exception("adapter error: %s", exc)
+                self._write_health("degraded", error=exc)
+                self.stop_event.wait(30 if conflict else max(self.poll_seconds, 3))
 
     def _remember_update(self, update_id: int) -> None:
         if update_id in self._processed_update_ids:
@@ -147,8 +180,16 @@ class TelegramListener:
             headers={"Content-Type": "application/json"},
             method="POST" if data else "GET",
         )
-        with urllib.request.urlopen(request, timeout=35) as response:
-            result = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=35) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            try:
+                payload = json.loads(exc.read().decode("utf-8", "replace"))
+                description = payload.get("description") or str(exc)
+            except (ValueError, OSError):
+                description = str(exc)
+            raise RuntimeError(f"Telegram API {exc.code}: {description}") from exc
         if not result.get("ok"):
             raise RuntimeError(result.get("description", "Telegram API error"))
         return result.get("result")
@@ -160,13 +201,16 @@ class TelegramListener:
                 return function()
             except (OSError, ValueError, RuntimeError) as exc:
                 last_error = exc
+                if "Telegram API 409" in str(exc):
+                    logger.error("%s conflict: %s", operation, exc)
+                    break
                 if attempt + 1 == attempts:
                     logger.exception("%s failed after %d attempts", operation, attempts)
                     break
                 delay = min(30.0, max(1.0, self.poll_seconds) * (2**attempt))
                 logger.warning("%s retry=%d delay=%.1fs", operation, attempt + 1, delay)
                 self.stop_event.wait(delay)
-        raise RuntimeError(f"{operation} failed") from last_error
+        raise RuntimeError(f"{operation} failed: {last_error}") from last_error
 
     def _get_updates(self, offset: Optional[int]) -> list:
         def call():
@@ -174,8 +218,16 @@ class TelegramListener:
             if offset is not None:
                 query["offset"] = offset
             url = f"{self.api_url}/getUpdates?{urllib.parse.urlencode(query)}"
-            with urllib.request.urlopen(url, timeout=35) as response:
-                result = json.loads(response.read().decode("utf-8"))
+            try:
+                with urllib.request.urlopen(url, timeout=35) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                try:
+                    payload = json.loads(exc.read().decode("utf-8", "replace"))
+                    description = payload.get("description") or str(exc)
+                except (ValueError, OSError):
+                    description = str(exc)
+                raise RuntimeError(f"Telegram API {exc.code}: {description}") from exc
             if not result.get("ok"):
                 raise RuntimeError(result.get("description", "Telegram API error"))
             return result.get("result", [])
@@ -226,12 +278,37 @@ class TelegramListener:
             self.send_message(chat_id, "Puedo procesar texto y fotos. Enviame un mensaje o una imagen con una consulta.")
             return
 
+        typing_stop = threading.Event()
+        typing_thread = self._start_typing(chat_id, typing_stop)
         try:
-            reply = self._invoke_internal_chat(text, chat_id=chat_id, sender=sender)
-        except TypeError:
-            reply = self._invoke_internal_chat(text)
+            try:
+                reply = self._invoke_internal_chat(text, chat_id=chat_id, sender=sender)
+            except TypeError:
+                reply = self._invoke_internal_chat(text)
+        finally:
+            typing_stop.set()
+            if typing_thread:
+                typing_thread.join(timeout=1.0)
         logger.info("chat_id=%s respuesta=%r", chat_id, str(reply)[:500])
         self.send_message(chat_id, reply)
+
+    def _start_typing(self, chat_id: str, stop_event: threading.Event) -> Optional[threading.Thread]:
+        """Keep Telegram's transient typing indicator alive during long tasks."""
+        if not self.typing_enabled or not chat_id:
+            return None
+
+        def loop() -> None:
+            while not stop_event.is_set() and not self.stop_event.is_set():
+                try:
+                    self._api("sendChatAction", {"chat_id": chat_id, "action": "typing"})
+                except Exception as exc:
+                    # The indicator is best-effort and must never cancel a task.
+                    logger.debug("telegram_typing_indicator_failed chat_id=%s error=%s", chat_id, exc)
+                stop_event.wait(self.typing_interval)
+
+        thread = threading.Thread(target=loop, name=f"ada-telegram-typing-{chat_id}", daemon=True)
+        thread.start()
+        return thread
 
     def _status_summary(self) -> str:
         def call():
@@ -271,7 +348,9 @@ class TelegramListener:
             headers={"Content-Type": "application/json", "X-ADA-Source": "telegram"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=300) as response:
+        # Allow the local agent budget to finish before the Telegram adapter
+        # gives up and reports a misleading connection failure.
+        with urllib.request.urlopen(request, timeout=max(60, self.request_timeout + 60)) as response:
             result = json.loads(response.read().decode("utf-8"))
         return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
 
@@ -301,7 +380,9 @@ TelegramBot = TelegramListener
 def main():
     """CLI Entry point to run Telegram Bot independently."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-    cfg_path = PROJECT_ROOT / "config.json"
+    cfg_path = PROJECT_ROOT / "ada" / "config.json"
+    if not cfg_path.is_file():
+        cfg_path = PROJECT_ROOT / "config.json"
     cfg = {}
     if cfg_path.is_file():
         with open(cfg_path, "r", encoding="utf-8") as f:
