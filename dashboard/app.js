@@ -130,8 +130,20 @@ export const api = {
   saveModelsPolicy(policy) {
     return this.request('/api/models/policy', { method: 'POST', body: JSON.stringify({ model_policy: policy }) });
   },
-  runBenchmark(model, prompt_key) {
-    return this.request('/api/models/benchmark', { method: 'POST', body: JSON.stringify({ model, prompt_key }) });
+  runBenchmark(model, prompt_key, custom_prompt, run_suite, prompt_keys) {
+    return this.request('/api/models/benchmark', {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        prompt_key,
+        custom_prompt,
+        run_suite: Boolean(run_suite || prompt_key === 'suite'),
+        prompt_keys,
+      }),
+    });
+  },
+  getBenchmarkPrompts() {
+    return this.request('/api/models/benchmark/prompts');
   },
 
   // MCPs Lifecycle
@@ -640,6 +652,7 @@ function MetricsView() {
 
 function CoreView({ onSwitchTab }) {
   const [coreData, setCoreData] = useState(null);
+  const [metricsData, setMetricsData] = useState({ samples: [] });
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
@@ -657,6 +670,19 @@ function CoreView({ onSwitchTab }) {
     };
     load();
     const interval = setInterval(load, 1000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadMetrics = () => api.getTimeSeries().then(data => {
+      if (mounted) setMetricsData(data || { samples: [] });
+    }).catch(() => {});
+    loadMetrics();
+    const interval = setInterval(loadMetrics, 10000);
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -713,6 +739,25 @@ function CoreView({ onSwitchTab }) {
     chat: 'Chat', router: 'Router', reasoning: 'Razonamiento', coding: 'Código', tools: 'Herramientas', vision: 'Visión',
   };
   const statusText = activity.status === 'working' ? 'Trabajando' : activity.status === 'error' ? 'Requiere atención' : activity.status === 'complete' ? 'Completado' : 'En espera';
+  const samples = metricsData.samples || [];
+  const byMetric = samples.reduce((groups, sample) => {
+    (groups[sample.metric] ||= []).push(sample);
+    return groups;
+  }, {});
+  const latestMetric = (name) => byMetric[name]?.at(-1)?.value;
+  const sparkValues = (name) => (byMetric[name] || []).slice(-28).map(sample => Number(sample.value) || 0);
+  const formatMetric = (name, suffix = '') => {
+    const value = latestMetric(name);
+    return value == null ? '—' : `${Number(value).toFixed(name.includes('percent') ? 1 : 0)}${suffix}`;
+  };
+  const activeConnections = connectors.filter(connector => connector.online).length;
+  const renderSpark = (name, tone = 'cyan') => {
+    const values = sparkValues(name);
+    const peak = Math.max(...values, 1);
+    return h('div', { className: `core-spark core-spark-${tone}`, 'aria-hidden': 'true' }, values.length
+      ? values.map((value, index) => h('i', { key: `${name}-${index}`, style: { height: `${Math.max(9, Math.round((value / peak) * 100))}%` } }))
+      : [h('i', { key: 'empty', style: { height: '12%' } })]);
+  };
   const center = 400;
   const connectorRadius = 302;
   const modelRadius = 150;
@@ -732,6 +777,28 @@ function CoreView({ onSwitchTab }) {
       ]),
     ]),
     loadError ? h('div', { className: 'core-load-error', role: 'alert' }, loadError) : null,
+    h('div', { className: 'core-kpi-strip', key: 'kpis' }, [
+      h('article', { className: 'core-kpi core-kpi-primary' }, [
+        h('span', { className: 'core-kpi-label' }, 'NÚCLEO ADA'),
+        h('strong', null, statusText),
+        h('small', null, activity.label),
+      ]),
+      h('article', { className: 'core-kpi' }, [
+        h('span', { className: 'core-kpi-label' }, 'CPU DEL PROCESO'),
+        h('strong', null, formatMetric('ada_process_cpu_percent', '%')),
+        renderSpark('ada_process_cpu_percent', 'violet'),
+      ]),
+      h('article', { className: 'core-kpi' }, [
+        h('span', { className: 'core-kpi-label' }, 'MEMORIA ADA'),
+        h('strong', null, formatMetric('ada_process_rss_mb', ' MB')),
+        renderSpark('ada_process_rss_mb', 'cyan'),
+      ]),
+      h('article', { className: 'core-kpi' }, [
+        h('span', { className: 'core-kpi-label' }, 'CONEXIONES'),
+        h('strong', null, `${activeConnections}/${connectors.length}`),
+        h('small', null, 'canales y herramientas activas'),
+      ]),
+    ]),
     h('div', { className: 'core-layout', key: 'core-layout' }, [
       h('div', {
         className: 'core-network',
@@ -748,8 +815,12 @@ function CoreView({ onSwitchTab }) {
             const outerY = center + connectorRadius * Math.sin(angle);
             const innerX = center + 118 * Math.cos(angle);
             const innerY = center + 118 * Math.sin(angle);
-            return h('line', {
-              key: `line-${node.id}`, x1: innerX, y1: innerY, x2: outerX, y2: outerY,
+            const bend = (index % 2 === 0 ? 1 : -1) * (24 + (index % 3) * 12);
+            const controlX = center + ((innerX + outerX) / 2 - center) + bend * Math.sin(angle);
+            const controlY = center + ((innerY + outerY) / 2 - center) - bend * Math.cos(angle);
+            return h('path', {
+              key: `line-${node.id}`,
+              d: `M ${innerX} ${innerY} Q ${controlX} ${controlY} ${outerX} ${outerY}`,
               className: `core-link ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
             });
           }),
@@ -844,6 +915,42 @@ function CoreView({ onSwitchTab }) {
             }, event.label))
           ),
         ]) : null,
+      ]),
+    ]),
+    h('div', { className: 'core-telemetry-grid', key: 'telemetry' }, [
+      h('section', { className: 'core-telemetry-card core-telemetry-wide' }, [
+        h('div', { className: 'core-telemetry-heading' }, [
+          h('div', null, [
+            h('span', { className: 'core-activity-eyebrow' }, 'OBSERVABILIDAD EN TIEMPO REAL'),
+            h('h3', null, 'Pulso operativo'),
+          ]),
+          h('span', { className: 'core-live-badge' }, [h('span', { className: 'core-live-dot' }), 'LIVE']),
+        ]),
+        h('div', { className: 'core-telemetry-charts' }, [
+          h('div', { className: 'core-chart-block' }, [
+            h('div', { className: 'core-chart-label' }, [h('span', null, 'ADA / CPU'), h('strong', null, formatMetric('ada_process_cpu_percent', '%'))]),
+            renderSpark('ada_process_cpu_percent', 'cyan'),
+          ]),
+          h('div', { className: 'core-chart-block' }, [
+            h('div', { className: 'core-chart-label' }, [h('span', null, 'OLLAMA / MEMORIA'), h('strong', null, formatMetric('ollama_process_rss_mb', ' MB'))]),
+            renderSpark('ollama_process_rss_mb', 'violet'),
+          ]),
+          h('div', { className: 'core-chart-block' }, [
+            h('div', { className: 'core-chart-label' }, [h('span', null, 'ACTIVIDAD REGISTRADA'), h('strong', null, String(samples.length))]),
+            renderSpark('messages_received', 'green'),
+          ]),
+        ]),
+      ]),
+      h('section', { className: 'core-telemetry-card core-signal-card' }, [
+        h('div', { className: 'core-telemetry-heading' }, [
+          h('div', null, [h('span', { className: 'core-activity-eyebrow' }, 'SEÑALES DEL SISTEMA'), h('h3', null, 'Estado de la red')]),
+        ]),
+        h('div', { className: 'core-signal-grid' }, [
+          h('div', null, [h('strong', null, String(modelGroups.length)), h('span', null, 'modelos activos')]),
+          h('div', null, [h('strong', null, String(connectors.filter(connector => connector.kind === 'MCP' && connector.online).length)), h('span', null, 'MCP conectados')]),
+          h('div', null, [h('strong', null, String(connectors.filter(connector => connector.kind === 'Entrada' && connector.online).length)), h('span', null, 'entradas listas')]),
+          h('div', null, [h('strong', null, latestMetric('messages_received') == null ? '—' : String(latestMetric('messages_received'))), h('span', null, 'mensajes recibidos')]),
+        ]),
       ]),
     ]),
   ]);
@@ -1465,8 +1572,11 @@ function ModelsView({ installedModels, showToast }) {
   const [savingMode, setSavingMode] = useState(false);
   const [benchModel, setBenchModel] = useState('');
   const [benchPrompt, setBenchPrompt] = useState('quick');
+  const [customPromptText, setCustomPromptText] = useState('');
   const [benchResult, setBenchResult] = useState(null);
   const [benchLoading, setBenchLoading] = useState(false);
+  const [promptCatalog, setPromptCatalog] = useState(null);
+  const [expandedPromptIdx, setExpandedPromptIdx] = useState(null);
   const [catalog, setCatalog] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newModelForm, setNewModelForm] = useState({
@@ -1487,6 +1597,10 @@ function ModelsView({ installedModels, showToast }) {
 
     api.getModelsCatalog().then(data => {
       setCatalog(data.catalog || []);
+    }).catch(() => {});
+
+    api.getBenchmarkPrompts().then(data => {
+      if (data?.prompts) setPromptCatalog(data.prompts);
     }).catch(() => {});
   }, []);
 
@@ -1529,11 +1643,18 @@ function ModelsView({ installedModels, showToast }) {
     setBenchLoading(true);
     setBenchResult(null);
     try {
-      const res = await api.runBenchmark(target, benchPrompt);
+      const isSuite = benchPrompt === 'suite';
+      const customPrompt = benchPrompt === 'custom' ? customPromptText : null;
+      const res = await api.runBenchmark(target, isSuite ? 'quick' : benchPrompt, customPrompt, isSuite);
       setBenchResult(res);
-      if (res.ok) showToast('Benchmark finalizado', 'success');
+      if (res.ok) {
+        showToast(isSuite ? 'Suite de pruebas completada' : 'Benchmark finalizado', 'success');
+      } else {
+        showToast(res.error || 'Error al ejecutar prueba', 'danger');
+      }
     } catch (err) {
       setBenchResult({ ok: false, error: err.message });
+      showToast('Error de conexión con el motor', 'danger');
     } finally {
       setBenchLoading(false);
     }
@@ -1621,10 +1742,13 @@ function ModelsView({ installedModels, showToast }) {
         ]),
       ]),
 
-      // Benchmark Runner
+      // Benchmark & Prompt Test Runner with Full Telemetry
       h('div', { className: 'card', key: 'bench-card' }, [
         h('div', { className: 'card-header' }, [
-          h('h3', { className: 'card-title' }, 'Benchmark & Test de Velocidad'),
+          h('div', null, [
+            h('h3', { className: 'card-title' }, '🧪 Ejecución de Prompts de Test & Telemetría'),
+            h('span', { className: 'text-xs text-muted' }, 'Medición completa de tiempos, velocidad de inferencia y recursos consumidos (CPU / RAM / VRAM).'),
+          ]),
         ]),
         h('div', { className: 'card-body flex flex-col gap-4' }, [
           h('div', { className: 'form-group' }, [
@@ -1637,21 +1761,98 @@ function ModelsView({ installedModels, showToast }) {
             ),
           ]),
           h('div', { className: 'form-group' }, [
-            h('label', { className: 'form-label' }, 'Tipo de Prueba'),
+            h('label', { className: 'form-label' }, 'Tipo de Prueba de Prompts'),
             h('select', { className: 'form-select', 'aria-label': 'Tipo de prueba de rendimiento', value: benchPrompt, onChange: (e) => setBenchPrompt(e.target.value) }, [
-              h('option', { value: 'quick' }, 'Respuesta Rápida (Explicación corta)'),
-              h('option', { value: 'reasoning' }, 'Razonamiento Lógico Paso a Paso'),
-              h('option', { value: 'json' }, 'Estructuración en JSON'),
+              h('option', { value: 'suite' }, '⚡ Suite Completa (Ejecutar todos los prompts de prueba)'),
+              h('option', { value: 'quick' }, '🚀 Respuesta Rápida (Explicación básica)'),
+              h('option', { value: 'reasoning' }, '🧠 Razonamiento Lógico (Paso a paso)'),
+              h('option', { value: 'json' }, '📊 Estructuración JSON (Validación de esquema)'),
+              h('option', { value: 'planning' }, '🛠️ Planificación y Tareas (Workflow de agentes)'),
+              h('option', { value: 'coding' }, '💻 Generación de Código (Algoritmo Python)'),
+              h('option', { value: 'custom' }, '✍️ Prompt Personalizado (Ingresar texto libre)'),
             ]),
           ]),
-          h('button', { className: 'btn btn-secondary', onClick: handleBenchmark, disabled: benchLoading }, [
-            h('span', null, benchLoading ? 'Midiendo rendimiento...' : '⚡ Iniciar Prueba de Rendimiento'),
+          benchPrompt === 'custom' ? h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Texto del Prompt Personalizado'),
+            h('textarea', {
+              className: 'form-input form-textarea',
+              rows: 3,
+              placeholder: 'Escribí el prompt de prueba para evaluar la respuesta y rendimiento...',
+              value: customPromptText,
+              onChange: (e) => setCustomPromptText(e.target.value),
+            }),
+          ]) : null,
+          h('button', { className: 'btn btn-primary', onClick: handleBenchmark, disabled: benchLoading }, [
+            h('span', null, benchLoading ? '⏳ Midiendo tiempos y recursos del sistema...' : (benchPrompt === 'suite' ? '⚡ Iniciar Suite Completa de Prompts' : '⚡ Ejecutar Prompt de Test')),
           ]),
           benchResult ? h('div', { className: 'benchmark-results-box' }, [
-            benchResult.ok ? h('div', null, [
+            benchResult.ok ? (benchResult.suite_run ? h('div', { className: 'bench-suite-container' }, [
+              // Suite Summary Header
+              h('div', { className: 'bench-suite-summary-header' }, [
+                h('div', { className: 'flex justify-between items-center mb-3' }, [
+                  h('h4', { className: 'text-sm font-semibold' }, `Resumen de Suite: ${benchResult.model}`),
+                  h('span', { className: 'badge badge-success' }, `✓ ${benchResult.summary?.successful_prompts}/${benchResult.summary?.total_prompts} Completados`),
+                ]),
+                h('div', { className: 'bench-stats-grid grid-cols-3 gap-3 mb-4' }, [
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'Velocidad Media'),
+                    h('span', { className: 'bench-stat-val text-primary' }, `${benchResult.summary?.avg_tokens_per_second} t/s`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'Tiempo Total Suite'),
+                    h('span', { className: 'bench-stat-val' }, `${benchResult.summary?.total_duration_s} s`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'Tokens Generados'),
+                    h('span', { className: 'bench-stat-val' }, `${benchResult.summary?.total_tokens_generated}`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'CPU Media / Pico'),
+                    h('span', { className: 'bench-stat-val text-warning' }, `${benchResult.summary?.avg_cpu_percent}% / ${benchResult.summary?.peak_cpu_percent}%`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'RAM Media / Pico'),
+                    h('span', { className: 'bench-stat-val' }, `${benchResult.summary?.avg_ram_used_gb} GB / ${benchResult.summary?.peak_ram_used_gb} GB`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'Aceleración'),
+                    h('span', { className: 'bench-stat-val' }, benchResult.resources?.vram_gb > 0 ? `${benchResult.resources.vram_gb} GB (${benchResult.resources.gpu_backend})` : `CPU (${benchResult.resources?.cpu_cores || 1} cores)`),
+                  ]),
+                ]),
+              ]),
+              // Suite Individual Prompts
+              h('div', { className: 'bench-suite-list flex flex-col gap-2 mt-4' },
+                (benchResult.results || []).map((item, idx) => {
+                  const isExpanded = expandedPromptIdx === idx;
+                  return h('div', { key: idx, className: 'bench-suite-item' }, [
+                    h('div', {
+                      className: 'bench-suite-item-header flex justify-between items-center cursor-pointer',
+                      onClick: () => setExpandedPromptIdx(isExpanded ? null : idx),
+                    }, [
+                      h('div', { className: 'flex items-center gap-2' }, [
+                        h('span', { className: item.ok ? 'text-success font-bold' : 'text-danger font-bold' }, item.ok ? '✓' : '✗'),
+                        h('strong', { className: 'text-sm' }, item.prompt_title || `Prueba ${idx + 1}`),
+                        h('span', { className: 'text-xs text-muted' }, `· ${item.tokens_per_second || 0} t/s · ${item.total_time_s || 0}s`),
+                      ]),
+                      h('div', { className: 'flex items-center gap-2' }, [
+                        h('span', { className: 'badge badge-sm' }, `CPU ${item.resources?.cpu_percent ?? 0}%`),
+                        h('span', { className: 'badge badge-sm' }, `RAM ${item.resources?.ram_used_gb ?? 0} GB`),
+                        h('span', { className: 'text-xs text-muted' }, isExpanded ? '▲ Ocultar' : '▼ Ver respuesta'),
+                      ]),
+                    ]),
+                    isExpanded ? h('div', { className: 'bench-suite-item-body mt-3' }, [
+                      h('div', { className: 'text-xs text-muted mb-1' }, `Prompt: ${item.prompt}`),
+                      h('div', { className: 'bench-output' }, item.response || item.error || 'Sin respuesta'),
+                    ]) : null,
+                  ]);
+                })
+              ),
+            ]) : h('div', null, [
+              // Single Prompt Timing Metrics
+              h('div', { className: 'text-xs font-semibold uppercase text-muted mb-2' }, '⏱️ Medición de Tiempos & Inferencia'),
               h('div', { className: 'bench-stats-grid' }, [
                 h('div', { className: 'bench-stat-item' }, [
-                  h('span', { className: 'bench-stat-label' }, 'Velocidad'),
+                  h('span', { className: 'bench-stat-label' }, 'Velocidad Inferencia'),
                   h('span', { className: 'bench-stat-val text-primary' }, `${benchResult.tokens_per_second} t/s`),
                 ]),
                 h('div', { className: 'bench-stat-item' }, [
@@ -1663,8 +1864,26 @@ function ModelsView({ installedModels, showToast }) {
                   h('span', { className: 'bench-stat-val' }, `${benchResult.total_time_s} s`),
                 ]),
               ]),
+              // Single Prompt Resource Telemetry
+              h('div', { className: 'text-xs font-semibold uppercase text-muted mt-3 mb-2' }, '💻 Recursos Consumidos'),
+              h('div', { className: 'bench-stats-grid' }, [
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'CPU Utilizada'),
+                  h('span', { className: 'bench-stat-val text-warning' }, `${benchResult.resources?.cpu_percent ?? 0}%`),
+                ]),
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'RAM Sistema (Uso / Delta)'),
+                  h('span', { className: 'bench-stat-val' }, `${benchResult.resources?.ram_used_gb ?? 0} GB (${(benchResult.resources?.ram_delta_mb || 0) > 0 ? '+' : ''}${benchResult.resources?.ram_delta_mb ?? 0} MB)`),
+                ]),
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'Tokens Generados'),
+                  h('span', { className: 'bench-stat-val' }, `${benchResult.eval_count || 0} tokens`),
+                ]),
+              ]),
+              // Generated Output
+              h('div', { className: 'text-xs font-semibold uppercase text-muted mt-3 mb-1' }, '💬 Respuesta Generada'),
               h('div', { className: 'bench-output' }, benchResult.response),
-            ]) : h('div', { className: 'text-danger text-sm' }, `Error: ${benchResult.error}`),
+            ])) : h('div', { className: 'text-danger text-sm' }, `Error: ${benchResult.error}`),
           ]) : null,
         ]),
       ]),

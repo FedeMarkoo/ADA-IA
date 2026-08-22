@@ -69,13 +69,20 @@ export const api = {
   },
 
   getStatus() { return this.request('/api/status'); },
-  
-  // Ollama Lifecycle
+  getCoreState() { return this.request('/api/core/state'); },
+  getTimeSeries() { return this.request('/api/metrics/timeseries?hours=24'); },
+  getDebug() { return this.request('/api/debug'); },
+  setDebug(enabled) { return this.request('/api/debug', { method: 'POST', body: JSON.stringify({ enabled }) }); },
+
+  // Ollama Lifecycle & Config
   getOllamaStatus() { return this.request('/api/ollama/status'); },
   startOllama() { return this.request('/api/ollama/start', { method: 'POST' }); },
   stopOllama() { return this.request('/api/ollama/stop', { method: 'POST' }); },
   restartOllama() { return this.request('/api/ollama/restart', { method: 'POST' }); },
   getOllamaModels() { return this.request('/api/ollama/models'); },
+  getOllamaConfig() { return this.request('/api/ollama/config'); },
+  saveOllamaConfig(config) { return this.request('/api/ollama/config', { method: 'POST', body: JSON.stringify(config) }); },
+  getOllamaDetails(model) { return this.request(`/api/ollama/details?model=${encodeURIComponent(model)}`); },
   unloadOllamaModel(model) {
     return this.request('/api/ollama/unload', { method: 'POST', body: JSON.stringify({ model }) });
   },
@@ -85,6 +92,8 @@ export const api = {
 
   // ADA Agent Lifecycle
   restartAgent() { return this.request('/api/agent/restart', { method: 'POST' }); },
+  stopAgent() { return this.request('/api/agent/stop', { method: 'POST' }); },
+  startAgent() { return this.request('/api/agent/start', { method: 'POST' }); },
 
   // Telegram Bot Lifecycle
   getTelegramStatus() { return this.request('/api/telegram/status'); },
@@ -94,6 +103,12 @@ export const api = {
   testTelegram(body = {}) { return this.request('/api/telegram/test', { method: 'POST', body: JSON.stringify(body) }); },
   getTelegramHistory() { return this.request('/api/telegram/history'); },
   saveTelegramConfig(data) { return this.request('/api/telegram/config', { method: 'POST', body: JSON.stringify(data) }); },
+
+  // Event sources and entry points
+  getTriggers() { return this.request('/api/triggers'); },
+  controlTrigger(id, action) {
+    return this.request(`/api/triggers/${encodeURIComponent(id)}/${action}`, { method: 'POST' });
+  },
 
   // Encrypted Vault (vault.db)
   getVaultKeys() { return this.request('/api/vault/keys'); },
@@ -106,12 +121,29 @@ export const api = {
 
   // Models & Policy
   getModelsCatalog() { return this.request('/api/models/catalog'); },
+  addCatalogModel(data) { return this.request('/api/models/catalog', { method: 'POST', body: JSON.stringify(data) }); },
+  deleteCatalogModel(name) { return this.request('/api/models/catalog', { method: 'DELETE', body: JSON.stringify({ name }) }); },
   getModelsPolicy() { return this.request('/api/models/policy'); },
+  saveModelsSelection(data) {
+    return this.request('/api/models/policy', { method: 'POST', body: JSON.stringify(data) });
+  },
   saveModelsPolicy(policy) {
     return this.request('/api/models/policy', { method: 'POST', body: JSON.stringify({ model_policy: policy }) });
   },
-  runBenchmark(model, prompt_key) {
-    return this.request('/api/models/benchmark', { method: 'POST', body: JSON.stringify({ model, prompt_key }) });
+  runBenchmark(model, prompt_key, custom_prompt, run_suite, prompt_keys) {
+    return this.request('/api/models/benchmark', {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        prompt_key,
+        custom_prompt,
+        run_suite: Boolean(run_suite || prompt_key === 'suite'),
+        prompt_keys,
+      }),
+    });
+  },
+  getBenchmarkPrompts() {
+    return this.request('/api/models/benchmark/prompts');
   },
 
   // MCPs Lifecycle
@@ -120,6 +152,8 @@ export const api = {
   stopMCPServer(name) { return this.request(`/api/mcps/servers/${name}/stop`, { method: 'POST' }); },
   restartMCPServer(name) { return this.request(`/api/mcps/servers/${name}/restart`, { method: 'POST' }); },
   restartAllMCPServers() { return this.request('/api/mcps/servers/restart-all', { method: 'POST' }); },
+  stopAllMCPServers() { return this.request('/api/mcps/servers/stop-all', { method: 'POST' }); },
+  startAllMCPServers() { return this.request('/api/mcps/servers/start-all', { method: 'POST' }); },
   pingMCPServer(name) { return this.request(`/api/mcps/servers/${name}/ping`); },
   getMCPsTools(category) {
     const query = category && category !== 'all' ? `?category=${category}` : '';
@@ -150,6 +184,7 @@ export const api = {
     return this.request('/api/config', { method: 'POST', body: JSON.stringify({ config }) });
   },
   warmup() { return this.request('/api/warmup', { method: 'POST' }); },
+  restartAll() { return this.request('/api/restart-all', { method: 'POST' }); },
   getConversation() { return this.request('/api/conversation'); },
   clearConversation() { return this.request('/api/conversation', { method: 'DELETE' }); },
 };
@@ -178,24 +213,64 @@ const { useState, useEffect, useRef, useCallback, createElement: h } = window.Re
 // React Components
 // =============================================================================
 
+// Small, dependency-free icon set. Keeping icons as SVG makes the interface
+// visually consistent and prevents platform-specific emoji rendering.
+const ICON_PATHS = {
+  overview: ['M3 3h7v7H3z', 'M14 3h7v4h-7z', 'M14 11h7v10h-7z', 'M3 14h7v7H3z'],
+  core: ['M12 3a9 9 0 1 0 9 9', 'M12 7a5 5 0 1 0 5 5', 'M12 10a2 2 0 1 0 2 2', 'M12 1v2', 'M23 12h-2', 'M12 23v-2', 'M1 12h2'],
+  engine: ['M9 3h6', 'M10 3v3', 'M14 3v3', 'M7 6h10a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a2 2 0 0 1 2-2Z', 'M9 11h.01', 'M15 11h.01', 'M9 15h6'],
+  models: ['M12 2 4 6v12l8 4 8-4V6Z', 'm4 6 8 4 8-4', 'M12 10v12'],
+  tools: ['M8 3v4', 'M16 3v4', 'M5 7h14', 'M6 7v5a6 6 0 0 0 12 0V7', 'M12 18v3'],
+  chat: ['M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z', 'M8 9h8', 'M8 13h5'],
+  telegram: ['m22 2-7 20-4-9-9-4Z', 'm22 2-11 11'],
+  triggers: ['M4 4v6', 'M4 14v6', 'M20 4v6', 'M20 14v6', 'M4 7h5a3 3 0 0 1 3 3v4a3 3 0 0 0 3 3h5', 'M2 12h4', 'M18 12h4'],
+  activity: ['M3 12h4l2-7 4 14 2-7h6'],
+  settings: ['M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', 'M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V20h-3v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 14.7a1.7 1.7 0 0 0-1.55-1H5v-3h.09a1.7 1.7 0 0 0 1.55-1A1.7 1.7 0 0 0 6.3 7.8l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0 0 10.3 6a1.7 1.7 0 0 0 1-1.55V4h3v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19 9.3a1.7 1.7 0 0 0 1.55 1H21v3h-.09a1.7 1.7 0 0 0-1.51 1.7Z'],
+  refresh: ['M20 6v5h-5', 'M4 18v-5h5', 'M18.5 9A7 7 0 0 0 6.2 6.2L4 8', 'M5.5 15A7 7 0 0 0 17.8 17.8L20 16'],
+  bolt: ['m13 2-8 12h7l-1 8 8-12h-7Z'],
+  bug: ['M8 2l1.5 2', 'M16 2l-1.5 2', 'M9 9h6', 'M9 13h6', 'M12 4a5 5 0 0 1 5 5v5a5 5 0 0 1-10 0V9a5 5 0 0 1 5-5Z', 'M3 13h4', 'M17 13h4'],
+  restart: ['M20 11a8 8 0 1 0-2.34 5.66', 'M20 4v7h-7'],
+  menu: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
+  close: ['m6 6 12 12', 'M18 6 6 18'],
+  more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
+  check: ['m5 12 4 4L19 6'],
+  alert: ['M12 3 2.7 20h18.6Z', 'M12 9v4', 'M12 17h.01'],
+};
+
+function Icon({ name, size = 18 }) {
+  const paths = ICON_PATHS[name] || ICON_PATHS.activity;
+  return h('svg', {
+    className: 'ui-icon', width: size, height: size, viewBox: '0 0 24 24',
+    fill: 'none', stroke: 'currentColor', strokeWidth: 1.8,
+    strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true', focusable: 'false',
+  }, paths.map((d, index) => h('path', { d, key: index })));
+}
+
 // 1. Sidebar Component
-function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
+function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus, isOpen, onClose }) {
   const isOnline = isOllamaAvailable(statusData) || runtimeStatus?.available === true;
+  const systemReady = isOnline && statusData?.agent_enabled !== false;
+  const toolCount = (statusData?.mcp_servers || []).reduce((total, server) => total + (Number(server.tool_count) || 0), 0);
 
   const navItems = [
-    { id: 'overview', label: 'Overview', group: 'SISTEMA', icon: '📊' },
-    { id: 'ollama', label: 'Ollama Hub', badge: isOnline ? 'Online' : 'Offline', badgeClass: isOnline ? 'badge-success' : 'badge-danger', group: 'SISTEMA', icon: '🦙' },
-    { id: 'models', label: 'Modelos & Roles', group: 'SISTEMA', icon: '🧠' },
-    { id: 'mcps', label: 'MCPs & Tools', badge: '19 tools', badgeClass: 'badge-accent', group: 'SISTEMA', icon: '🔌' },
-    { id: 'chat', label: 'ADA Chat', group: 'AGENTE & OPERACIONES', icon: '💬' },
-    { id: 'telegram', label: 'Telegram Bot', group: 'AGENTE & OPERACIONES', icon: '📱' },
-    { id: 'memory', label: 'Memoria & Auditoría', group: 'AGENTE & OPERACIONES', icon: '🗃️' },
-    { id: 'settings', label: 'Configuración', group: 'AGENTE & OPERACIONES', icon: '⚙️' },
+    { id: 'overview', label: 'Resumen', group: 'OPERAR', icon: 'overview' },
+    { id: 'core', label: 'Núcleo ADA', group: 'OPERAR', icon: 'core' },
+    { id: 'metrics', label: 'Métricas', group: 'OPERAR', icon: 'activity' },
+    { id: 'chat', label: 'Conversar con ADA', group: 'OPERAR', icon: 'chat' },
+    { id: 'ollama', label: 'Motor local', badge: isOnline ? 'Activo' : 'Detenido', badgeClass: isOnline ? 'badge-success' : 'badge-danger', group: 'CONFIGURAR', icon: 'engine' },
+    { id: 'models', label: 'Modelos y roles', group: 'CONFIGURAR', icon: 'models' },
+    { id: 'mcps', label: 'Herramientas', badge: toolCount ? String(toolCount) : null, badgeClass: 'badge-accent', group: 'CONFIGURAR', icon: 'tools' },
+    { id: 'triggers', label: 'Disparadores', group: 'CANALES Y DATOS', icon: 'triggers' },
+    { id: 'telegram', label: 'Telegram', group: 'CANALES Y DATOS', icon: 'telegram' },
+    { id: 'memory', label: 'Actividad y memoria', group: 'CANALES Y DATOS', icon: 'activity' },
+    { id: 'settings', label: 'Preferencias', group: 'CANALES Y DATOS', icon: 'settings' },
   ];
 
   let currentGroup = '';
 
-  return h('aside', { className: 'sidebar', id: 'sidebar' }, [
+  return h(React.Fragment, null, [
+    h('button', { className: `sidebar-scrim ${isOpen ? 'visible' : ''}`, onClick: onClose, 'aria-label': 'Cerrar navegación', key: 'scrim' }),
+    h('aside', { className: `sidebar ${isOpen ? 'mobile-open' : ''}`, id: 'sidebar', 'aria-label': 'Navegación principal', key: 'sidebar' }, [
     h('div', { className: 'sidebar-header', key: 'header' }, [
       h('div', { className: 'brand' }, [
         h('div', { className: 'brand-orb' }, [
@@ -203,9 +278,10 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
           h('span', { className: 'orb-letter' }, 'A'),
         ]),
         h('div', { className: 'brand-info' }, [
-          h('span', { className: 'brand-title' }, 'ADA HUB'),
-          h('span', { className: 'brand-tag' }, 'v0.1.0 · Panel de Control'),
+          h('span', { className: 'brand-title' }, 'ADA'),
+          h('span', { className: 'brand-tag' }, 'Gestor local'),
         ]),
+        h('button', { className: 'icon-button sidebar-close', onClick: onClose, 'aria-label': 'Cerrar navegación' }, h(Icon, { name: 'close' })),
       ]),
     ]),
     h('nav', { className: 'sidebar-nav', key: 'nav' }, 
@@ -221,9 +297,10 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
             className: `nav-item ${activeTab === item.id ? 'active' : ''}`,
             id: `nav-${item.id}`,
             onClick: () => onSelectTab(item.id),
+            'aria-current': activeTab === item.id ? 'page' : undefined,
           }, [
-            h('span', { className: 'nav-item-icon', key: 'icon' }, item.icon),
-            h('span', { key: 'lbl' }, item.label),
+            h('span', { className: 'nav-item-icon', key: 'icon' }, h(Icon, { name: item.icon })),
+            h('span', { className: 'nav-item-label', key: 'lbl' }, item.label),
             item.badge ? h('span', { className: `badge ${item.badgeClass || ''}`, key: 'badge' }, item.badge) : null,
           ])
         );
@@ -232,26 +309,42 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus }) {
     ),
     h('div', { className: 'sidebar-footer', key: 'footer' }, [
       h('div', { className: 'runtime-pill', id: 'runtime-status-pill' }, [
-        h('span', { className: `status-dot ${isOnline ? 'online' : 'offline'}` }),
-        h('span', { className: 'status-text' }, isOnline ? 'Ollama Online' : 'Ollama Inactivo'),
+        h('span', { className: `status-dot ${systemReady ? 'online' : 'offline'}` }),
+        h('span', { className: 'status-text' }, systemReady ? 'Sistema operativo' : 'Requiere atención'),
       ]),
+    ]),
     ]),
   ]);
 }
 
 // 2. Header Component
-function Header({ title, subtitle, onWarmup, onRefresh, isRefreshing }) {
+function Header({ title, subtitle, onWarmup, onRefresh, onRestartAll, isRefreshing, isRestarting, identity, debugEnabled, onToggleDebug, onOpenNavigation }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return h('header', { className: 'top-header' }, [
     h('div', { className: 'header-left', key: 'left' }, [
+      h('button', { className: 'icon-button mobile-menu', onClick: onOpenNavigation, 'aria-label': 'Abrir navegación' }, h(Icon, { name: 'menu' })),
+      h('div', { className: 'header-copy' }, [
       h('h1', { className: 'page-title', id: 'page-title' }, title),
       h('span', { className: 'page-subtitle', id: 'page-subtitle' }, subtitle),
+      ]),
     ]),
     h('div', { className: 'header-actions', key: 'actions' }, [
-      h('button', { className: 'btn btn-ghost', id: 'btn-warmup', onClick: onWarmup, title: 'Precargar motor' }, [
-        h('span', null, '⚡ Warmup'),
-      ]),
       h('button', { className: 'btn btn-secondary', id: 'btn-refresh', onClick: onRefresh, title: 'Actualizar datos' }, [
-        h('span', null, isRefreshing ? 'Actualizando...' : '🔄 Actualizar'),
+        h(Icon, { name: 'refresh', key: 'icon' }),
+        h('span', { className: 'desktop-label', key: 'label' }, isRefreshing ? 'Actualizando…' : 'Actualizar'),
+      ]),
+      h('div', { className: 'action-menu' }, [
+        h('button', { className: 'icon-button', onClick: () => setMenuOpen(open => !open), 'aria-label': 'Más acciones', 'aria-expanded': menuOpen }, h(Icon, { name: 'more' })),
+        menuOpen ? h('div', { className: 'action-menu-popover' }, [
+          h('div', { className: 'action-menu-meta' }, [
+            h('strong', null, `ADA ${identity?.version ? `v${identity.version}` : ''}`),
+            h('span', null, identity?.started_at ? `Activa desde ${new Date(identity.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Instancia local'),
+          ]),
+          h('button', { onClick: () => { setMenuOpen(false); onWarmup(); } }, [h(Icon, { name: 'bolt' }), h('span', null, 'Preparar motor')]),
+          h('button', { onClick: () => { setMenuOpen(false); onToggleDebug(); } }, [h(Icon, { name: 'bug' }), h('span', null, debugEnabled ? 'Desactivar diagnóstico' : 'Activar diagnóstico')]),
+          h('div', { className: 'action-menu-separator' }),
+          h('button', { className: 'danger-action', onClick: () => { setMenuOpen(false); onRestartAll(); }, disabled: isRestarting }, [h(Icon, { name: 'restart' }), h('span', null, isRestarting ? 'Reiniciando…' : 'Reiniciar servicios')]),
+        ]) : null,
       ]),
     ]),
   ]);
@@ -266,6 +359,9 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const hardware = statusData?.hardware || {};
   const runtime = statusData?.runtime || {};
   const isOllamaRunning = isOllamaAvailable(statusData);
+  const isAgentRunning = statusData?.agent_enabled !== false;
+  const mcpServers = statusData?.mcp_servers || [];
+  const areMCPsRunning = mcpServers.some(server => server.status === 'active');
 
   const loadHealth = useCallback(async () => {
     try {
@@ -367,237 +463,576 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const checkItems = healthData?.items || [];
   const hasPendingFixes = healthData?.can_auto_heal_all;
 
-  const ITEM_ICONS = {
-    ollama_daemon: '🦙',
-    models_installed: '🧠',
-    ada_agent: '🤖',
-    mcps_subsystem: '🔌',
-    sqlite_memory: '🗄️',
-    hardware_resources: '💻',
-  };
+  const effectiveItems = checkItems.map(item => ({
+    ...item,
+    effectiveStatus: item.id === 'ada_agent' && statusData?.agent_enabled === false
+      ? 'stopped'
+      : item.id === 'mcps_subsystem' && statusData?.mcp_servers?.length && statusData.mcp_servers.every(server => server.status !== 'active')
+        ? 'stopped'
+        : item.status,
+  }));
+  const attentionItems = effectiveItems.filter(item => item.effectiveStatus !== 'ok');
+  const okCount = effectiveItems.filter(item => item.effectiveStatus === 'ok').length;
+  const mcpCount = statusData?.mcp_servers?.length || 0;
+  const activeMcpCount = (statusData?.mcp_servers || []).filter(server => server.status === 'active').length;
+  const toolCount = (statusData?.mcp_servers || []).reduce((total, server) => total + (Number(server.tool_count) || 0), 0);
+  const installedCount = statusData?.runtime?.models?.installed?.length || 0;
+  const roles = statusData?.model_recommendations?.roles || {};
+  const resourceCheck = checkItems.find(item => item.id === 'hardware_resources');
+  const ramPercent = resourceCheck?.details?.ram_percent;
+  const isHealthy = overallStatus === 'healthy' && attentionItems.length === 0;
 
-  return h('section', { className: 'tab-view active', id: 'tab-overview' }, [
-    // Health Doctor Auto-Healing Banner
-    h('div', { className: 'doctor-banner mb-6', key: 'doctor-banner' }, [
-      h('div', { className: 'doctor-header' }, [
-        h('div', { className: 'doctor-score-box' }, [
-          h('div', { className: `doctor-score-ring ${overallStatus}` }, `${healthScore}%`),
-          h('div', { className: 'doctor-title-group' }, [
-            h('h3', null, [
-              'Healthcheck General del Sistema',
-              h('span', {
-                className: `badge ${overallStatus === 'healthy' ? 'badge-success' : overallStatus === 'degraded' ? 'badge-warning' : 'badge-danger'}`
-              }, overallStatus === 'healthy' ? '100% Operativo' : overallStatus === 'degraded' ? 'Degradado / Alertas' : 'Requiere Atención')
-            ]),
-            h('p', null, hasPendingFixes ? 'Hay componentes que no están levantados. Podés repararlos con un solo clic.' : 'Todos los subsistemas y motores están operando correctamente.'),
-          ]),
+  const statusLabel = (status) => status === 'ok' ? 'Operativo' : status === 'warning' ? 'Atención' : status === 'stopped' ? 'Detenido' : 'Error';
+  const statusClass = (status) => status === 'ok' ? 'badge-success' : status === 'warning' ? 'badge-warning' : 'badge-danger';
+
+  return h('section', { className: 'tab-view active overview-v2', id: 'tab-overview' }, [
+    h('section', { className: `system-summary ${isHealthy ? 'healthy' : 'attention'}`, key: 'summary', 'aria-labelledby': 'system-summary-title' }, [
+      h('div', { className: 'system-summary-icon' }, h(Icon, { name: isHealthy ? 'check' : 'alert', size: 22 })),
+      h('div', { className: 'system-summary-copy' }, [
+        h('div', { className: 'eyebrow' }, 'ESTADO GENERAL'),
+        h('h2', { id: 'system-summary-title' }, isHealthy ? 'ADA está lista para trabajar' : `${attentionItems.length || 1} ${attentionItems.length === 1 ? 'punto requiere' : 'puntos requieren'} atención`),
+        h('p', null, isHealthy
+          ? 'Motor, agente, memoria y herramientas responden correctamente.'
+          : 'El resto del sistema sigue disponible. Revisá el pendiente antes de depender de ese canal.'),
+      ]),
+      h('div', { className: 'system-summary-actions' }, [
+        h('span', { className: 'health-ratio' }, `${okCount} de ${effectiveItems.length || '—'} comprobaciones · ${healthScore}%`),
+        hasPendingFixes ? h('button', {
+          className: 'btn btn-primary',
+          onClick: handleAutoHeal,
+          disabled: isHealing,
+        }, [
+          h(Icon, { name: 'bolt', key: 'icon' }),
+          h('span', { key: 'label' }, isHealing ? 'Resolviendo…' : 'Resolver pendientes'),
+        ]) : h('button', { className: 'btn btn-secondary', onClick: loadHealth }, [
+          h(Icon, { name: 'refresh', key: 'icon' }),
+          h('span', { key: 'label' }, 'Volver a comprobar'),
         ]),
+      ]),
+    ]),
+
+    attentionItems.length ? h('section', { className: 'attention-panel', key: 'attention', 'aria-labelledby': 'attention-title' }, [
+      h('div', { className: 'section-heading' }, [
         h('div', null, [
-          hasPendingFixes ? h('button', {
-            className: 'btn-heal-all',
-            onClick: handleAutoHeal,
-            disabled: isHealing,
-          }, isHealing ? 'Reparando componentes...' : '🚀 Auto-Reparar / Levantar Todo lo que Falte') : h('button', {
-            className: 'btn btn-sm btn-ghost',
-            onClick: loadHealth,
-          }, '🔍 Re-verificar Salud'),
+          h('div', { className: 'eyebrow' }, 'PRIORIDAD'),
+          h('h2', { id: 'attention-title' }, 'Requiere tu atención'),
         ]),
+        h('span', { className: 'badge badge-warning' }, `${attentionItems.length} pendiente${attentionItems.length === 1 ? '' : 's'}`),
       ]),
-
-      // Diagnostic Grid Checklist
-      h('div', { className: 'doctor-items-grid' },
-        checkItems.map(item => {
-          const isOk = item.status === 'ok';
-          const isWarn = item.status === 'warning';
-          const statusBadge = isOk ? 'badge-success' : isWarn ? 'badge-warning' : 'badge-danger';
-          const statusLabel = isOk ? 'OK' : isWarn ? 'Alerta' : 'Error';
-          const icon = ITEM_ICONS[item.id] || '⚙️';
-
-          return h('div', { className: 'doctor-item-card', key: item.id }, [
-            h('div', { className: 'doctor-item-top' }, [
-              h('div', { className: 'doctor-item-name' }, [
-                h('span', { className: 'text-base' }, icon),
-                h('span', null, item.name),
-              ]),
-              h('span', { className: `badge ${statusBadge}` }, statusLabel),
-            ]),
-            h('p', { className: 'doctor-item-msg' }, item.message),
-            item.can_auto_fix && item.status !== 'ok' ? h('div', { className: 'doctor-item-actions' }, [
-              h('button', {
-                className: 'btn btn-sm btn-primary',
-                onClick: () => handleFixItem(item.fix_action_id),
-                disabled: fixingAction === item.fix_action_id,
-              }, fixingAction === item.fix_action_id ? 'Levantando...' : `⚡ ${item.fix_label || 'Levantar'}`),
-            ]) : null,
-          ]);
-        })
-      ),
-    ]),
-
-    // Top Hardware & Status Stats
-    h('div', { className: 'grid grid-cols-4 gap-4 mb-6', key: 'stats-grid' }, [
-      h('div', { className: 'card stat-card', key: 'ollama-card' }, [
-        h('div', { className: 'stat-header' }, [
-          h('span', { className: 'stat-label' }, 'Ollama Engine'),
-          h('span', { className: `status-indicator ${isOllamaRunning ? 'online' : 'offline'}` }),
-        ]),
-        h('div', { className: 'stat-value' }, isOllamaRunning ? 'En Línea' : 'Detenido'),
-        h('div', { className: 'stat-footer' }, 'http://127.0.0.1:11434'),
-      ]),
-      h('div', { className: 'card stat-card', key: 'ram-card' }, [
-        h('div', { className: 'stat-header' }, [
-          h('span', { className: 'stat-label' }, 'Memoria RAM'),
-          h('span', { className: 'stat-badge' }, `${hardware.ram_gb || '--'} GB Total`),
-        ]),
-        h('div', { className: 'stat-value' }, `${hardware.ram_percent || 0}%`),
-        h('div', { className: 'progress-bar-bg' }, [
-          h('div', { className: 'progress-bar-fill', style: { width: `${hardware.ram_percent || 0}%` } }),
-        ]),
-      ]),
-      h('div', { className: 'card stat-card', key: 'cpu-card' }, [
-        h('div', { className: 'stat-header' }, [
-          h('span', { className: 'stat-label' }, 'CPU Cores'),
-          h('span', { className: 'stat-badge' }, hardware.platform || 'Linux'),
-        ]),
-        h('div', { className: 'stat-value' }, `${hardware.cpu_count || '--'} Cores`),
-        h('div', { className: 'stat-footer' }, 'Procesador del sistema'),
-      ]),
-      h('div', { className: 'card stat-card', key: 'agent-card' }, [
-        h('div', { className: 'stat-header' }, [
-          h('span', { className: 'stat-label' }, 'Agente ADA Core'),
-          h('span', { className: 'stat-badge badge-primary' }, 'Activo'),
-        ]),
-        h('div', { className: 'stat-value' }, 'Listo'),
-        h('div', { className: 'stat-footer' }, 'SQLite FTS5 Habilitado'),
-      ]),
-    ]),
-
-    // Central Lifecycle Services Control Matrix
-    h('div', { className: 'card mb-6', key: 'control-matrix-card' }, [
-      h('div', { className: 'card-header' }, [
-        h('div', { className: 'flex items-center gap-2' }, [
-          h('h3', { className: 'card-title' }, 'Centro de Control de Servicios & Ciclo de Vida'),
-          h('span', { className: 'badge badge-accent' }, 'Control en Tiempo Real'),
-        ]),
-      ]),
-      h('div', { className: 'card-body' }, [
-        h('div', { className: 'grid grid-cols-3 gap-4' }, [
-          // Ollama Control Box
-          h('div', { className: 'service-box', key: 'box-ollama' }, [
-            h('div', { className: 'service-box-header' }, [
-              h('div', { className: 'flex items-center gap-2' }, [
-                h('span', { className: 'text-lg' }, '🦙'),
-                h('span', { className: 'font-bold' }, 'Ollama Daemon'),
-              ]),
-              h('span', { className: `badge ${isOllamaRunning ? 'badge-success' : 'badge-danger'}` },
-                isOllamaRunning ? 'Activo' : 'Inactivo'
-              ),
-            ]),
-            h('p', { className: 'text-xs text-muted mt-1' }, 'Servicio local de inferencia de modelos LLM.'),
-            h('div', { className: 'service-box-actions mt-4 flex gap-2' }, [
-              !isOllamaRunning ? h('button', { className: 'btn btn-sm btn-primary', onClick: handleOllamaStart }, '▶ Iniciar') : null,
-              isOllamaRunning ? h('button', { className: 'btn btn-sm btn-secondary', onClick: handleOllamaStop }, '⏹ Detener') : null,
-              h('button', { className: 'btn btn-sm btn-ghost', onClick: handleOllamaRestart }, '🔄 Reiniciar'),
-            ]),
+      h('div', { className: 'attention-list' }, attentionItems.map(item => h('article', { className: 'attention-item', key: item.id }, [
+        h('div', { className: `attention-marker ${item.effectiveStatus}` }, h(Icon, { name: item.effectiveStatus === 'warning' ? 'alert' : 'activity' })),
+        h('div', { className: 'attention-copy' }, [
+          h('div', { className: 'attention-title-row' }, [
+            h('h3', null, item.name),
+            h('span', { className: `badge ${statusClass(item.effectiveStatus)}` }, statusLabel(item.effectiveStatus)),
           ]),
+          h('p', null, item.effectiveStatus === 'stopped'
+            ? (item.id === 'ada_agent' ? 'El núcleo de ADA está detenido.' : 'Este servicio está detenido.')
+            : item.message),
+        ]),
+        item.can_auto_fix ? h('button', {
+          className: 'btn btn-secondary',
+          onClick: () => handleFixItem(item.fix_action_id),
+          disabled: fixingAction === item.fix_action_id,
+        }, fixingAction === item.fix_action_id ? 'Iniciando…' : (item.fix_label || 'Resolver')) : null,
+      ]))),
+    ]) : null,
 
-          // ADA Agent Control Box
-          h('div', { className: 'service-box', key: 'box-agent' }, [
-            h('div', { className: 'service-box-header' }, [
-              h('div', { className: 'flex items-center gap-2' }, [
-                h('span', { className: 'text-lg' }, '🧠'),
-                h('span', { className: 'font-bold' }, 'ADA Agent Core'),
-              ]),
-              h('span', { className: 'badge badge-success' }, 'Operativo'),
-            ]),
-            h('p', { className: 'text-xs text-muted mt-1' }, 'Orquestador multiagente, memoria y router.'),
-            h('div', { className: 'service-box-actions mt-4 flex gap-2' }, [
-              h('button', { className: 'btn btn-sm btn-primary', onClick: handleAgentRestart }, '🔄 Reiniciar Agente'),
-              h('button', { className: 'btn btn-sm btn-ghost', onClick: () => api.clearConversation().then(() => showToast('Memoria reiniciada', 'info')) }, '🧹 Limpiar'),
-            ]),
+    h('section', { className: 'overview-section', key: 'services', 'aria-labelledby': 'services-title' }, [
+      h('div', { className: 'section-heading' }, [
+        h('div', null, [
+          h('div', { className: 'eyebrow' }, 'SERVICIOS ESENCIALES'),
+          h('h2', { id: 'services-title' }, 'Lo necesario para operar'),
+        ]),
+      ]),
+      h('div', { className: 'service-grid' }, [
+        h('article', { className: 'service-card', key: 'ollama' }, [
+          h('div', { className: 'service-card-top' }, [
+            h('span', { className: 'service-icon' }, h(Icon, { name: 'engine' })),
+            h('span', { className: `badge ${isOllamaRunning ? 'badge-success' : 'badge-danger'}` }, isOllamaRunning ? 'Activo' : 'Detenido'),
           ]),
-
-          // MCPs Engine Control Box
-          h('div', { className: 'service-box', key: 'box-mcps' }, [
-            h('div', { className: 'service-box-header' }, [
-              h('div', { className: 'flex items-center gap-2' }, [
-                h('span', { className: 'text-lg' }, '🔌'),
-                h('span', { className: 'font-bold' }, 'MCPs Servers (5)'),
-              ]),
-              h('span', { className: 'badge badge-accent' }, 'Conectados'),
-            ]),
-            h('p', { className: 'text-xs text-muted mt-1' }, 'Servidores Model Context Protocol y herramientas.'),
-            h('div', { className: 'service-box-actions mt-4 flex gap-2' }, [
-              h('button', { className: 'btn btn-sm btn-secondary', onClick: handleMCPsRestartAll }, '🔄 Reiniciar Todos'),
-              h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('mcps') }, '⚙️ Ver Servidores'),
-            ]),
+          h('h3', null, 'Motor local'),
+          h('p', null, isOllamaRunning
+            ? `Responde en ${statusData?.ollama_health?.latency_ms ?? '—'} ms`
+            : 'La inferencia local no está disponible.'),
+          h('div', { className: 'service-card-actions' }, [
+            !isOllamaRunning ? h('button', { className: 'btn btn-primary', onClick: handleOllamaStart }, 'Iniciar motor') : null,
+            h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('ollama') }, 'Administrar'),
+          ]),
+        ]),
+        h('article', { className: 'service-card', key: 'agent' }, [
+          h('div', { className: 'service-card-top' }, [
+            h('span', { className: 'service-icon' }, h(Icon, { name: 'chat' })),
+            h('span', { className: `badge ${isAgentRunning ? 'badge-success' : 'badge-danger'}` }, isAgentRunning ? 'Listo' : 'Detenido'),
+          ]),
+          h('h3', null, 'Agente ADA'),
+          h('p', null, isAgentRunning ? 'Conversación, router y memoria disponibles.' : 'ADA no puede procesar nuevas solicitudes.'),
+          h('div', { className: 'service-card-actions' }, [
+            !isAgentRunning ? h('button', { className: 'btn btn-primary', onClick: async () => { await api.startAgent(); onRefresh(); } }, 'Iniciar ADA') : null,
+            h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('chat') }, 'Abrir conversación'),
+          ]),
+        ]),
+        h('article', { className: 'service-card', key: 'tools' }, [
+          h('div', { className: 'service-card-top' }, [
+            h('span', { className: 'service-icon' }, h(Icon, { name: 'tools' })),
+            h('span', { className: `badge ${areMCPsRunning ? 'badge-success' : 'badge-danger'}` }, `${activeMcpCount}/${mcpCount} activos`),
+          ]),
+          h('h3', null, 'Herramientas'),
+          h('p', null, toolCount ? `${toolCount} capacidades disponibles para ADA.` : 'No hay herramientas disponibles.'),
+          h('div', { className: 'service-card-actions' }, [
+            !areMCPsRunning ? h('button', { className: 'btn btn-primary', onClick: async () => { await api.startAllMCPServers(); onRefresh(); } }, 'Iniciar herramientas') : null,
+            h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('mcps') }, 'Ver herramientas'),
           ]),
         ]),
       ]),
     ]),
 
-    // Bottom Grid: Models & Quick Actions
-    h('div', { className: 'grid grid-cols-2 gap-6 mb-6', key: 'details-grid' }, [
-      h('div', { className: 'card', key: 'assigned-models' }, [
-        h('div', { className: 'card-header' }, [
-          h('h3', { className: 'card-title' }, 'Modelos Asignados Activos'),
-          h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('models') }, 'Gestionar'),
+    h('div', { className: 'overview-split', key: 'details' }, [
+      h('section', { className: 'overview-section overview-panel', 'aria-labelledby': 'resources-title' }, [
+        h('div', { className: 'section-heading compact' }, [
+          h('div', null, [
+            h('div', { className: 'eyebrow' }, 'RECURSOS'),
+            h('h2', { id: 'resources-title' }, 'Capacidad local'),
+          ]),
         ]),
-        h('div', { className: 'card-body' }, [
-          h('div', { className: 'model-role-row', key: 'chat-role' }, [
-            h('span', { className: 'role-badge role-chat' }, 'Chat Principal'),
-            h('span', { className: 'model-name-pill' }, 'llama3.2:3b'),
+        h('dl', { className: 'metrics-list' }, [
+          h('div', { key: 'ram' }, [
+            h('dt', null, 'Memoria RAM'),
+            h('dd', null, (hardware.ram_used_gb != null && hardware.ram_gb)
+              ? `${hardware.ram_used_gb} / ${hardware.ram_gb} GB (${(hardware.ram_percent || ramPercent || 0).toFixed(1)}%)`
+              : (ramPercent != null ? `${ramPercent.toFixed(1)}% en uso` : `${hardware.ram_gb || '—'} GB`))
           ]),
-          h('div', { className: 'model-role-row', key: 'vision-role' }, [
-            h('span', { className: 'role-badge role-vision' }, 'Visión & OCR'),
-            h('span', { className: 'model-name-pill' }, 'qwen2.5vl:3b'),
-          ]),
-          h('div', { className: 'model-role-row', key: 'router-role' }, [
-            h('span', { className: 'role-badge role-router' }, 'Router Rápido'),
-            h('span', { className: 'model-name-pill' }, 'llama3.2:3b'),
-          ]),
+          h('div', { key: 'cpu' }, [h('dt', null, 'Procesamiento'), h('dd', null, `${hardware.cpu_cores || hardware.cpu_count || '—'} núcleos · ${hardware.gpu_backend === 'cpu' ? 'sin GPU dedicada' : hardware.gpu_backend || '—'}`)]),
+          h('div', { key: 'disk' }, [h('dt', null, 'Espacio disponible'), h('dd', null, hardware.disk_free_gb != null ? `${hardware.disk_free_gb} GB` : '—')]),
+          h('div', { key: 'models' }, [h('dt', null, 'Modelos instalados'), h('dd', null, String(installedCount))]),
         ]),
       ]),
-      h('div', { className: 'card', key: 'quick-actions' }, [
-        h('div', { className: 'card-header' }, [
-          h('h3', { className: 'card-title' }, 'Acciones Rápidas'),
+      h('section', { className: 'overview-section overview-panel', 'aria-labelledby': 'roles-title' }, [
+        h('div', { className: 'section-heading compact' }, [
+          h('div', null, [
+            h('div', { className: 'eyebrow' }, 'ASIGNACIÓN ACTUAL'),
+            h('h2', { id: 'roles-title' }, 'Modelos por tarea'),
+          ]),
+          h('button', { className: 'btn btn-ghost btn-sm', onClick: () => onSwitchTab('models') }, 'Editar'),
         ]),
-        h('div', { className: 'card-body quick-actions-grid' }, [
-          h('button', { className: 'quick-action-btn', onClick: () => onSwitchTab('ollama') }, [
-            h('span', { className: 'qa-icon' }, '📥'),
-            h('span', { className: 'qa-title' }, 'Descargar Modelo'),
-            h('span', { className: 'qa-sub' }, 'Pull de nuevo LLM en Ollama'),
-          ]),
-          h('button', { className: 'quick-action-btn', onClick: () => onSwitchTab('models') }, [
-            h('span', { className: 'qa-icon' }, '⚡'),
-            h('span', { className: 'qa-title' }, 'Test de Velocidad'),
-            h('span', { className: 'qa-sub' }, 'Medir tokens/segundo'),
-          ]),
-          h('button', { className: 'quick-action-btn', onClick: () => onSwitchTab('mcps') }, [
-            h('span', { className: 'qa-icon' }, '🔌'),
-            h('span', { className: 'qa-title' }, 'Ver Herramientas'),
-            h('span', { className: 'qa-sub' }, 'Activar/Desactivar tools'),
-          ]),
-          h('button', { className: 'quick-action-btn', onClick: () => onSwitchTab('chat') }, [
-            h('span', { className: 'qa-icon' }, '💬'),
-            h('span', { className: 'qa-title' }, 'Abrir Chat'),
-            h('span', { className: 'qa-sub' }, 'Interactuar con ADA'),
-          ]),
+        h('dl', { className: 'role-list' }, [
+          h('div', { key: 'chat' }, [h('dt', null, 'Conversación'), h('dd', null, roles.chat || 'Sin asignar')]),
+          h('div', { key: 'vision' }, [h('dt', null, 'Visión'), h('dd', null, roles.vision || 'Sin asignar')]),
+          h('div', { key: 'router' }, [h('dt', null, 'Router'), h('dd', null, roles.router || 'Sin asignar')]),
         ]),
       ]),
     ]),
   ]);
 }
 
-// 4. Ollama Tab View (With Full Start / Stop / Restart Controls)
+function MetricsView() {
+  const [data, setData] = useState({ samples: [] });
+  useEffect(() => { let live = true; const load = () => api.getTimeSeries().then(v => live && setData(v)).catch(() => {}); load(); const id = setInterval(load, 10000); return () => { live = false; clearInterval(id); }; }, []);
+  const samples = data.samples || [];
+  const byMetric = samples.reduce((a, s) => { (a[s.metric] ||= []).push(s); return a; }, {});
+  const latest = (name) => (byMetric[name] || []).at(-1)?.value;
+  const max = (name) => Math.max(...(byMetric[name] || []).map(s => Number(s.value)), 0);
+  const names = { ada: 'ADA', telegram: 'Telegram', ollama: 'Ollama' };
+  const servicePanel = (service) => h('article', { className: 'metrics-panel service-panel', key: service }, [
+    h('div', { className: 'metrics-panel-title' }, [h('span', { className: 'status-dot online' }), h('div', null, [h('h3', null, names[service]), h('small', null, 'Proceso local')])]),
+    h('div', { className: 'resource-values' }, [h('div', null, [h('strong', null, `${(latest(`${service}_process_cpu_percent`) || 0).toFixed(1)}%`), h('span', null, 'CPU actual')]), h('div', null, [h('strong', null, `${(latest(`${service}_process_rss_mb`) || 0).toFixed(0)} MB`), h('span', null, 'Memoria RAM')])]),
+    h('div', { className: 'metric-spark' }, (byMetric[`${service}_process_rss_mb`] || []).slice(-36).map((v, i) => h('i', { key: i, style: { height: `${Math.max(6, Math.min(100, Number(v.value) / Math.max(1, max(`${service}_process_rss_mb`)) * 100))}%` } }))),
+  ]);
+  return h('section', { className: 'tab-view active metrics-view' }, [
+    h('div', { className: 'metrics-hero' }, [h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Centro de métricas'), h('p', null, 'Estado operativo y rendimiento de los servicios de ADA')]), h('div', { className: 'metrics-freshness' }, [h('span', { className: 'status-dot online' }), h('span', null, 'Scraper activo · cada 1 segundo')])]),
+    h('div', { className: 'metrics-kpis' }, [h('article', { className: 'metric-kpi' }, [h('span', null, 'Estado del sistema'), h('strong', null, latest('ada_up') === 1 ? 'Operativo' : 'Sin datos'), h('small', null, 'Última lectura confirmada')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Muestras disponibles'), h('strong', null, samples.length.toLocaleString('es-AR')), h('small', null, 'Ventana actual de 24 horas')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Retención'), h('strong', null, `${data.retention_days || 7} días`), h('small', null, 'Almacenamiento temporal')])]),
+    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Recursos en tiempo real'), h('p', null, 'Consumo de los procesos que mantienen ADA funcionando')]),
+    h('div', { className: 'metrics-service-grid' }, ['ada', 'ollama', 'telegram'].map(servicePanel)),
+    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Uso de ADA'), h('p', null, 'Invocaciones, mensajes y resultados observados por el scraper')]),
+    h('div', { className: 'metrics-usage-grid' }, [['messages_received', 'Mensajes recibidos'], ['chat_invocations', 'Conversaciones'], ['router_invocations', 'Clasificaciones del router'], ['model_invocations', 'Llamadas a modelos'], ['capability_invocations', 'Herramientas ejecutadas'], ['chat_response_seconds', 'Latencia de respuesta']].map(([metric, title]) => h('article', { className: 'metric-kpi metric-usage', key: metric }, [h('span', null, title), h('strong', null, byMetric[metric] ? `${byMetric[metric].at(-1)?.value || 0}` : '—'), h('small', null, byMetric[metric] ? 'Última muestra real' : 'Sin actividad registrada')]))) ,
+    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Cobertura de telemetría'), h('p', null, 'Las invocaciones de modelos, router, MCPs y tools aparecerán aquí cuando registren actividad real')]),
+    h('div', { className: 'metrics-empty-panel' }, [h('strong', null, 'Esperando actividad de componentes'), h('span', null, 'No se muestran valores inventados: cada serie aparece sólo cuando ADA registra una invocación real.')]),
+  ]);
+}
+
+function CoreView({ onSwitchTab }) {
+  const [coreData, setCoreData] = useState(null);
+  const [metricsData, setMetricsData] = useState({ samples: [] });
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const data = await api.getCoreState();
+        if (mounted) {
+          setCoreData(data);
+          setLoadError('');
+        }
+      } catch (error) {
+        if (mounted) setLoadError(error.message || 'No pude leer el estado del núcleo');
+      }
+    };
+    load();
+    const interval = setInterval(load, 1000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadMetrics = () => api.getTimeSeries().then(data => {
+      if (mounted) setMetricsData(data || { samples: [] });
+    }).catch(() => {});
+    loadMetrics();
+    const interval = setInterval(loadMetrics, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const activity = coreData?.activity || {
+    status: 'idle', phase: 'idle', label: 'Conectando con ADA', detail: 'Leyendo el estado del sistema', recent: [],
+  };
+  const activeModels = coreData?.models?.active || {};
+  const modelGroups = Object.entries(activeModels).reduce((groups, [role, model]) => {
+    if (!model) return groups;
+    const existing = groups.find(item => item.name === model);
+    if (existing) existing.roles.push(role);
+    else groups.push({ name: model, roles: [role] });
+    return groups;
+  }, []);
+  const telegram = coreData?.connectors?.telegram || {};
+  const connectors = [
+    {
+      id: 'telegram', name: 'Telegram', kind: 'Canal', online: telegram.status === 'running',
+      meta: telegram.status === 'degraded' ? 'Conflicto de listener' : telegram.running ? 'Escuchando mensajes' : (telegram.configured ? 'Detenido' : 'Sin configurar'), tab: 'telegram',
+    },
+    ...(coreData?.connectors?.mcps || []).map(server => ({
+      id: server.name,
+      name: server.name,
+      kind: 'MCP',
+      online: server.status === 'active',
+      meta: `${server.tool_count || 0} herramientas`,
+      tab: 'mcps',
+    })),
+    ...(coreData?.connectors?.triggers || []).filter(trigger => trigger.id !== 'telegram').map(trigger => ({
+      id: `trigger:${trigger.id}`,
+      sourceId: trigger.id,
+      name: trigger.name,
+      kind: 'Entrada',
+      online: trigger.running === true,
+      meta: trigger.status === 'ready' ? 'Preparado' : trigger.summary,
+      tab: 'triggers',
+    })),
+  ];
+  const working = activity.status === 'working';
+  const elapsed = activity.started_at && working
+    ? Math.max(0, Math.round((Number(coreData?.server_time || Date.now() / 1000) - Number(activity.started_at))))
+    : 0;
+  const activeConnector = (node) => working && (
+    activity.component === node.id
+    || activity.component === node.sourceId
+    || (activity.component === 'filesystem' && node.id === 'filesystem')
+    || (activity.component === 'sqlite' && node.id === 'sqlite-memory')
+    || (activity.channel === 'telegram' && node.id === 'telegram')
+  );
+  const roleLabels = {
+    chat: 'Chat', router: 'Router', reasoning: 'Razonamiento', coding: 'Código', tools: 'Herramientas', vision: 'Visión',
+  };
+  const statusText = activity.status === 'working' ? 'Trabajando' : activity.status === 'error' ? 'Requiere atención' : activity.status === 'complete' ? 'Completado' : 'En espera';
+  const samples = metricsData.samples || [];
+  const byMetric = samples.reduce((groups, sample) => {
+    (groups[sample.metric] ||= []).push(sample);
+    return groups;
+  }, {});
+  const latestMetric = (name) => byMetric[name]?.at(-1)?.value;
+  const sparkValues = (name) => (byMetric[name] || []).slice(-28).map(sample => Number(sample.value) || 0);
+  const formatMetric = (name, suffix = '') => {
+    const value = latestMetric(name);
+    return value == null ? '—' : `${Number(value).toFixed(name.includes('percent') ? 1 : 0)}${suffix}`;
+  };
+  const activeConnections = connectors.filter(connector => connector.online).length;
+  const renderSpark = (name, tone = 'cyan') => {
+    const values = sparkValues(name);
+    const peak = Math.max(...values, 1);
+    return h('div', { className: `core-spark core-spark-${tone}`, 'aria-hidden': 'true' }, values.length
+      ? values.map((value, index) => h('i', { key: `${name}-${index}`, style: { height: `${Math.max(9, Math.round((value / peak) * 100))}%` } }))
+      : [h('i', { key: 'empty', style: { height: '12%' } })]);
+  };
+  const center = 400;
+  const connectorRadius = 302;
+  const modelRadius = 150;
+
+  return h('section', { className: `tab-view active core-view core-status-${activity.status}`, id: 'tab-core' }, [
+    h('div', { className: 'core-toolbar', key: 'toolbar' }, [
+      h('div', { className: 'core-live-state', role: 'status', 'aria-live': 'polite' }, [
+        h('span', { className: 'core-live-dot', 'aria-hidden': 'true' }),
+        h('div', null, [
+          h('strong', null, statusText),
+          h('span', null, working && elapsed ? `${activity.label} · ${elapsed}s` : activity.label),
+        ]),
+      ]),
+      h('div', { className: 'core-mode-copy' }, [
+        h('span', null, 'Política de modelos'),
+        h('strong', null, ({ hybrid: 'Híbrido', turbo: 'Turbo', light: 'Liviano', manual: 'Manual' })[coreData?.models?.mode] || '—'),
+      ]),
+    ]),
+    loadError ? h('div', { className: 'core-load-error', role: 'alert' }, loadError) : null,
+    h('div', { className: 'core-kpi-strip', key: 'kpis' }, [
+      h('article', { className: 'core-kpi core-kpi-primary' }, [
+        h('span', { className: 'core-kpi-label' }, 'NÚCLEO ADA'),
+        h('strong', null, statusText),
+        h('small', null, activity.label),
+      ]),
+      h('article', { className: 'core-kpi' }, [
+        h('span', { className: 'core-kpi-label' }, 'CPU DEL PROCESO'),
+        h('strong', null, formatMetric('ada_process_cpu_percent', '%')),
+        renderSpark('ada_process_cpu_percent', 'violet'),
+      ]),
+      h('article', { className: 'core-kpi' }, [
+        h('span', { className: 'core-kpi-label' }, 'MEMORIA ADA'),
+        h('strong', null, formatMetric('ada_process_rss_mb', ' MB')),
+        renderSpark('ada_process_rss_mb', 'cyan'),
+      ]),
+      h('article', { className: 'core-kpi' }, [
+        h('span', { className: 'core-kpi-label' }, 'CONEXIONES'),
+        h('strong', null, `${activeConnections}/${connectors.length}`),
+        h('small', null, 'canales y herramientas activas'),
+      ]),
+    ]),
+    h('div', { className: 'core-layout', key: 'core-layout' }, [
+      h('div', {
+        className: 'core-network',
+        role: 'region',
+        'aria-label': `${statusText}. ${activity.label}. ${modelGroups.length} modelos y ${connectors.length} conectores visibles.`,
+        key: 'network',
+      }, [
+        h('svg', { className: 'core-link-layer', viewBox: '0 0 800 800', 'aria-hidden': 'true' }, [
+          h('circle', { cx: center, cy: center, r: connectorRadius, className: 'core-orbit orbit-outer', key: 'outer' }),
+          h('circle', { cx: center, cy: center, r: modelRadius, className: 'core-orbit orbit-inner', key: 'inner' }),
+          ...connectors.map((node, index) => {
+            const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
+            const outerX = center + connectorRadius * Math.cos(angle);
+            const outerY = center + connectorRadius * Math.sin(angle);
+            const innerX = center + 118 * Math.cos(angle);
+            const innerY = center + 118 * Math.sin(angle);
+            const bend = (index % 2 === 0 ? 1 : -1) * (24 + (index % 3) * 12);
+            const controlX = center + ((innerX + outerX) / 2 - center) + bend * Math.sin(angle);
+            const controlY = center + ((innerY + outerY) / 2 - center) - bend * Math.cos(angle);
+            return h('path', {
+              key: `line-${node.id}`,
+              d: `M ${innerX} ${innerY} Q ${controlX} ${controlY} ${outerX} ${outerY}`,
+              className: `core-link ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+            });
+          }),
+        ]),
+        h('div', { className: 'core-sphere-wrap' }, [
+          h('div', { className: 'core-sphere-halo halo-one' }),
+          h('div', { className: 'core-sphere-halo halo-two' }),
+          h('div', { className: 'core-sphere' }, [
+            h('div', { className: 'core-sphere-grid' }),
+            h('span', { className: 'core-sphere-kicker' }, 'NÚCLEO LOCAL'),
+            h('strong', { className: 'core-sphere-name' }, 'ADA'),
+            h('span', { className: 'core-sphere-state' }, activity.label),
+            activity.model ? h('span', { className: 'core-sphere-model' }, activity.model) : null,
+          ]),
+        ]),
+        h('div', { className: 'core-model-orbit', 'aria-label': 'Modelos activos' },
+          modelGroups.map((model, index) => {
+            const angle = (-90 + (360 / Math.max(1, modelGroups.length)) * index) * Math.PI / 180;
+            const x = 50 + 19 * Math.cos(angle);
+            const y = 50 + 19 * Math.sin(angle);
+            const isActive = working && (
+              (activity.component === 'model' && (
+                activity.model === model.name || model.roles.includes(activity.role)
+              ))
+              || (activity.component === 'router' && model.roles.includes('router'))
+            );
+            return h('button', {
+              key: model.name,
+              type: 'button',
+              className: `core-model-node ${isActive ? 'active' : ''}`,
+              style: { left: `${x}%`, top: `${y}%` },
+              onClick: () => onSwitchTab('models'),
+              'aria-label': `${model.name}: ${model.roles.map(role => roleLabels[role] || role).join(', ')}`,
+            }, [
+              h('span', { className: 'core-node-signal' }),
+              h('strong', null, model.name),
+              h('span', null, model.roles.map(role => roleLabels[role] || role).join(' · ')),
+            ]);
+          })
+        ),
+        h('div', { className: 'core-connectors', 'aria-label': 'Conectores y MCP' },
+          connectors.map((node, index) => {
+            const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
+            const x = 50 + 40.5 * Math.cos(angle);
+            const y = 50 + 40.5 * Math.sin(angle);
+            return h('button', {
+              key: node.id,
+              type: 'button',
+              className: `core-connector ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+              style: { left: `${x}%`, top: `${y}%` },
+              onClick: () => onSwitchTab(node.tab),
+              'aria-label': `${node.name}, ${node.kind}, ${node.online ? 'activo' : 'inactivo'}, ${node.meta}`,
+            }, [
+              h('span', { className: 'core-node-signal' }),
+              h('strong', null, node.name),
+              h('span', null, node.kind === 'MCP' ? node.meta : node.kind),
+            ]);
+          })
+        ),
+      ]),
+      h('div', { className: 'core-activity-panel', key: 'activity' }, [
+        h('div', { className: 'core-activity-header' }, [
+          h('span', { className: 'core-activity-icon', 'aria-hidden': 'true' }, h(Icon, { name: working ? 'bolt' : activity.status === 'error' ? 'alert' : 'check' })),
+          h('div', { className: 'core-activity-title' }, [
+            h('span', { className: 'core-activity-eyebrow' }, activity.phase === 'idle' ? 'ESTADO ACTUAL' : activity.phase.replaceAll('_', ' ').toUpperCase()),
+            h('strong', null, activity.label),
+          ]),
+        ]),
+        h('div', { className: 'core-activity-body' }, [
+          h('p', { className: 'core-activity-desc' }, activity.detail || 'Núcleo en espera de nuevas instrucciones o disparadores.'),
+        ]),
+        activity.prompt ? h('div', { className: 'core-current-request' }, [
+          h('span', null, 'Pedido actual'),
+          h('p', null, activity.prompt),
+        ]) : null,
+        h('div', { className: 'core-panel-meta' }, [
+          h('div', { className: 'core-meta-item' }, [
+            h('span', { className: 'core-meta-label' }, 'Modo de trabajo'),
+            h('strong', { className: 'core-meta-val' }, ({ hybrid: 'Híbrido', turbo: 'Turbo', light: 'Liviano', manual: 'Manual' })[coreData?.models?.mode] || '—'),
+          ]),
+          h('div', { className: 'core-meta-item' }, [
+            h('span', { className: 'core-meta-label' }, 'Conexiones activas'),
+            h('strong', { className: 'core-meta-val text-accent' }, `${connectors.filter(c => c.online).length} de ${connectors.length}`),
+          ]),
+        ]),
+        (activity.recent && activity.recent.length > 0) ? h('div', { className: 'core-recent-phases', 'aria-label': 'Últimas fases' }, [
+          h('span', { className: 'core-recent-title' }, 'Flujo reciente'),
+          h('div', { className: 'core-phases-list' },
+            (activity.recent || []).slice(-4).map((event, index) => h('span', {
+              key: `${event.at}-${index}`,
+              className: `core-phase phase-${event.status}`,
+            }, event.label))
+          ),
+        ]) : null,
+      ]),
+    ]),
+    h('div', { className: 'core-telemetry-grid', key: 'telemetry' }, [
+      h('section', { className: 'core-telemetry-card core-telemetry-wide' }, [
+        h('div', { className: 'core-telemetry-heading' }, [
+          h('div', null, [
+            h('span', { className: 'core-activity-eyebrow' }, 'OBSERVABILIDAD EN TIEMPO REAL'),
+            h('h3', null, 'Pulso operativo'),
+          ]),
+          h('span', { className: 'core-live-badge' }, [h('span', { className: 'core-live-dot' }), 'LIVE']),
+        ]),
+        h('div', { className: 'core-telemetry-charts' }, [
+          h('div', { className: 'core-chart-block' }, [
+            h('div', { className: 'core-chart-label' }, [h('span', null, 'ADA / CPU'), h('strong', null, formatMetric('ada_process_cpu_percent', '%'))]),
+            renderSpark('ada_process_cpu_percent', 'cyan'),
+          ]),
+          h('div', { className: 'core-chart-block' }, [
+            h('div', { className: 'core-chart-label' }, [h('span', null, 'OLLAMA / MEMORIA'), h('strong', null, formatMetric('ollama_process_rss_mb', ' MB'))]),
+            renderSpark('ollama_process_rss_mb', 'violet'),
+          ]),
+          h('div', { className: 'core-chart-block' }, [
+            h('div', { className: 'core-chart-label' }, [h('span', null, 'ACTIVIDAD REGISTRADA'), h('strong', null, String(samples.length))]),
+            renderSpark('messages_received', 'green'),
+          ]),
+        ]),
+      ]),
+      h('section', { className: 'core-telemetry-card core-signal-card' }, [
+        h('div', { className: 'core-telemetry-heading' }, [
+          h('div', null, [h('span', { className: 'core-activity-eyebrow' }, 'SEÑALES DEL SISTEMA'), h('h3', null, 'Estado de la red')]),
+        ]),
+        h('div', { className: 'core-signal-grid' }, [
+          h('div', null, [h('strong', null, String(modelGroups.length)), h('span', null, 'modelos activos')]),
+          h('div', null, [h('strong', null, String(connectors.filter(connector => connector.kind === 'MCP' && connector.online).length)), h('span', null, 'MCP conectados')]),
+          h('div', null, [h('strong', null, String(connectors.filter(connector => connector.kind === 'Entrada' && connector.online).length)), h('span', null, 'entradas listas')]),
+          h('div', null, [h('strong', null, latestMetric('messages_received') == null ? '—' : String(latestMetric('messages_received'))), h('span', null, 'mensajes recibidos')]),
+        ]),
+      ]),
+    ]),
+  ]);
+}
+
+const TIMEOUT_PRESETS = {
+  fast: {
+    label: 'Rápido', description: 'Para pedidos simples', taskLabel: '2 min por tarea',
+    router_timeout: 10, model_timeout: 60, chat_timeout_seconds: 120, food_advisor_timeout: 60,
+  },
+  balanced: {
+    label: 'Equilibrado', description: 'Uso cotidiano', taskLabel: '5 min por tarea',
+    router_timeout: 20, model_timeout: 180, chat_timeout_seconds: 300, food_advisor_timeout: 120,
+  },
+  patient: {
+    label: 'Agente paciente', description: 'Prioriza completar bien', taskLabel: '15 min por tarea',
+    router_timeout: 30, model_timeout: 300, chat_timeout_seconds: 900, food_advisor_timeout: 180,
+  },
+};
+
+// 4. Ollama Tab View (Advanced Resource Controls, Diagnostics, Real-Time Download % & Model Management)
 function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark }) {
   const [pullInput, setPullInput] = useState('');
   const [pulling, setPulling] = useState(false);
-  const [pullProgress, setPullProgress] = useState({ percent: 0, status: '', text: '' });
+  const [pullProgress, setPullProgress] = useState({ percent: 0, status: '', text: '', completed_fmt: '', total_fmt: '' });
+
+  // Ollama Advanced Config State
+  const [ollamaConfig, setOllamaConfig] = useState({
+    cpu_limit_percent: 50,
+    ollama_num_thread: 4,
+    ollama_num_ctx: 4096,
+    ollama_keep_alive: '5m',
+    ollama_temperature: 0.2,
+    timeout_profile: 'patient',
+    router_timeout: 30,
+    model_timeout: 300,
+    chat_timeout_seconds: 900,
+    food_advisor_timeout: 180,
+    recommended_threads: 4,
+    hardware: { cpu_cores: 8, ram_gb: 16, gpu_backend: 'cpu' },
+  });
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [modelDetailsModal, setModelDetailsModal] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [catalog, setCatalog] = useState([]);
 
   const models = modelsData?.models || [];
   const running = modelsData?.running || [];
   const isOnline = isOllamaAvailable(statusData);
+
+  useEffect(() => {
+    api.getOllamaConfig().then(data => {
+      if (data) setOllamaConfig(data);
+    }).catch(() => {});
+
+    api.getModelsCatalog().then(data => {
+      if (data?.catalog) setCatalog(data.catalog);
+    }).catch(() => {});
+  }, []);
+
+  const handleSaveConfig = async () => {
+    if (Number(ollamaConfig.chat_timeout_seconds) < Number(ollamaConfig.model_timeout)) {
+      showToast('El tiempo de la tarea completa debe ser mayor o igual al de una llamada al modelo.', 'danger');
+      return;
+    }
+    if (Number(ollamaConfig.food_advisor_timeout) > Number(ollamaConfig.chat_timeout_seconds)) {
+      showToast('El tiempo del asesor de comida no puede superar el de la tarea completa.', 'danger');
+      return;
+    }
+    setSavingConfig(true);
+    try {
+      const res = await api.saveOllamaConfig(ollamaConfig);
+      if (res.ok) {
+        setOllamaConfig(res.config);
+        showToast('Rendimiento y paciencia del agente guardados', 'success');
+      }
+    } catch (err) {
+      showToast('Error al guardar configuración: ' + err.message, 'danger');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const handleStart = async () => {
     try {
@@ -632,22 +1067,29 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
     }
   };
 
-  const handlePull = async () => {
-    if (!pullInput.trim()) {
-      showToast('Ingresá el nombre del modelo', 'warning');
-      return;
-    }
-    const modelName = pullInput.trim();
+  const startPullForModel = async (modelName) => {
+    if (!modelName || !modelName.trim()) return;
+    const targetModel = modelName.trim();
     setPulling(true);
-    setPullProgress({ percent: 0, status: `Iniciando pull de ${modelName}...`, text: '' });
+    setPullProgress({
+      percent: 0,
+      status: `Iniciando conexión con el registro para ${targetModel}...`,
+      text: '0%',
+      completed_fmt: '0 B',
+      total_fmt: 'Calculando...',
+    });
 
     try {
       const token = api.getCookie('ada_csrf');
       const res = await fetch('/api/ollama/pull/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-ADA-Token': token },
-        body: JSON.stringify({ model: modelName }),
+        body: JSON.stringify({ model: targetModel }),
       });
+
+      if (!res.ok) {
+        throw new Error(`Error en servidor: ${res.statusText}`);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -664,16 +1106,24 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
+              if (data.error) {
+                showToast(`Error al descargar ${targetModel}: ${data.error}`, 'danger');
+                setPulling(false);
+                return;
+              }
               if (data.status) {
                 setPullProgress({
                   percent: data.percent || 0,
                   status: data.status,
-                  text: `${data.percent || 0}% (${data.completed_formatted || ''} / ${data.total_formatted || ''})`,
+                  text: `${data.percent || 0}%`,
+                  completed_fmt: data.completed_formatted || '',
+                  total_fmt: data.total_formatted || '',
                 });
               }
               if (data.done) {
-                showToast(`Modelo ${modelName} descargado exitosamente`, 'success');
+                showToast(`¡Modelo ${targetModel} descargado e instalado con éxito!`, 'success');
                 setPulling(false);
+                setPullInput('');
                 onRefresh();
               }
             } catch (_) {}
@@ -689,7 +1139,7 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const handleUnload = async (name) => {
     try {
       await api.unloadOllamaModel(name);
-      showToast(`Modelo ${name} descargado de VRAM`, 'info');
+      showToast(`Modelo ${name} descargado de VRAM / Memoria`, 'info');
       onRefresh();
     } catch (err) {
       showToast('Error: ' + err.message, 'danger');
@@ -697,163 +1147,495 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   };
 
   const handleDelete = async (name) => {
-    if (!confirm(`¿Eliminar modelo ${name} de disco?`)) return;
+    if (!window.confirm(`¿Estás seguro de que deseás eliminar el modelo ${name} de disco?`)) return;
     try {
       await api.deleteOllamaModel(name);
-      showToast(`Modelo ${name} eliminado`, 'info');
+      showToast(`Modelo ${name} eliminado del almacenamiento local`, 'info');
       onRefresh();
     } catch (err) {
       showToast('Error: ' + err.message, 'danger');
     }
   };
 
+  const handleShowDetails = async (name) => {
+    setLoadingDetails(true);
+    setModelDetailsModal({ name, loading: true });
+    try {
+      const details = await api.getOllamaDetails(name);
+      setModelDetailsModal({ name, data: details });
+    } catch (err) {
+      showToast('Error al obtener detalles: ' + err.message, 'danger');
+      setModelDetailsModal(null);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const maxCores = ollamaConfig.hardware?.cpu_cores || 8;
+  const applyTimeoutPreset = (profile) => {
+    const preset = TIMEOUT_PRESETS[profile];
+    if (!preset) return;
+    setOllamaConfig({
+      ...ollamaConfig,
+      timeout_profile: profile,
+      router_timeout: preset.router_timeout,
+      model_timeout: preset.model_timeout,
+      chat_timeout_seconds: preset.chat_timeout_seconds,
+      food_advisor_timeout: preset.food_advisor_timeout,
+    });
+  };
+  const updateTimeout = (key, seconds) => {
+    const safeSeconds = Math.max(1, Math.min(86400, Number(seconds) || 1));
+    setOllamaConfig({ ...ollamaConfig, timeout_profile: 'custom', [key]: safeSeconds });
+  };
+
   return h('section', { className: 'tab-view active', id: 'tab-ollama' }, [
-    // Ollama Lifecycle Bar
+    // 1. Service Lifecycle Control Header
     h('div', { className: 'card mb-6', key: 'service-control-card' }, [
       h('div', { className: 'card-header' }, [
-        h('div', { className: 'flex items-center gap-2' }, [
-          h('h3', { className: 'card-title' }, 'Control del Servicio Ollama'),
-          h('span', { className: `badge ${isOnline ? 'badge-success' : 'badge-danger'}` },
-            isOnline ? 'En ejecución' : 'Detenido'
+        h('div', { className: 'flex items-center gap-3' }, [
+          h('div', { className: `status-dot ${isOnline ? 'online' : 'offline'}` }),
+          h('div', null, [
+            h('h3', { className: 'card-title' }, 'Motor de inferencia local'),
+            h('span', { className: 'text-xs text-muted' }, `${ollamaConfig.hardware?.gpu_backend?.toUpperCase() || 'CPU'} · ${ollamaConfig.hardware?.ram_gb || '16'} GB de RAM · ${ollamaConfig.hardware?.cpu_cores || 8} núcleos`),
+          ]),
+          h('span', { className: `badge ${isOnline ? 'badge-success' : 'badge-danger'} ml-2` },
+            isOnline ? 'En línea' : 'Detenido'
           ),
         ]),
         h('div', { className: 'flex items-center gap-2' }, [
-          !isOnline ? h('button', { className: 'btn btn-sm btn-primary', onClick: handleStart }, '▶ Iniciar Servicio') : null,
-          isOnline ? h('button', { className: 'btn btn-sm btn-secondary text-danger', onClick: handleStop }, '⏹ Detener') : null,
-          h('button', { className: 'btn btn-sm btn-ghost', onClick: handleRestart }, '🔄 Reiniciar Servicio'),
+          !isOnline ? h('button', { className: 'btn btn-sm btn-primary', onClick: handleStart }, 'Iniciar motor') : null,
+          isOnline ? h('button', { className: 'btn btn-sm btn-secondary text-danger', onClick: handleStop }, 'Detener') : null,
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: handleRestart }, 'Reiniciar'),
         ]),
       ]),
     ]),
 
-    // Pull Form Card
-    h('div', { className: 'card mb-6', key: 'pull-card' }, [
+    // 2. Hardware Resource & Inference Limits Configuration
+    h('div', { className: 'card mb-6', key: 'config-card' }, [
       h('div', { className: 'card-header' }, [
-        h('h3', { className: 'card-title' }, 'Descargar / Pull de Modelo Ollama'),
+        h('div', null, [
+          h('h3', { className: 'card-title' }, 'Rendimiento y memoria'),
+          h('span', { className: 'text-xs text-muted' }, 'Ajustá cuánto puede usar el motor. Los valores actuales priorizan calidad sobre velocidad.'),
+        ]),
+        h('button', { className: 'btn btn-sm btn-primary', onClick: handleSaveConfig, disabled: savingConfig },
+          savingConfig ? 'Guardando…' : 'Guardar cambios'
+        ),
       ]),
       h('div', { className: 'card-body' }, [
-        h('div', { className: 'pull-form' }, [
+        h('div', { className: 'grid grid-cols-3 gap-6' }, [
+          // CPU Threads & Budget
+          h('div', { className: 'form-group' }, [
+            h('div', { className: 'flex justify-between items-center' }, [
+              h('label', { className: 'form-label', htmlFor: 'ollama-threads' }, 'Hilos de CPU'),
+              h('span', { className: 'badge badge-accent' }, `${ollamaConfig.ollama_num_thread || ollamaConfig.recommended_threads} núcleos`),
+            ]),
+            h('input', {
+              type: 'range',
+              id: 'ollama-threads',
+              min: 1,
+              max: maxCores,
+              step: 1,
+              className: 'w-full',
+              value: ollamaConfig.ollama_num_thread || ollamaConfig.recommended_threads || 4,
+              onChange: (e) => setOllamaConfig({ ...ollamaConfig, ollama_num_thread: parseInt(e.target.value) }),
+            }),
+            h('span', { className: 'form-help' }, `Máximo disponible: ${maxCores} cores. Recomendado: ${ollamaConfig.recommended_threads}`),
+          ]),
+
+          // Context Window (num_ctx)
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'ollama-context' }, 'Ventana de contexto'),
+            h('select', {
+              id: 'ollama-context',
+              className: 'form-select',
+              value: ollamaConfig.ollama_num_ctx || 4096,
+              onChange: (e) => setOllamaConfig({ ...ollamaConfig, ollama_num_ctx: parseInt(e.target.value) }),
+            }, [
+            h('option', { value: 2048 }, '2,048 tokens (Ultra ligero - Bajo consumo RAM)'),
+            h('option', { value: 8192 }, '8,192 tokens (Turbo estable)'),
+            h('option', { value: 90000 }, '90,000 tokens (Experimental - alto consumo RAM)'),
+              h('option', { value: 4096 }, '4,096 tokens (Recomendado estándar)'),
+              h('option', { value: 8192 }, '8,192 tokens (Contexto amplio / Documentos largos)'),
+              h('option', { value: 16384 }, '16,384 tokens (Modo Agéntico / Código multi-archivo)'),
+              h('option', { value: 32768 }, '32,768 tokens (Máximo contexto)'),
+            ]),
+            h('span', { className: 'form-help' }, 'Determina cuántos tokens de historial y herramientas recuerda por turno.'),
+          ]),
+
+          // Keep Alive in Memory
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'ollama-retention' }, 'Mantener el modelo en memoria'),
+            h('select', {
+              id: 'ollama-retention',
+              className: 'form-select',
+              value: ollamaConfig.ollama_keep_alive || '5m',
+              onChange: (e) => setOllamaConfig({ ...ollamaConfig, ollama_keep_alive: e.target.value }),
+            }, [
+              h('option', { value: '0m' }, '0m (Liberar RAM/VRAM inmediatamente tras responder)'),
+              h('option', { value: '2m' }, '2 minutos'),
+              h('option', { value: '5m' }, '5 minutos (Predeterminado)'),
+              h('option', { value: '10m' }, '10 minutos'),
+              h('option', { value: '15m' }, '15 minutos'),
+              h('option', { value: '30m' }, '30 minutos'),
+              h('option', { value: '-1' }, 'Indefinido (Mantener siempre en RAM)'),
+            ]),
+            h('span', { className: 'form-help' }, 'Tiempo que el modelo permanece precargado para respuestas instantáneas.'),
+          ]),
+        ]),
+      ]),
+    ]),
+
+    // 3. Independent timeout policy for patient agent work
+    h('div', { className: 'card mb-6 agent-timeout-card', key: 'timeout-card' }, [
+      h('div', { className: 'card-header' }, [
+        h('div', null, [
+          h('div', { className: 'eyebrow' }, 'INDEPENDIENTE DEL MODO DE MODELO'),
+          h('h3', { className: 'card-title' }, 'Paciencia del agente'),
+          h('span', { className: 'text-xs text-muted' }, 'Define cuánto puede trabajar ADA antes de cancelar. Cambiar entre Liviano, Híbrido o Turbo ya no modifica estos tiempos.'),
+        ]),
+        h('button', { className: 'btn btn-sm btn-primary', onClick: handleSaveConfig, disabled: savingConfig },
+          savingConfig ? 'Guardando…' : 'Guardar tiempos'
+        ),
+      ]),
+      h('div', { className: 'card-body' }, [
+        h('div', { className: 'timeout-preset-grid', role: 'group', 'aria-label': 'Perfiles de paciencia' },
+          Object.entries(TIMEOUT_PRESETS).map(([key, preset]) => h('button', {
+            key,
+            type: 'button',
+            className: `timeout-preset ${ollamaConfig.timeout_profile === key ? 'active' : ''}`,
+            'aria-pressed': ollamaConfig.timeout_profile === key,
+            onClick: () => applyTimeoutPreset(key),
+          }, [
+            h('span', { className: 'timeout-preset-title' }, [
+              preset.label,
+              key === 'patient' ? h('span', { className: 'badge badge-accent' }, 'Recomendado') : null,
+            ]),
+            h('span', { className: 'timeout-preset-description' }, preset.description),
+            h('strong', null, preset.taskLabel),
+          ]))
+        ),
+        ollamaConfig.timeout_profile === 'custom'
+          ? h('div', { className: 'custom-timeout-note' }, 'Perfil personalizado · se guardarán los valores escritos abajo.')
+          : null,
+        h('div', { className: 'grid grid-cols-4 gap-4 timeout-fields' }, [
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'router-timeout' }, 'Entender el pedido'),
+            h('div', { className: 'input-with-unit' }, [
+              h('input', {
+                id: 'router-timeout', type: 'number', className: 'form-input', min: 1, max: 86400, step: 1,
+                value: ollamaConfig.router_timeout || 30,
+                onChange: (e) => updateTimeout('router_timeout', e.target.value),
+              }),
+              h('span', null, 'seg'),
+            ]),
+            h('span', { className: 'form-help' }, 'Clasificación inicial del pedido.'),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'model-timeout' }, 'Una llamada al modelo'),
+            h('div', { className: 'input-with-unit' }, [
+              h('input', {
+                id: 'model-timeout', type: 'number', className: 'form-input', min: 1 / 60, max: 1440, step: 0.5,
+                value: Number((Number(ollamaConfig.model_timeout || 300) / 60).toFixed(2)),
+                onChange: (e) => updateTimeout('model_timeout', Number(e.target.value) * 60),
+              }),
+              h('span', null, 'min'),
+            ]),
+            h('span', { className: 'form-help' }, 'Incluye carga y generación local.'),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'task-timeout' }, 'Tarea completa'),
+            h('div', { className: 'input-with-unit' }, [
+              h('input', {
+                id: 'task-timeout', type: 'number', className: 'form-input', min: 1 / 60, max: 1440, step: 1,
+                value: Number((Number(ollamaConfig.chat_timeout_seconds || 900) / 60).toFixed(2)),
+                onChange: (e) => updateTimeout('chat_timeout_seconds', Number(e.target.value) * 60),
+              }),
+              h('span', null, 'min'),
+            ]),
+            h('span', { className: 'form-help' }, 'Límite total del agente y sus pasos.'),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label', htmlFor: 'food-timeout' }, 'Asesor de comida'),
+            h('div', { className: 'input-with-unit' }, [
+              h('input', {
+                id: 'food-timeout', type: 'number', className: 'form-input', min: 1 / 60, max: 1440, step: 0.5,
+                value: Number((Number(ollamaConfig.food_advisor_timeout || 180) / 60).toFixed(2)),
+                onChange: (e) => updateTimeout('food_advisor_timeout', Number(e.target.value) * 60),
+              }),
+              h('span', null, 'min'),
+            ]),
+            h('span', { className: 'form-help' }, 'Análisis nutricional y recetas.'),
+          ]),
+        ]),
+        h('div', { className: 'timeout-rule-note' }, [
+          h('span', { 'aria-hidden': 'true' }, '⏱'),
+          h('span', null, 'ADA mantiene la conexión abierta e informa que sigue trabajando cada 3 segundos. La tarea completa debe tener al menos tanto tiempo como una llamada al modelo.'),
+        ]),
+      ]),
+    ]),
+
+    // 4. Download & Pull Manager (Real-Time % Progress)
+    h('div', { className: 'card mb-6', key: 'pull-card' }, [
+      h('div', { className: 'card-header' }, [
+        h('div', null, [
+          h('h3', { className: 'card-title' }, 'Descargar un modelo'),
+          h('span', { className: 'text-xs text-muted' }, 'Instalá un modelo desde la biblioteca de Ollama y seguí el progreso sin salir del gestor.'),
+        ]),
+      ]),
+      h('div', { className: 'card-body flex flex-col gap-4' }, [
+        h('div', { className: 'pull-form flex gap-3' }, [
           h('input', {
             type: 'text',
             className: 'form-input flex-1',
-            placeholder: 'Ej: deepseek-r1:8b, qwen2.5:7b, llama3.2:1b, nomic-embed-text',
+            placeholder: 'Nombre y versión, por ejemplo qwen2.5-coder:14b',
+            'aria-label': 'Nombre del modelo que querés descargar',
             value: pullInput,
             onChange: (e) => setPullInput(e.target.value),
-            onKeyDown: (e) => e.key === 'Enter' && handlePull(),
+            onKeyDown: (e) => e.key === 'Enter' && !pulling && startPullForModel(pullInput),
+            disabled: pulling,
           }),
-          h('button', { className: 'btn btn-primary', onClick: handlePull, disabled: pulling }, [
-            h('span', null, pulling ? 'Descargando...' : '📥 Descargar Modelo'),
+          h('button', { className: 'btn btn-primary', onClick: () => startPullForModel(pullInput), disabled: pulling || !pullInput.trim() }, [
+            h('span', null, pulling ? 'Descargando…' : 'Descargar'),
           ]),
         ]),
-        pulling ? h('div', { className: 'pull-progress-container' }, [
-          h('div', { className: 'pull-progress-header' }, [
-            h('span', null, pullProgress.status),
-            h('span', null, pullProgress.text),
+
+        // Active Download Progress Box
+        pulling ? h('div', { className: 'download-progress-card p-4 bg-surface-elevated rounded-lg border border-primary', style: { background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.3)' } }, [
+          h('div', { className: 'flex justify-between items-center mb-2' }, [
+            h('div', { className: 'flex items-center gap-2' }, [
+              h('span', { className: 'font-semibold text-primary' }, `Descargando: ${pullInput}`),
+              h('span', { className: 'text-xs text-muted' }, `• ${pullProgress.status || 'Descargando paquetes...'}`),
+            ]),
+            h('div', { className: 'flex items-center gap-2' }, [
+              pullProgress.total_fmt ? h('span', { className: 'text-xs font-mono text-muted' }, `${pullProgress.completed_fmt} / ${pullProgress.total_fmt}`) : null,
+              h('span', { className: 'badge badge-primary font-mono' }, `${pullProgress.percent}%`),
+            ]),
           ]),
-          h('div', { className: 'progress-bar-bg' }, [
-            h('div', { className: 'progress-bar-fill', style: { width: `${pullProgress.percent}%` } }),
+          h('div', { className: 'progress-bar-bg', style: { height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden' } }, [
+            h('div', {
+              className: 'progress-bar-fill',
+              style: {
+                width: `${pullProgress.percent}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
+                transition: 'width 0.3s ease-out',
+                boxShadow: '0 0 10px rgba(168, 85, 247, 0.5)',
+              }
+            }),
           ]),
+        ]) : null,
+
+        // Quick Pick from Recommended Catalog
+        catalog.length > 0 ? h('div', { className: 'mt-2' }, [
+          h('span', { className: 'text-xs font-semibold text-muted uppercase tracking-wide block mb-2' }, 'Sugerencias para este equipo'),
+          h('div', { className: 'flex flex-wrap gap-2' },
+            catalog.map(cat => {
+              const isInstalled = models.some(m => m.name === cat.name || m.name.startsWith(cat.name + ':'));
+              return h('button', {
+                key: cat.name,
+                className: `btn btn-sm ${isInstalled ? 'btn-ghost' : 'btn-secondary'} text-xs flex items-center gap-1.5`,
+                disabled: pulling || isInstalled,
+                onClick: () => {
+                  setPullInput(cat.name);
+                  startPullForModel(cat.name);
+                },
+              }, [
+                h('span', null, isInstalled ? '✅' : '📥'),
+                h('span', { className: 'font-mono' }, cat.name),
+                h('span', { className: 'text-muted text-2xs' }, `(${cat.min_ram_gb}GB+)`),
+              ]);
+            })
+          ),
         ]) : null,
       ]),
     ]),
 
-    // Running VRAM Models Card
+    // 4. Running VRAM / Active Models
     h('div', { className: 'card mb-6', key: 'running-card' }, [
       h('div', { className: 'card-header' }, [
         h('div', { className: 'flex items-center gap-2' }, [
-          h('h3', { className: 'card-title' }, 'Modelos en Memoria / VRAM Activos (Ollama ps)'),
-          h('span', { className: 'badge badge-accent' }, `${running.length} en VRAM`),
+          h('h3', { className: 'card-title' }, 'Modelos Activos en Memoria / VRAM (Ollama ps)'),
+          h('span', { className: 'badge badge-accent' }, `${running.length} cargado(s)`),
         ]),
       ]),
       h('div', { className: 'card-body' }, [
-        !running.length ? h('div', { className: 'empty-state-sm' }, 'No hay modelos cargados en VRAM en este momento.')
-          : h('div', { className: 'running-models-grid' }, 
-              running.map(r => h('div', { className: 'model-card border-accent', key: r.name }, [
-                h('div', { className: 'model-card-header' }, [
-                  h('span', { className: 'model-name' }, r.name),
-                  h('span', { className: 'badge badge-success' }, `VRAM: ${r.size_vram_formatted}`),
+        !running.length ? h('div', { className: 'empty-state-sm text-center py-4 text-muted text-sm' }, 'No hay ningún modelo ocupando memoria en este momento.')
+          : h('div', { className: 'grid grid-cols-2 gap-4' },
+              running.map(r => h('div', { className: 'model-card border-accent p-4 rounded-lg bg-surface-elevated', key: r.name }, [
+                h('div', { className: 'flex justify-between items-start mb-2' }, [
+                  h('div', null, [
+                    h('span', { className: 'model-name block font-semibold text-primary font-mono' }, r.name),
+                    h('span', { className: 'text-xs text-muted' }, `Expira en: ${r.expires_at || 'Al agotarse keep-alive'}`),
+                  ]),
+                  h('span', { className: 'badge badge-success' }, `VRAM/RAM: ${r.size_vram_formatted}`),
                 ]),
-                h('div', { className: 'flex justify-between items-center mt-2' }, [
-                  h('span', { className: 'text-xs text-muted' }, 'Cargado en memoria gráfica'),
-                  h('button', { className: 'btn btn-sm btn-secondary', onClick: () => handleUnload(r.name) }, 'Descargar de VRAM'),
+                h('div', { className: 'flex justify-end gap-2 mt-3 pt-2 border-t border-subtle' }, [
+                  h('button', { className: 'btn btn-sm btn-secondary text-danger', onClick: () => handleUnload(r.name) }, '🔻 Liberar Memoria'),
                 ]),
               ]))
             ),
       ]),
     ]),
 
-    // Installed Models Card
+    // 5. Installed Models List & Management
     h('div', { className: 'card', key: 'installed-card' }, [
       h('div', { className: 'card-header' }, [
         h('div', { className: 'flex items-center gap-2' }, [
-          h('h3', { className: 'card-title' }, 'Modelos Instalados en Disco'),
+          h('h3', { className: 'card-title' }, 'Biblioteca de Modelos Instalados en Disco'),
           h('span', { className: 'badge badge-primary' }, `${models.length} modelos`),
         ]),
+        h('button', { className: 'btn btn-sm btn-ghost', onClick: onRefresh }, '🔄 Actualizar Lista'),
       ]),
       h('div', { className: 'card-body' }, [
-        !models.length ? h('div', { className: 'empty-state-sm' }, 'No se encontraron modelos instalados en Ollama.')
-          : h('div', { className: 'models-grid' }, 
-              models.map(m => h('div', { className: 'model-card', key: m.name }, [
-                h('div', { className: 'model-card-header' }, [
-                  h('span', { className: 'model-name' }, m.name),
-                  h('span', { className: 'badge badge-accent' }, m.size_formatted),
-                ]),
-                h('div', { className: 'model-meta' }, [
-                  m.details?.parameter_size ? h('span', { className: 'badge', key: 'p' }, m.details.parameter_size) : null,
-                  m.details?.quantization_level ? h('span', { className: 'badge', key: 'q' }, m.details.quantization_level) : null,
-                  m.details?.family ? h('span', { className: 'badge', key: 'f' }, m.details.family) : null,
-                ]),
-                h('div', { className: 'flex justify-between items-center mt-2' }, [
-                  h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onBenchmark(m.name) }, '⚡ Probar'),
-                  h('button', { className: 'btn btn-sm btn-secondary text-danger', onClick: () => handleDelete(m.name) }, 'Eliminar'),
-                ]),
-              ]))
+        !models.length ? h('div', { className: 'empty-state-sm text-center py-6 text-muted' }, 'No se encontraron modelos descargados en este equipo.')
+          : h('div', { className: 'grid grid-cols-3 gap-4' },
+              models.map(m => {
+                const isRunning = running.some(r => r.name === m.name);
+                return h('div', { className: `model-card p-4 rounded-lg bg-surface-elevated flex flex-col justify-between ${isRunning ? 'border-primary' : ''}`, key: m.name }, [
+                  h('div', null, [
+                    h('div', { className: 'flex justify-between items-start mb-2' }, [
+                      h('span', { className: 'model-name font-mono font-bold text-white' }, m.name),
+                      h('span', { className: 'badge badge-accent' }, m.size_formatted),
+                    ]),
+                    h('div', { className: 'model-meta flex flex-wrap gap-1.5 mb-3' }, [
+                      isRunning ? h('span', { className: 'badge badge-success text-2xs', key: 'running' }, '🟢 En Memoria') : null,
+                      m.details?.parameter_size ? h('span', { className: 'badge text-2xs', key: 'p' }, m.details.parameter_size) : null,
+                      m.details?.quantization_level ? h('span', { className: 'badge text-2xs', key: 'q' }, m.details.quantization_level) : null,
+                      m.details?.family ? h('span', { className: 'badge text-2xs', key: 'f' }, m.details.family) : null,
+                    ]),
+                  ]),
+                  h('div', { className: 'flex justify-between items-center gap-2 mt-3 pt-2 border-t border-subtle' }, [
+                    h('div', { className: 'flex gap-1' }, [
+                      h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Ver Arquitectura y Modelfile', onClick: () => handleShowDetails(m.name) }, 'ℹ️ Info'),
+                      h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Testear velocidad de respuesta', onClick: () => onBenchmark(m.name) }, '⚡ Benchmark'),
+                    ]),
+                    h('button', { className: 'btn btn-sm btn-secondary text-danger text-xs', title: 'Borrar de disco', onClick: () => handleDelete(m.name) }, '🗑️ Borrar'),
+                  ]),
+                ]);
+              })
             ),
       ]),
     ]),
+
+    // Model Details Modal
+    modelDetailsModal ? h('div', { className: 'modal-overlay', style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }, onClick: () => setModelDetailsModal(null) }, [
+      h('div', { className: 'modal-content card', style: { width: '600px', maxHeight: '80vh', overflowY: 'auto' }, onClick: (e) => e.stopPropagation() }, [
+        h('div', { className: 'card-header flex justify-between items-center' }, [
+          h('h3', { className: 'card-title font-mono' }, `Detalles de ${modelDetailsModal.name}`),
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: () => setModelDetailsModal(null) }, '✕'),
+        ]),
+        h('div', { className: 'card-body' }, [
+          modelDetailsModal.data ? h('div', { className: 'flex flex-col gap-3 text-xs font-mono' }, [
+            h('div', null, [
+              h('span', { className: 'text-muted block' }, 'Familia & Formato:'),
+              h('span', { className: 'text-primary' }, `${modelDetailsModal.data.details?.family || 'N/A'} (${modelDetailsModal.data.details?.format || 'gguf'})`),
+            ]),
+            h('div', null, [
+              h('span', { className: 'text-muted block' }, 'Parámetros & Cuantización:'),
+              h('span', { className: 'text-white' }, `${modelDetailsModal.data.details?.parameter_size || 'N/A'} - ${modelDetailsModal.data.details?.quantization_level || 'N/A'}`),
+            ]),
+            modelDetailsModal.data.parameters ? h('div', null, [
+              h('span', { className: 'text-muted block mb-1' }, 'Parámetros Modelfile:'),
+              h('pre', { className: 'p-2 bg-surface rounded text-2xs overflow-x-auto' }, modelDetailsModal.data.parameters),
+            ]) : null,
+            modelDetailsModal.data.template ? h('div', null, [
+              h('span', { className: 'text-muted block mb-1' }, 'Template de Prompt:'),
+              h('pre', { className: 'p-2 bg-surface rounded text-2xs overflow-x-auto' }, modelDetailsModal.data.template.slice(0, 300) + '...'),
+            ]) : null,
+          ]) : h('div', { className: 'py-6 text-center text-muted' }, 'Cargando información del modelo...'),
+        ]),
+      ]),
+    ]) : null,
   ]);
 }
 
 // 5. Models Tab View (Roles & Benchmark)
 function ModelsView({ installedModels, showToast }) {
-  const [chatRole, setChatRole] = useState('llama3.2:3b');
-  const [visionRole, setVisionRole] = useState('qwen2.5vl:3b');
-  const [routerRole, setRouterRole] = useState('llama3.2:3b');
+  const roleLabels = {
+    chat: 'Conversación',
+    router: 'Router rápido',
+    reasoning: 'Razonamiento',
+    coding: 'Código',
+    tools: 'Herramientas',
+    vision: 'Visión y OCR',
+  };
+  const modeCards = [
+    { id: 'manual', name: 'Manual', eyebrow: 'Control total', description: 'Elegís un modelo para cada tipo de tarea.' },
+    { id: 'light', name: 'Liviano', eyebrow: 'Más rápido', description: 'Menos RAM, menos temperatura y respuestas ágiles.' },
+    { id: 'hybrid', name: 'Híbrido', eyebrow: 'Recomendado', description: 'Modelo rápido para lo simple y especialistas cuando hacen falta.' },
+    { id: 'turbo', name: 'Turbo', eyebrow: 'Máxima calidad', description: 'Usa el modelo más potente que entra con margen seguro.' },
+  ];
+  const [selectionMode, setSelectionMode] = useState('manual');
+  const [policyData, setPolicyData] = useState(null);
+  const [manualRoles, setManualRoles] = useState({ chat: '', router: '', reasoning: '', coding: '', tools: '', vision: '' });
+  const [savingMode, setSavingMode] = useState(false);
   const [benchModel, setBenchModel] = useState('');
   const [benchPrompt, setBenchPrompt] = useState('quick');
+  const [customPromptText, setCustomPromptText] = useState('');
   const [benchResult, setBenchResult] = useState(null);
   const [benchLoading, setBenchLoading] = useState(false);
+  const [promptCatalog, setPromptCatalog] = useState(null);
+  const [expandedPromptIdx, setExpandedPromptIdx] = useState(null);
   const [catalog, setCatalog] = useState([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newModelForm, setNewModelForm] = useState({
+    name: '',
+    roles: 'chat',
+    description: '',
+    min_ram_gb: 8,
+    quality_tier: 'medium',
+  });
 
   useEffect(() => {
     api.getModelsPolicy().then(data => {
-      if (data.active) {
-        if (data.active.chat) setChatRole(data.active.chat);
-        if (data.active.vision) setVisionRole(data.active.vision);
-        if (data.active.router) setRouterRole(data.active.router);
-      }
+      setPolicyData(data);
+      setSelectionMode(data.mode || 'manual');
+      const source = data.manual_policy || data.policy || {};
+      setManualRoles(Object.fromEntries(Object.keys(roleLabels).map(role => [role, source?.[role]?.preferred || ''])));
     }).catch(() => {});
 
     api.getModelsCatalog().then(data => {
       setCatalog(data.catalog || []);
     }).catch(() => {});
+
+    api.getBenchmarkPrompts().then(data => {
+      if (data?.prompts) setPromptCatalog(data.prompts);
+    }).catch(() => {});
   }, []);
 
-  const handleSaveRoles = async () => {
-    const policy = {
-      chat: { preferred: chatRole, fallbacks: [] },
-      vision: { preferred: visionRole, fallbacks: [] },
-      router: { preferred: routerRole, fallbacks: [] },
-    };
+  const handleApplyMode = async () => {
+    const manualPolicy = Object.fromEntries(
+      Object.keys(roleLabels).map(role => [role, { preferred: manualRoles[role] || null, fallbacks: [] }])
+    );
+    setSavingMode(true);
     try {
-      await api.saveModelsPolicy(policy);
-      showToast('Roles de modelos guardados exitosamente', 'success');
+      const result = await api.saveModelsSelection({
+        selection_mode: selectionMode,
+        ...(selectionMode === 'manual' ? { manual_policy: manualPolicy } : {}),
+      });
+      setPolicyData(result);
+      showToast(`Modo ${modeCards.find(item => item.id === selectionMode)?.name} aplicado`, 'success');
     } catch (err) {
       showToast('Error: ' + err.message, 'danger');
+    } finally {
+      setSavingMode(false);
     }
   };
 
+  const previewPolicy = selectionMode === 'manual'
+    ? Object.fromEntries(Object.keys(roleLabels).map(role => [role, { preferred: manualRoles[role] || null, fallbacks: [] }]))
+    : policyData?.mode_previews?.[selectionMode] || policyData?.policy || {};
+  const previewRuntime = policyData?.runtime_presets?.[selectionMode] || policyData?.runtime_settings || {};
+  const compatibleByRole = (role) => {
+    const profiles = policyData?.installed || [];
+    const names = profiles.filter(item => (item.roles || []).includes(role)).map(item => item.name);
+    return installedModels.filter(item => names.includes(item.name));
+  };
+  const installedProfile = (name) => (policyData?.installed || []).find(item => item.name === name);
+
   const handleBenchmark = async () => {
-    const target = benchModel || (installedModels[0]?.name);
+    const target = benchModel || previewPolicy?.chat?.preferred || installedModels[0]?.name;
     if (!target) {
       showToast('Seleccioná un modelo para benchmark', 'warning');
       return;
@@ -861,77 +1643,216 @@ function ModelsView({ installedModels, showToast }) {
     setBenchLoading(true);
     setBenchResult(null);
     try {
-      const res = await api.runBenchmark(target, benchPrompt);
+      const isSuite = benchPrompt === 'suite';
+      const customPrompt = benchPrompt === 'custom' ? customPromptText : null;
+      const res = await api.runBenchmark(target, isSuite ? 'quick' : benchPrompt, customPrompt, isSuite);
       setBenchResult(res);
-      if (res.ok) showToast('Benchmark finalizado', 'success');
+      if (res.ok) {
+        showToast(isSuite ? 'Suite de pruebas completada' : 'Benchmark finalizado', 'success');
+      } else {
+        showToast(res.error || 'Error al ejecutar prueba', 'danger');
+      }
     } catch (err) {
       setBenchResult({ ok: false, error: err.message });
+      showToast('Error de conexión con el motor', 'danger');
     } finally {
       setBenchLoading(false);
     }
   };
 
   return h('section', { className: 'tab-view active', id: 'tab-models' }, [
-    h('div', { className: 'grid grid-cols-2 gap-6 mb-6', key: 'top-grid' }, [
-      // Role Assignment Matrix
-      h('div', { className: 'card', key: 'roles-matrix' }, [
-        h('div', { className: 'card-header' }, [
-          h('h3', { className: 'card-title' }, 'Asignación de Roles de Modelos'),
-          h('button', { className: 'btn btn-sm btn-primary', onClick: handleSaveRoles }, 'Guardar Cambios'),
+    h('div', { className: 'card mb-6 model-mode-shell', key: 'mode-selector' }, [
+      h('div', { className: 'card-header model-mode-header' }, [
+        h('div', null, [
+          h('span', { className: 'section-kicker' }, 'Política de ejecución'),
+          h('h3', { className: 'card-title' }, '¿Cómo querés que ADA elija los modelos?'),
+          h('p', { className: 'text-sm text-muted mt-1' }, 'Los modos automáticos usan solamente modelos descargados y dejan margen para el sistema.'),
         ]),
-        h('div', { className: 'card-body flex flex-col gap-4' }, [
-          h('div', { className: 'form-group' }, [
-            h('label', { className: 'form-label' }, 'Modelo de Chat Principal'),
-            h('select', { className: 'form-select', value: chatRole, onChange: (e) => setChatRole(e.target.value) },
-              installedModels.map(m => h('option', { key: m.name, value: m.name }, `${m.name} (${m.size_formatted})`))
-            ),
-            h('span', { className: 'form-help' }, 'Utilizado para responder dudas generales y razonamiento.'),
+        h('button', { className: 'btn btn-primary', onClick: handleApplyMode, disabled: savingMode || !policyData },
+          savingMode ? 'Aplicando…' : 'Aplicar configuración'
+        ),
+      ]),
+      h('div', { className: 'card-body' }, [
+        h('div', { className: 'model-mode-grid', role: 'radiogroup', 'aria-label': 'Modo de selección de modelos' },
+          modeCards.map(mode => h('button', {
+            key: mode.id,
+            type: 'button',
+            role: 'radio',
+            'aria-checked': selectionMode === mode.id,
+            className: `model-mode-card ${selectionMode === mode.id ? 'selected' : ''}`,
+            onClick: () => setSelectionMode(mode.id),
+          }, [
+            h('span', { className: 'model-mode-check', 'aria-hidden': 'true' }, selectionMode === mode.id ? '✓' : ''),
+            h('span', { className: 'model-mode-eyebrow' }, mode.eyebrow),
+            h('strong', null, mode.name),
+            h('span', { className: 'model-mode-description' }, mode.description),
+          ]))
+        ),
+        selectionMode === 'manual' ? h('div', { className: 'manual-role-grid mt-6' },
+          Object.entries(roleLabels).map(([role, label]) => {
+            const compatible = compatibleByRole(role);
+            const options = compatible.length ? compatible : (role === 'vision' ? [] : installedModels);
+            return h('label', { className: 'manual-role-field', key: role }, [
+              h('span', { className: 'form-label' }, label),
+              h('select', {
+                className: 'form-select',
+                'aria-label': `Modelo manual para ${label}`,
+                value: manualRoles[role] || '',
+                onChange: (event) => setManualRoles({ ...manualRoles, [role]: event.target.value }),
+              }, [
+                h('option', { value: '' }, role === 'vision' ? 'Sin modelo compatible' : 'Sin asignar'),
+                ...options.map(model => {
+                  const profile = installedProfile(model.name);
+                  const warning = profile && !profile.hardware_fit ? ' · ⚠ excede la RAM segura' : '';
+                  return h('option', { key: model.name, value: model.name }, `${model.name} · ${model.size_formatted}${warning}`);
+                }),
+              ]),
+              !compatible.length ? h('span', { className: 'form-help text-warning' }, 'No hay un modelo especializado descargado.') : null,
+            ]);
+          })
+        ) : null,
+      ]),
+    ]),
+
+    h('div', { className: 'grid grid-cols-2 gap-6 mb-6', key: 'top-grid' }, [
+      h('div', { className: 'card model-plan-card', key: 'active-plan' }, [
+        h('div', { className: 'card-header' }, [
+          h('div', null, [
+            h('h3', { className: 'card-title' }, 'Configuración resultante'),
+            h('span', { className: 'text-xs text-muted' }, 'Vista previa antes de aplicar'),
           ]),
-          h('div', { className: 'form-group' }, [
-            h('label', { className: 'form-label' }, 'Modelo de Visión & OCR'),
-            h('select', { className: 'form-select', value: visionRole, onChange: (e) => setVisionRole(e.target.value) },
-              installedModels.map(m => h('option', { key: m.name, value: m.name }, `${m.name} (${m.size_formatted})`))
-            ),
-            h('span', { className: 'form-help' }, 'Utilizado cuando se envían imágenes o capturas.'),
+          selectionMode === 'hybrid' ? h('span', { className: 'badge badge-success' }, 'Recomendado') : null,
+        ]),
+        h('div', { className: 'card-body' }, [
+          h('dl', { className: 'model-plan-list' }, Object.entries(roleLabels).map(([role, label]) =>
+            h('div', { key: role }, [
+              h('dt', null, label),
+              h('dd', { className: !previewPolicy?.[role]?.preferred ? 'missing' : '' }, previewPolicy?.[role]?.preferred || 'No disponible'),
+            ])
+          )),
+          selectionMode === 'manual' ? h('p', { className: 'model-manual-runtime' }, 'Los límites de CPU y contexto se administran desde Motor local.') : h('div', { className: 'model-runtime-strip' }, [
+            h('span', null, `${previewRuntime.ollama_num_thread || '—'} hilos`),
+            h('span', null, `${Number(previewRuntime.ollama_num_ctx || 0).toLocaleString('es-AR')} tokens`),
+            h('span', null, `${previewRuntime.cpu_limit_percent || '—'}% CPU`),
           ]),
-          h('div', { className: 'form-group' }, [
-            h('label', { className: 'form-label' }, 'Modelo de Router / Clasificación'),
-            h('select', { className: 'form-select', value: routerRole, onChange: (e) => setRouterRole(e.target.value) },
-              installedModels.map(m => h('option', { key: m.name, value: m.name }, `${m.name} (${m.size_formatted})`))
-            ),
-            h('span', { className: 'form-help' }, 'Modelo rápido y ligero para enrutar intenciones.'),
-          ]),
+          policyData?.warnings?.length ? h('div', { className: 'model-policy-warning' }, [
+            h('strong', null, 'Atención'),
+            h('span', null, policyData.warnings[0]),
+          ]) : null,
         ]),
       ]),
 
-      // Benchmark Runner
+      // Benchmark & Prompt Test Runner with Full Telemetry
       h('div', { className: 'card', key: 'bench-card' }, [
         h('div', { className: 'card-header' }, [
-          h('h3', { className: 'card-title' }, 'Benchmark & Test de Velocidad'),
+          h('div', null, [
+            h('h3', { className: 'card-title' }, '🧪 Ejecución de Prompts de Test & Telemetría'),
+            h('span', { className: 'text-xs text-muted' }, 'Medición completa de tiempos, velocidad de inferencia y recursos consumidos (CPU / RAM / VRAM).'),
+          ]),
         ]),
         h('div', { className: 'card-body flex flex-col gap-4' }, [
           h('div', { className: 'form-group' }, [
             h('label', { className: 'form-label' }, 'Seleccionar Modelo'),
-            h('select', { className: 'form-select', value: benchModel || installedModels[0]?.name || '', onChange: (e) => setBenchModel(e.target.value) },
-              installedModels.map(m => h('option', { key: m.name, value: m.name }, m.name))
+            h('select', { className: 'form-select', 'aria-label': 'Modelo para la prueba de rendimiento', value: benchModel || previewPolicy?.chat?.preferred || installedModels[0]?.name || '', onChange: (e) => setBenchModel(e.target.value) },
+              installedModels.map(model => {
+                const profile = installedProfile(model.name);
+                return h('option', { key: model.name, value: model.name }, `${model.name}${profile && !profile.hardware_fit ? ' · ⚠ supera RAM segura' : ''}`);
+              })
             ),
           ]),
           h('div', { className: 'form-group' }, [
-            h('label', { className: 'form-label' }, 'Tipo de Prueba'),
-            h('select', { className: 'form-select', value: benchPrompt, onChange: (e) => setBenchPrompt(e.target.value) }, [
-              h('option', { value: 'quick' }, 'Respuesta Rápida (Explicación corta)'),
-              h('option', { value: 'reasoning' }, 'Razonamiento Lógico Paso a Paso'),
-              h('option', { value: 'json' }, 'Estructuración en JSON'),
+            h('label', { className: 'form-label' }, 'Tipo de Prueba de Prompts'),
+            h('select', { className: 'form-select', 'aria-label': 'Tipo de prueba de rendimiento', value: benchPrompt, onChange: (e) => setBenchPrompt(e.target.value) }, [
+              h('option', { value: 'suite' }, '⚡ Suite Completa (Ejecutar todos los prompts de prueba)'),
+              h('option', { value: 'quick' }, '🚀 Respuesta Rápida (Explicación básica)'),
+              h('option', { value: 'reasoning' }, '🧠 Razonamiento Lógico (Paso a paso)'),
+              h('option', { value: 'json' }, '📊 Estructuración JSON (Validación de esquema)'),
+              h('option', { value: 'planning' }, '🛠️ Planificación y Tareas (Workflow de agentes)'),
+              h('option', { value: 'coding' }, '💻 Generación de Código (Algoritmo Python)'),
+              h('option', { value: 'custom' }, '✍️ Prompt Personalizado (Ingresar texto libre)'),
             ]),
           ]),
-          h('button', { className: 'btn btn-secondary', onClick: handleBenchmark, disabled: benchLoading }, [
-            h('span', null, benchLoading ? 'Midiendo rendimiento...' : '⚡ Iniciar Prueba de Rendimiento'),
+          benchPrompt === 'custom' ? h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Texto del Prompt Personalizado'),
+            h('textarea', {
+              className: 'form-input form-textarea',
+              rows: 3,
+              placeholder: 'Escribí el prompt de prueba para evaluar la respuesta y rendimiento...',
+              value: customPromptText,
+              onChange: (e) => setCustomPromptText(e.target.value),
+            }),
+          ]) : null,
+          h('button', { className: 'btn btn-primary', onClick: handleBenchmark, disabled: benchLoading }, [
+            h('span', null, benchLoading ? '⏳ Midiendo tiempos y recursos del sistema...' : (benchPrompt === 'suite' ? '⚡ Iniciar Suite Completa de Prompts' : '⚡ Ejecutar Prompt de Test')),
           ]),
           benchResult ? h('div', { className: 'benchmark-results-box' }, [
-            benchResult.ok ? h('div', null, [
+            benchResult.ok ? (benchResult.suite_run ? h('div', { className: 'bench-suite-container' }, [
+              // Suite Summary Header
+              h('div', { className: 'bench-suite-summary-header' }, [
+                h('div', { className: 'flex justify-between items-center mb-3' }, [
+                  h('h4', { className: 'text-sm font-semibold' }, `Resumen de Suite: ${benchResult.model}`),
+                  h('span', { className: 'badge badge-success' }, `✓ ${benchResult.summary?.successful_prompts}/${benchResult.summary?.total_prompts} Completados`),
+                ]),
+                h('div', { className: 'bench-stats-grid grid-cols-3 gap-3 mb-4' }, [
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'Velocidad Media'),
+                    h('span', { className: 'bench-stat-val text-primary' }, `${benchResult.summary?.avg_tokens_per_second} t/s`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'Tiempo Total Suite'),
+                    h('span', { className: 'bench-stat-val' }, `${benchResult.summary?.total_duration_s} s`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'Tokens Generados'),
+                    h('span', { className: 'bench-stat-val' }, `${benchResult.summary?.total_tokens_generated}`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'CPU Media / Pico'),
+                    h('span', { className: 'bench-stat-val text-warning' }, `${benchResult.summary?.avg_cpu_percent}% / ${benchResult.summary?.peak_cpu_percent}%`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'RAM Media / Pico'),
+                    h('span', { className: 'bench-stat-val' }, `${benchResult.summary?.avg_ram_used_gb} GB / ${benchResult.summary?.peak_ram_used_gb} GB`),
+                  ]),
+                  h('div', { className: 'bench-stat-item' }, [
+                    h('span', { className: 'bench-stat-label' }, 'Aceleración'),
+                    h('span', { className: 'bench-stat-val' }, benchResult.resources?.vram_gb > 0 ? `${benchResult.resources.vram_gb} GB (${benchResult.resources.gpu_backend})` : `CPU (${benchResult.resources?.cpu_cores || 1} cores)`),
+                  ]),
+                ]),
+              ]),
+              // Suite Individual Prompts
+              h('div', { className: 'bench-suite-list flex flex-col gap-2 mt-4' },
+                (benchResult.results || []).map((item, idx) => {
+                  const isExpanded = expandedPromptIdx === idx;
+                  return h('div', { key: idx, className: 'bench-suite-item' }, [
+                    h('div', {
+                      className: 'bench-suite-item-header flex justify-between items-center cursor-pointer',
+                      onClick: () => setExpandedPromptIdx(isExpanded ? null : idx),
+                    }, [
+                      h('div', { className: 'flex items-center gap-2' }, [
+                        h('span', { className: item.ok ? 'text-success font-bold' : 'text-danger font-bold' }, item.ok ? '✓' : '✗'),
+                        h('strong', { className: 'text-sm' }, item.prompt_title || `Prueba ${idx + 1}`),
+                        h('span', { className: 'text-xs text-muted' }, `· ${item.tokens_per_second || 0} t/s · ${item.total_time_s || 0}s`),
+                      ]),
+                      h('div', { className: 'flex items-center gap-2' }, [
+                        h('span', { className: 'badge badge-sm' }, `CPU ${item.resources?.cpu_percent ?? 0}%`),
+                        h('span', { className: 'badge badge-sm' }, `RAM ${item.resources?.ram_used_gb ?? 0} GB`),
+                        h('span', { className: 'text-xs text-muted' }, isExpanded ? '▲ Ocultar' : '▼ Ver respuesta'),
+                      ]),
+                    ]),
+                    isExpanded ? h('div', { className: 'bench-suite-item-body mt-3' }, [
+                      h('div', { className: 'text-xs text-muted mb-1' }, `Prompt: ${item.prompt}`),
+                      h('div', { className: 'bench-output' }, item.response || item.error || 'Sin respuesta'),
+                    ]) : null,
+                  ]);
+                })
+              ),
+            ]) : h('div', null, [
+              // Single Prompt Timing Metrics
+              h('div', { className: 'text-xs font-semibold uppercase text-muted mb-2' }, '⏱️ Medición de Tiempos & Inferencia'),
               h('div', { className: 'bench-stats-grid' }, [
                 h('div', { className: 'bench-stat-item' }, [
-                  h('span', { className: 'bench-stat-label' }, 'Velocidad'),
+                  h('span', { className: 'bench-stat-label' }, 'Velocidad Inferencia'),
                   h('span', { className: 'bench-stat-val text-primary' }, `${benchResult.tokens_per_second} t/s`),
                 ]),
                 h('div', { className: 'bench-stat-item' }, [
@@ -943,36 +1864,186 @@ function ModelsView({ installedModels, showToast }) {
                   h('span', { className: 'bench-stat-val' }, `${benchResult.total_time_s} s`),
                 ]),
               ]),
+              // Single Prompt Resource Telemetry
+              h('div', { className: 'text-xs font-semibold uppercase text-muted mt-3 mb-2' }, '💻 Recursos Consumidos'),
+              h('div', { className: 'bench-stats-grid' }, [
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'CPU Utilizada'),
+                  h('span', { className: 'bench-stat-val text-warning' }, `${benchResult.resources?.cpu_percent ?? 0}%`),
+                ]),
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'RAM Sistema (Uso / Delta)'),
+                  h('span', { className: 'bench-stat-val' }, `${benchResult.resources?.ram_used_gb ?? 0} GB (${(benchResult.resources?.ram_delta_mb || 0) > 0 ? '+' : ''}${benchResult.resources?.ram_delta_mb ?? 0} MB)`),
+                ]),
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'Tokens Generados'),
+                  h('span', { className: 'bench-stat-val' }, `${benchResult.eval_count || 0} tokens`),
+                ]),
+              ]),
+              // Generated Output
+              h('div', { className: 'text-xs font-semibold uppercase text-muted mt-3 mb-1' }, '💬 Respuesta Generada'),
               h('div', { className: 'bench-output' }, benchResult.response),
-            ]) : h('div', { className: 'text-danger text-sm' }, `Error: ${benchResult.error}`),
+            ])) : h('div', { className: 'text-danger text-sm' }, `Error: ${benchResult.error}`),
           ]) : null,
         ]),
       ]),
     ]),
 
-    // Catalog
+    // Catalog & DB Model Management
     h('div', { className: 'card', key: 'catalog-card' }, [
-      h('div', { className: 'card-header' }, [
-        h('h3', { className: 'card-title' }, 'Catálogo de Modelos Recomendados para tu Hardware'),
+      h('div', { className: 'card-header flex justify-between items-center' }, [
+        h('div', null, [
+          h('h3', { className: 'card-title' }, 'Catálogo de Modelos en Base de Datos (SQLite)'),
+          h('span', { className: 'text-xs text-muted' }, 'Modelos registrados en la BD para gestión y descarga automatizada.'),
+        ]),
+        h('div', { className: 'flex gap-2' }, [
+          h('button', { className: 'btn btn-sm btn-primary', onClick: () => setShowAddModal(true) }, '➕ Agregar Modelo a BD'),
+        ]),
       ]),
       h('div', { className: 'card-body' }, [
         h('div', { className: 'catalog-grid' },
-          catalog.map(c => h('div', { className: 'model-card', key: c.name }, [
-            h('div', { className: 'model-card-header' }, [
-              h('span', { className: 'model-name' }, c.name),
-              h('span', { className: `badge ${c.hardware_fit ? 'badge-success' : 'badge-warning'}` },
-                c.hardware_fit ? 'Apto para tu RAM' : 'Requiere más RAM'
-              ),
-            ]),
-            h('p', { className: 'text-xs text-muted' }, c.description),
-            h('div', { className: 'model-meta' }, [
-              h('span', { className: 'badge badge-accent' }, `Roles: ${(c.roles || []).join(', ')}`),
-              h('span', { className: 'badge' }, `Mínimo: ${c.min_ram_gb} GB RAM`),
-            ]),
-          ]))
+          catalog.map(c => {
+            const isInstalled = installedModels.some(m => m.name === c.name || m.name.startsWith(c.name + ':'));
+            return h('div', { className: 'model-card flex flex-col justify-between', key: c.name }, [
+              h('div', null, [
+                h('div', { className: 'model-card-header' }, [
+                  h('span', { className: 'model-name font-mono' }, c.name),
+                  h('span', { className: `badge ${c.hardware_fit ? 'badge-success' : 'badge-warning'}` },
+                    c.hardware_fit ? 'Apto para tu RAM' : 'Requiere más RAM'
+                  ),
+                ]),
+                h('p', { className: 'text-xs text-muted my-2' }, c.description || 'Sin descripción'),
+                h('div', { className: 'model-meta mb-3' }, [
+                  h('span', { className: 'badge badge-accent' }, `Roles: ${(c.roles || []).join(', ')}`),
+                  h('span', { className: 'badge' }, `Mín: ${c.min_ram_gb} GB RAM`),
+                  isInstalled ? h('span', { className: 'badge badge-success' }, '🟢 Instalado') : null,
+                ]),
+              ]),
+              h('div', { className: 'flex justify-between items-center pt-2 border-t border-subtle mt-2' }, [
+                !isInstalled ? h('button', {
+                  className: 'btn btn-sm btn-primary text-xs',
+                  onClick: async () => {
+                    showToast(`Iniciando descarga en gestor para ${c.name}...`, 'info');
+                    window.location.hash = '#ollama';
+                  }
+                }, '📥 Descargar en Ollama') : h('span', { className: 'text-xs text-success font-semibold' }, '✓ Listo para uso'),
+                h('button', {
+                  className: 'btn btn-sm btn-ghost text-danger text-xs',
+                  title: 'Quitar del catálogo BD',
+                  onClick: async () => {
+                    if (!confirm(`¿Eliminar ${c.name} del catálogo de la Base de Datos?`)) return;
+                    try {
+                      await api.deleteCatalogModel(c.name);
+                      showToast(`Modelo ${c.name} removido de la BD`, 'info');
+                      const data = await api.getModelsCatalog();
+                      setCatalog(data.catalog || []);
+                    } catch (err) {
+                      showToast('Error: ' + err.message, 'danger');
+                    }
+                  }
+                }, '✕ Quitar'),
+              ]),
+            ]);
+          })
         ),
       ]),
     ]),
+
+    // Add Model to SQLite DB Modal
+    showAddModal ? h('div', { className: 'modal-overlay', style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }, onClick: () => setShowAddModal(false) }, [
+      h('div', { className: 'modal-content card', style: { width: '500px' }, onClick: (e) => e.stopPropagation() }, [
+        h('div', { className: 'card-header flex justify-between items-center' }, [
+          h('h3', { className: 'card-title' }, 'Registrar Nuevo Modelo en BD'),
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: () => setShowAddModal(false) }, '✕'),
+        ]),
+        h('div', { className: 'card-body flex flex-col gap-4' }, [
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Tag / Nombre en Ollama'),
+            h('input', {
+              type: 'text',
+              className: 'form-input font-mono',
+              placeholder: 'Ej: phi4:14b, mistral:7b, qwen2.5:14b',
+              value: newModelForm.name,
+              onChange: (e) => setNewModelForm({ ...newModelForm, name: e.target.value }),
+            }),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Roles (separados por coma)'),
+            h('input', {
+              type: 'text',
+              className: 'form-input',
+              placeholder: 'chat, reasoning, coding, tools',
+              value: newModelForm.roles,
+              onChange: (e) => setNewModelForm({ ...newModelForm, roles: e.target.value }),
+            }),
+          ]),
+          h('div', { className: 'grid grid-cols-2 gap-4' }, [
+            h('div', { className: 'form-group' }, [
+              h('label', { className: 'form-label' }, 'Mínimo RAM (GB)'),
+              h('input', {
+                type: 'number',
+                className: 'form-input',
+                value: newModelForm.min_ram_gb,
+                onChange: (e) => setNewModelForm({ ...newModelForm, min_ram_gb: e.target.value }),
+              }),
+            ]),
+            h('div', { className: 'form-group' }, [
+              h('label', { className: 'form-label' }, 'Tier / Categoría'),
+              h('select', {
+                className: 'form-select',
+                value: newModelForm.quality_tier,
+                onChange: (e) => setNewModelForm({ ...newModelForm, quality_tier: e.target.value }),
+              }, [
+                h('option', { value: 'tiny' }, 'Tiny (< 3B)'),
+                h('option', { value: 'small' }, 'Small (3B - 7B)'),
+                h('option', { value: 'medium' }, 'Medium (7B - 9B)'),
+                h('option', { value: 'large' }, 'Large (14B - 20B)'),
+                h('option', { value: 'huge' }, 'Huge (> 30B)'),
+              ]),
+            ]),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Descripción'),
+            h('input', {
+              type: 'text',
+              className: 'form-input',
+              placeholder: 'Descripción de capacidades y especialidad',
+              value: newModelForm.description,
+              onChange: (e) => setNewModelForm({ ...newModelForm, description: e.target.value }),
+            }),
+          ]),
+          h('div', { className: 'flex justify-end gap-2 mt-2' }, [
+            h('button', { className: 'btn btn-secondary', onClick: () => setShowAddModal(false) }, 'Cancelar'),
+            h('button', {
+              className: 'btn btn-primary',
+              onClick: async () => {
+                if (!newModelForm.name.trim()) {
+                  showToast('Ingresá el nombre del modelo', 'warning');
+                  return;
+                }
+                const rolesArray = newModelForm.roles.split(',').map(r => r.trim()).filter(Boolean);
+                try {
+                  await api.addCatalogModel({
+                    name: newModelForm.name.trim(),
+                    roles: rolesArray.length ? rolesArray : ['chat'],
+                    description: newModelForm.description.trim(),
+                    quality_tier: newModelForm.quality_tier,
+                    min_ram_gb: parseFloat(newModelForm.min_ram_gb) || 4,
+                  });
+                  showToast(`Modelo ${newModelForm.name} guardado en BD`, 'success');
+                  setShowAddModal(false);
+                  setNewModelForm({ name: '', roles: 'chat', description: '', min_ram_gb: 8, quality_tier: 'medium' });
+                  const data = await api.getModelsCatalog();
+                  setCatalog(data.catalog || []);
+                } catch (err) {
+                  showToast('Error al guardar: ' + err.message, 'danger');
+                }
+              }
+            }, '💾 Guardar en BD'),
+          ]),
+        ]),
+      ]),
+    ]) : null,
   ]);
 }
 
@@ -1219,6 +2290,7 @@ function MCPsView({ showToast }) {
             type: 'text',
             className: 'vscode-search-input',
             placeholder: '🔍 Filtrar servidores...',
+            'aria-label': 'Filtrar servidores',
             value: searchQuery,
             onChange: (e) => setSearchQuery(e.target.value),
           }),
@@ -1327,6 +2399,7 @@ function MCPsView({ showToast }) {
                 type: 'text',
                 className: 'form-input form-input-sm max-w-sm',
                 placeholder: 'Filtrar herramientas de este servidor...',
+                'aria-label': 'Filtrar herramientas del servidor seleccionado',
                 value: toolSearch,
                 onChange: (e) => setToolSearch(e.target.value),
               }),
@@ -1410,6 +2483,7 @@ function MCPsView({ showToast }) {
                           type: 'text',
                           className: 'tester-input',
                           placeholder: `Argumentos JSON (opcional), ej: {"path": "."}`,
+                          'aria-label': `Argumentos JSON para ${t.name}`,
                           value: testInputs[t.name] || '',
                           onChange: (e) => setTestInputs({ ...testInputs, [t.name]: e.target.value }),
                         }),
@@ -1561,24 +2635,26 @@ function ChatView({ showToast }) {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let eventName = 'message';
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        let eventName = 'message';
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            eventName = line.slice(7).trim();
-            continue;
+        const events = buffer.split(/\n\n/);
+        buffer = events.pop() || '';
+        for (const eventBlock of events) {
+          const lines = eventBlock.split(/\n/);
+          let payloadLine = null;
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+            if (line.startsWith('data: ')) payloadLine = line.slice(6);
           }
-          if (line.startsWith('data: ')) {
+          if (payloadLine) {
             try {
-              const data = JSON.parse(line.slice(6));
-              if (data.text && (eventName === 'reply' || eventName === 'error' || eventName === 'message')) {
+              const data = JSON.parse(payloadLine);
+              if (data.text && (eventName === 'status' || eventName === 'reply' || eventName === 'error' || eventName === 'message')) {
                 setMessages(prev => {
                   const updated = [...prev];
                   updated[assistantIdx] = { role: 'assistant', text: data.text };
@@ -1587,6 +2663,13 @@ function ChatView({ showToast }) {
               }
             } catch (_) {}
           }
+        }
+      }
+      if (buffer.trim()) {
+        const dataLine = buffer.split(/\n/).find(line => line.startsWith('data: '));
+        if (dataLine) {
+          const data = JSON.parse(dataLine.slice(6));
+          if (data.text) setMessages(prev => { const updated = [...prev]; updated[assistantIdx] = { role: 'assistant', text: data.text }; return updated; });
         }
       }
     } catch (err) {
@@ -1640,6 +2723,7 @@ function ChatView({ showToast }) {
         h('div', { className: 'chat-options' }, [
           h('select', {
             className: 'form-select form-select-sm',
+            'aria-label': 'Idioma de la conversación',
             value: lang,
             onChange: (e) => setLang(e.target.value),
           }, [
@@ -1655,6 +2739,7 @@ function ChatView({ showToast }) {
         h('textarea', {
           className: 'chat-textarea',
           placeholder: 'Escribí tu mensaje o solicitud...',
+          'aria-label': 'Mensaje para ADA',
           rows: 2,
           value: input,
           onChange: (e) => setInput(e.target.value),
@@ -1843,6 +2928,7 @@ function SettingsView({ showToast }) {
           h('input', {
             type: 'text',
             className: 'form-input',
+            'aria-label': 'Nombre del asistente',
             value: config.name || '',
             onChange: (e) => setConfig({ ...config, name: e.target.value }),
           }),
@@ -1852,6 +2938,7 @@ function SettingsView({ showToast }) {
           h('input', {
             type: 'text',
             className: 'form-input',
+            'aria-label': 'URL del servicio Ollama',
             value: config.ollama_url || '',
             onChange: (e) => setConfig({ ...config, ollama_url: e.target.value }),
           }),
@@ -1861,6 +2948,7 @@ function SettingsView({ showToast }) {
           h('input', {
             type: 'text',
             className: 'form-input',
+            'aria-label': 'Carpeta de fotos',
             value: config.photo_root || '',
             onChange: (e) => setConfig({ ...config, photo_root: e.target.value }),
           }),
@@ -1870,6 +2958,7 @@ function SettingsView({ showToast }) {
           h('input', {
             type: 'text',
             className: 'form-input',
+            'aria-label': 'Carpetas permitidas',
             value: (config.allowed_roots || []).join(', '),
             onChange: (e) => setConfig({ ...config, allowed_roots: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }),
           }),
@@ -1934,10 +3023,12 @@ function SettingsView({ showToast }) {
               h('label', { className: 'form-label text-xs' }, 'Tipo de Secreto / Servicio'),
               h('select', {
                 className: 'form-select font-mono text-sm',
+                'aria-label': 'Tipo de secreto o servicio',
                 value: selectedPreset,
                 onChange: (e) => setSelectedPreset(e.target.value),
               }, [
                 h('option', { value: 'telegram_bot_token' }, '📱 Telegram Bot Token (telegram_bot_token)'),
+                h('option', { value: 'event_token' }, '⚡ Webhook Event Token (event_token)'),
                 h('option', { value: 'openai_api_key' }, '🤖 OpenAI API Key (openai_api_key)'),
                 h('option', { value: 'anthropic_api_key' }, '🧠 Anthropic API Key (anthropic_api_key)'),
                 h('option', { value: 'openrouter_api_key' }, '🌐 OpenRouter API Key (openrouter_api_key)'),
@@ -1953,6 +3044,7 @@ function SettingsView({ showToast }) {
                   h('input', {
                     type: 'text',
                     className: 'form-input font-mono text-sm',
+                    'aria-label': 'Nombre de la clave personalizada',
                     placeholder: 'ej: stripe_api_key',
                     value: customKeyName,
                     onChange: (e) => setCustomKeyName(e.target.value),
@@ -1963,6 +3055,7 @@ function SettingsView({ showToast }) {
                   h('input', {
                     type: 'text',
                     className: 'form-input text-sm',
+                    'aria-label': 'Descripción opcional del secreto',
                     placeholder: 'ej: Token principal',
                     value: secretDescription,
                     onChange: (e) => setSecretDescription(e.target.value),
@@ -1974,6 +3067,7 @@ function SettingsView({ showToast }) {
             h('input', {
               type: 'password',
               className: 'form-input font-mono text-sm',
+              'aria-label': 'Valor del secreto',
               placeholder: 'Pegá aquí tu clave secreta o token...',
               value: secretValue,
               onChange: (e) => setSecretValue(e.target.value),
@@ -1989,6 +3083,111 @@ function SettingsView({ showToast }) {
         ]),
       ]),
     ]),
+  ]);
+}
+
+// =============================================================================
+// Trigger sources: every external entry point into ADA
+// =============================================================================
+function TriggersView({ showToast, onSwitchTab }) {
+  const [data, setData] = useState(null);
+  const [busyId, setBusyId] = useState('');
+
+  const refresh = useCallback(async () => {
+    try {
+      setData(await api.getTriggers());
+    } catch (error) {
+      showToast('No pude leer los disparadores: ' + error.message, 'danger');
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 4000);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
+  const control = async (trigger, action) => {
+    setBusyId(trigger.id);
+    try {
+      const result = await api.controlTrigger(trigger.id, action);
+      showToast(result.message || `${trigger.name}: ${action}`, 'success');
+      await refresh();
+    } catch (error) {
+      showToast(`${trigger.name}: ${error.message}`, 'danger');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  if (!data) return h('div', { className: 'initial-loader' }, [h('div', { className: 'loader-spinner' })]);
+  const labels = {
+    running: ['Activo', 'success'], starting: ['Iniciando', 'warning'], degraded: ['Conflicto', 'danger'], recovering: ['Recuperando', 'warning'], ready: ['Preparado', 'accent'],
+    needs_config: ['Falta configurar', 'warning'], needs_adapter: ['Adaptador pendiente', 'warning'], stopped: ['Detenido', 'outline'],
+  };
+  const kindLabels = { channel: 'Canal', device: 'Dispositivo', schedule: 'Programación', event: 'Evento HTTP' };
+
+  return h('section', { className: 'tab-view active triggers-view', id: 'tab-triggers' }, [
+    h('div', { className: 'trigger-flow', key: 'flow', 'aria-label': 'Flujo de disparadores hacia ADA' }, [
+      h('div', { className: 'trigger-flow-source' }, [
+        h(Icon, { name: 'triggers', size: 20 }),
+        h('div', { className: 'trigger-flow-copy' }, [
+          h('strong', null, 'Entradas externas'),
+          h('small', null, 'mensajes · eventos · horarios · dispositivos'),
+        ]),
+      ]),
+      h('span', { className: 'trigger-flow-line', 'aria-hidden': 'true' }),
+      h('div', { className: 'trigger-flow-gate' }, [
+        h('strong', null, 'Cola de eventos'),
+        h('span', null, 'autenticación · deduplicación · reintentos'),
+      ]),
+      h('span', { className: 'trigger-flow-line', 'aria-hidden': 'true' }),
+      h('div', { className: 'trigger-flow-core' }, [h('strong', null, 'ADA'), h('span', null, 'decide y ejecuta')]),
+    ]),
+    h('div', { className: 'trigger-summary', key: 'summary' }, [
+      h('div', null, [h('span', null, 'Fuentes previstas'), h('strong', null, data.counts?.total || 0)]),
+      h('div', null, [h('span', null, 'Ejecutándose'), h('strong', null, data.counts?.running || 0)]),
+      h('div', null, [h('span', null, 'Contratos listos'), h('strong', null, data.counts?.ready || 0)]),
+    ]),
+    h('div', { className: 'trigger-grid', key: 'grid' }, (data.triggers || []).map(trigger => {
+      const status = labels[trigger.status] || [trigger.status || 'Desconocido', 'outline'];
+      const isTelegram = trigger.id === 'telegram';
+      const running = trigger.running === true;
+      return h('article', { className: `trigger-card trigger-${trigger.status}`, key: trigger.id }, [
+        h('div', { className: 'trigger-card-head' }, [
+          h('span', { className: 'trigger-card-icon' }, h(Icon, { name: isTelegram ? 'telegram' : trigger.kind === 'schedule' ? 'activity' : 'triggers' })),
+          h('div', null, [
+            h('span', { className: 'trigger-kind' }, kindLabels[trigger.kind] || 'Disparador'),
+            h('h3', null, trigger.name),
+          ]),
+          h('span', { className: `badge badge-${status[1]}` }, status[0]),
+        ]),
+        h('p', null, trigger.description),
+        h('div', { className: 'trigger-runtime' }, [
+          h('span', null, trigger.summary || 'Preparado para integrarse al bus de eventos'),
+          isTelegram && trigger.pid ? h('code', null, `PID ${trigger.pid}`) : null,
+          trigger.endpoint ? h('code', null, trigger.endpoint) : null,
+        ]),
+        isTelegram && trigger.last_error ? h('div', { className: 'trigger-warning', role: 'status' }, trigger.last_error) : null,
+        h('div', { className: 'trigger-actions' }, isTelegram ? [
+          h('button', {
+            className: `btn btn-sm ${running ? 'btn-danger' : 'btn-primary'}`,
+            disabled: busyId === trigger.id || (!running && !trigger.configured),
+            onClick: () => control(trigger, running ? 'stop' : 'start'),
+          }, busyId === trigger.id ? 'Procesando…' : running ? 'Detener' : 'Iniciar'),
+          h('button', {
+            className: 'btn btn-sm btn-secondary', disabled: busyId === trigger.id || !running,
+            onClick: () => control(trigger, 'restart'),
+          }, 'Reiniciar'),
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('telegram') }, 'Configurar'),
+        ] : [
+          h('span', { className: 'trigger-contract' }, 'Interfaz de entrada registrada'),
+          trigger.id === 'webhook'
+            ? h('button', { className: 'btn btn-sm btn-ghost', onClick: () => onSwitchTab('settings') }, 'Configurar credencial')
+            : null,
+        ]),
+      ]);
+    })),
   ]);
 }
 
@@ -2129,6 +3328,7 @@ function TelegramView({ showToast }) {
   }
 
   const isRunning = status?.running === true;
+  const isDegraded = status?.status === 'degraded';
 
   return h('section', { className: 'tab-view active', id: 'tab-telegram' }, [
     // 1. Control Bar Card
@@ -2139,12 +3339,14 @@ function TelegramView({ showToast }) {
           h('div', null, [
             h('div', { className: 'flex items-center gap-2' }, [
               h('h3', { className: 'card-title' }, 'Control del Servidor Telegram Bot'),
-              h('span', { className: `badge ${isRunning ? 'badge-success' : 'badge-danger'}` },
-                isRunning ? 'En ejecución (Long-polling)' : 'Detenido'
+              h('span', { className: `badge ${isDegraded ? 'badge-danger' : isRunning ? 'badge-success' : 'badge-danger'}` },
+                isDegraded ? 'Conflicto de listener' : isRunning ? 'En ejecución (Long-polling)' : 'Detenido'
               ),
             ]),
             h('p', { className: 'text-xs text-muted mt-1' },
-              'Daemon independiente desacoplado que reenvía texto, fotos y comandos a los endpoints de razonamiento de ADA.'
+              status?.survives_dashboard_restart
+                ? 'Servicio independiente supervisado por ADA. Sigue activo aunque el dashboard se reinicie.'
+                : 'Servicio de mensajería conectado a los endpoints de razonamiento de ADA.'
             ),
           ]),
         ]),
@@ -2181,6 +3383,11 @@ function TelegramView({ showToast }) {
         ]),
       ]),
     ]),
+
+    isDegraded ? h('div', { className: 'trigger-warning mb-6', role: 'alert', key: 'telegram-health-warning' }, [
+      h('strong', null, 'Telegram está ejecutándose, pero no está saludable. '),
+      h('span', null, status.last_error || 'Revisá el log persistente del disparador.'),
+    ]) : null,
 
     // 2. Token Configuration Form Card (Collapsible)
     showConfigCard ? h('div', { className: 'card mb-6 animate-fade-in', key: 'token-config-card' }, [
@@ -2238,10 +3445,13 @@ function TelegramView({ showToast }) {
       h('div', { className: 'card stat-card', key: 'stat-status' }, [
         h('div', { className: 'stat-header' }, [
           h('span', { className: 'stat-label' }, 'Estado del Proceso'),
-          h('span', { className: `status-indicator ${isRunning ? 'online' : 'offline'}` }),
+          h('span', { className: `status-indicator ${isRunning && !isDegraded ? 'online' : 'offline'}` }),
         ]),
-        h('div', { className: `stat-value ${isRunning ? 'text-success' : 'text-muted'}` }, isRunning ? 'ONLINE' : 'OFFLINE'),
-        h('div', { className: 'stat-footer' }, isRunning ? `Polling cada ${status.poll_seconds}s activo` : 'Daemon detenido'),
+        h('div', { className: `stat-value ${isDegraded ? 'text-warning' : isRunning ? 'text-success' : 'text-muted'}` },
+          isDegraded ? 'CONFLICTO' : isRunning ? 'ONLINE' : 'OFFLINE'),
+        h('div', { className: 'stat-footer' }, isRunning
+          ? `PID ${status.pid || '—'} · polling cada ${status.poll_seconds}s`
+          : status?.desired_state === 'running' ? 'Recuperación automática pendiente' : 'Detenido desde el dashboard'),
       ]),
 
       // KPI 2: Token Configurado
@@ -2378,19 +3588,19 @@ function TelegramView({ showToast }) {
       h('div', { className: 'card', key: 'cli-guide' }, [
         h('div', { className: 'card-header' }, [
           h('div', { className: 'flex items-center gap-2' }, [
-            h('h3', { className: 'card-title' }, '💻 Ejecución como Proceso Aislado'),
-            h('span', { className: 'badge badge-primary' }, 'CLI & Background'),
+            h('h3', { className: 'card-title' }, '💻 Servicio administrado por ADA'),
+            h('span', { className: 'badge badge-primary' }, 'Persistente'),
           ]),
         ]),
         h('div', { className: 'card-body' }, [
           h('p', { className: 'text-sm text-muted mb-3' },
-            'Telegram está diseñado como un servidor/bot completamente independiente en `telegram/bot.py`. Podés ejecutarlo directamente en una terminal separada, en un contenedor o como servicio systemd:'
+            'El dashboard controla el estado deseado, pero Telegram corre fuera del proceso web. Si el gestor se reinicia, ADA adopta el PID existente o lo recupera automáticamente si terminó.'
           ),
           h('pre', {
             className: 'p-4 rounded-lg bg-base font-mono text-xs text-secondary overflow-x-auto border border-subtle leading-relaxed',
             style: { background: '#0a0d14' }
           },
-            `# 1. Configurar token en la Bóveda Cifrada (vault.db)\n.venv/bin/python -c "from utils.credentials import SecureVault; SecureVault().set('telegram_bot_token', 'TU_TOKEN')"\n\n# 2. Iniciar el bot de Telegram de forma aislada\n.venv/bin/python telegram/bot.py`
+            `Estado deseado: ${status?.desired_state || 'stopped'}\nProceso: ${status?.pid ? `PID ${status.pid}` : 'sin proceso'}\nLog persistente: ${status?.log_path || '~/Desktop/ADA_Data/runtime/triggers/telegram.log'}`
           ),
           h('div', { className: 'flex justify-between items-center mt-3 text-xs text-muted' }, [
             h('span', null, '💡 Se comunica con ADA vía REST HTTP'),
@@ -2448,11 +3658,18 @@ function TelegramView({ showToast }) {
 // Main App Component
 // =============================================================================
 export function App() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const validTabs = ['overview', 'core', 'metrics', 'ollama', 'models', 'mcps', 'chat', 'triggers', 'telegram', 'memory', 'settings'];
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = window.location.hash.replace(/^#/, '');
+    return validTabs.includes(requested) ? requested : 'overview';
+  });
   const [statusData, setStatusData] = useState(null);
   const [ollamaData, setOllamaData] = useState({ models: [], running: [] });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [debugEnabled, setDebugEnabled] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [navigationOpen, setNavigationOpen] = useState(false);
 
   const showToast = (msg, type = 'info') => {
     const id = Date.now();
@@ -2479,21 +3696,48 @@ export function App() {
 
   useEffect(() => {
     refreshAll();
+    api.getDebug().then(data => setDebugEnabled(Boolean(data.enabled))).catch(() => {});
     const interval = setInterval(() => {
       api.getStatus().then(setStatusData).catch(() => {});
     }, 15000);
     return () => clearInterval(interval);
   }, [refreshAll]);
 
+  const toggleDebug = async () => {
+    const next = !debugEnabled;
+    await api.setDebug(next);
+    setDebugEnabled(next);
+    showToast(next ? 'Debug activado: guardando ejecución detallada' : 'Debug desactivado', next ? 'warning' : 'info');
+  };
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const requested = window.location.hash.replace(/^#/, '');
+      if (validTabs.includes(requested)) setActiveTab(requested);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const selectTab = (tab) => {
+    if (!validTabs.includes(tab)) return;
+    setActiveTab(tab);
+    setNavigationOpen(false);
+    window.history.replaceState(null, '', `#${tab}`);
+  };
+
   const titles = {
-    overview: ['Overview del Sistema', 'Panel general de recursos, motores y estado del agente'],
-    ollama: ['Ollama Hub', 'Administración de modelos locales, descarga y monitoreo de VRAM'],
-    models: ['Modelos & Roles', 'Asignación de roles por tarea y benchmark de velocidad'],
-    mcps: ['MCPs & Herramientas', 'Servidores Model Context Protocol y catálogo de tools'],
-    chat: ['ADA Chat', 'Asistente interactivo local con razonamiento paso a paso'],
-    telegram: ['Telegram Bot (Daemon Independiente)', 'Servicio de mensajería y bot de asistencia vía Telegram'],
-    memory: ['Memoria & Auditoría', 'Explorador de base de datos SQLite y registro de auditoría'],
-    settings: ['Configuración', 'Parámetros del sistema y políticas de seguridad'],
+    overview: ['Resumen', 'Estado y decisiones importantes de tu asistente local'],
+    core: ['Núcleo ADA', 'Actividad en vivo de modelos, canales y herramientas'],
+    metrics: ['Métricas', 'Telemetría de ADA con retención de 7 días'],
+    ollama: ['Motor local', 'Modelos instalados, consumo y configuración de inferencia'],
+    models: ['Modelos y roles', 'Qué modelo usa ADA para cada tipo de tarea'],
+    mcps: ['Herramientas', 'Capacidades e integraciones disponibles para ADA'],
+    chat: ['Conversar con ADA', 'Probá solicitudes y revisá la respuesta del agente'],
+    triggers: ['Disparadores', 'Todos los canales, eventos y horarios que pueden activar a ADA'],
+    telegram: ['Telegram', 'Configuración y actividad del canal de mensajería'],
+    memory: ['Actividad y memoria', 'Historial persistente, métricas y auditoría'],
+    settings: ['Preferencias', 'Comportamiento, seguridad y credenciales del sistema'],
   };
 
   const currentTitle = titles[activeTab] || titles.overview;
@@ -2507,13 +3751,29 @@ export function App() {
     }
   };
 
+  const handleRestartAll = async () => {
+    if (!window.confirm('¿Reiniciar todos los servicios administrados por ADA?')) return;
+    setIsRestarting(true);
+    try {
+      await api.restartAll();
+      await refreshAll();
+      showToast('Servicios reiniciados correctamente', 'success');
+    } catch (err) {
+      showToast('Error al reiniciar: ' + err.message, 'danger');
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
   return h('div', { className: 'app-layout' }, [
     h(Sidebar, {
       key: 'sidebar',
       activeTab,
-      onSelectTab: setActiveTab,
+      onSelectTab: selectTab,
       statusData,
       runtimeStatus: statusData?.runtime,
+      isOpen: navigationOpen,
+      onClose: () => setNavigationOpen(false),
     }),
     h('main', { className: 'main-wrapper', key: 'main' }, [
       h(Header, {
@@ -2522,33 +3782,44 @@ export function App() {
         subtitle: currentTitle[1],
         onWarmup: handleWarmup,
         onRefresh: refreshAll,
+        onRestartAll: handleRestartAll,
         isRefreshing,
+        isRestarting,
+        identity: statusData?.identity,
+        debugEnabled,
+        onToggleDebug: toggleDebug,
+        onOpenNavigation: () => setNavigationOpen(true),
       }),
       h('div', { className: 'content-container', key: 'content' }, [
-        activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: setActiveTab, showToast, onRefresh: refreshAll }) : null,
-        activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { setActiveTab('models'); } }) : null,
+        activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: selectTab, showToast, onRefresh: refreshAll }) : null,
+        activeTab === 'core' ? h(CoreView, { onSwitchTab: selectTab }) : null,
+        activeTab === 'metrics' ? h(MetricsView) : null,
+        activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { selectTab('models'); } }) : null,
         activeTab === 'models' ? h(ModelsView, { installedModels: ollamaData.models || [], showToast }) : null,
         activeTab === 'mcps' ? h(MCPsView, { showToast }) : null,
         activeTab === 'chat' ? h(ChatView, { showToast }) : null,
+        activeTab === 'triggers' ? h(TriggersView, { showToast, onSwitchTab: selectTab }) : null,
         activeTab === 'telegram' ? h(TelegramView, { showToast }) : null,
         activeTab === 'memory' ? h(MemoryView, null) : null,
         activeTab === 'settings' ? h(SettingsView, { showToast }) : null,
       ]),
     ]),
     // Toast Container
-    h('div', { className: 'toast-container', key: 'toasts' },
-      toasts.map(t => h('div', { className: `toast toast-${t.type}`, key: t.id }, t.msg))
+    h('div', { className: 'toast-container', key: 'toasts', 'aria-live': 'polite', 'aria-atomic': 'false' },
+      toasts.map(t => h('div', { className: `toast toast-${t.type}`, key: t.id, role: t.type === 'danger' ? 'alert' : 'status' }, t.msg))
     ),
   ]);
 }
 
 // Auto-mount on load
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => {
+  const mountApp = () => {
     const rootElem = document.getElementById('root');
     if (rootElem && window.ReactDOM) {
       const root = window.ReactDOM.createRoot(rootElem);
       root.render(h(App));
     }
-  });
+  };
+  if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', mountApp, { once: true });
+  else mountApp();
 }

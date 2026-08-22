@@ -767,16 +767,33 @@ def models_policy_api():
     })
 
 
+@app.route("/api/models/benchmark/prompts", methods=["GET"])
+def models_benchmark_prompts_api():
+    runtime = _runtime()
+    bench = runtime.get("model_benchmark") or ModelBenchmark()
+    return jsonify({"ok": True, "prompts": bench.get_prompt_catalog()})
+
+
 @app.route("/api/models/benchmark", methods=["POST"])
 def models_benchmark_api():
     data = request.get_json(silent=True) or {}
     model_name = data.get("model")
     prompt_key = data.get("prompt_key", "quick")
+    custom_prompt = data.get("custom_prompt")
+    run_suite = bool(data.get("run_suite") or prompt_key == "suite")
+    prompt_keys = data.get("prompt_keys")
+
     if not model_name:
-        return jsonify({"error": "model_required"}), 400
+        return jsonify({"error": "model_required", "message": "Se requiere especificar un modelo"}), 400
+
     runtime = _runtime()
     bench = runtime.get("model_benchmark") or ModelBenchmark()
-    result = bench.run(model_name, prompt_key=prompt_key)
+
+    if run_suite:
+        result = bench.run_suite(model_name, prompt_keys=prompt_keys)
+    else:
+        result = bench.run(model_name, prompt_key=prompt_key, custom_prompt=custom_prompt)
+
     return jsonify(result)
 
 
