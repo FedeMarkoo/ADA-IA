@@ -22,6 +22,7 @@ from ada.interfaces.web.doctor import HealthDoctor
 from ada.infrastructure.runtime.duplicates import detect_duplicates
 from ada.infrastructure.observability_timeseries import TimeSeriesStore
 from ada.infrastructure.persistence.debug_log import DebugLog
+from ada.application.services.memory_refiner import MemoryRefiner
 import re
 import secrets
 import threading
@@ -151,6 +152,10 @@ trigger_manager = TriggerManager(
     config_path=cfg_path,
     internal_url=f"http://127.0.0.1:{int(os.environ.get('ADA_UI_PORT', '5005'))}",
 )
+memory_refiner = MemoryRefiner(agent.mem, agent=agent, config=cfg)
+if memory_refiner.enabled:
+    memory_refiner.start()
+
 
 
 class PersistentConversation(list):
@@ -216,8 +221,18 @@ def _activity_descriptor(phase, details):
         "router_model_finished": ("working", "Intención comprendida", str(action or "conversación"), "router"),
         "model_started": ("working", "Pensando con el modelo", str(details.get("model") or "modelo local"), "model"),
         "model_finished": ("working", "Respuesta generada", str(details.get("model") or "modelo local"), "model"),
-        "capability_started": ("working", "Ejecutando una herramienta", str(capability or "capability"), str(capability or "tools")),
-        "capability_finished": ("working", "Herramienta finalizada", str(capability or "capability"), str(capability or "tools")),
+        "capability_started": (
+            "working",
+            f"Ejecutando {details.get('server') or details.get('capability') or 'herramienta'}",
+            f"{details.get('tool') or details.get('capability') or 'acción'}",
+            str(details.get("server") or details.get("capability") or "tools"),
+        ),
+        "capability_finished": (
+            "working",
+            f"{details.get('tool') or details.get('capability') or 'Herramienta'} finalizada",
+            "OK" if details.get("ok", True) else (details.get("error") or "error"),
+            str(details.get("server") or details.get("capability") or "tools"),
+        ),
         "folder_index_updated": ("working", "Actualizando memoria de carpetas", str(details.get("parent") or ""), "sqlite-memory"),
         "completed": ("complete", "Tarea completada", str(details.get("detail") or "Resultado entregado"), None),
         "error": ("error", "La tarea terminó con un error", str(details.get("detail") or details.get("error") or "Error"), None),
@@ -278,6 +293,7 @@ app.extensions["ada_runtime"] = {
     "model_benchmark": model_benchmark,
     "mcp_manager": mcp_manager,
     "trigger_manager": trigger_manager,
+    "memory_refiner": memory_refiner,
     "identity": {"version": ADA_VERSION, "started_at": PROCESS_STARTED_AT, "reloaded_at": None, "hot_reload": False, "pid": os.getpid()},
     "agent_enabled": True,
     "debug_enabled": False,
@@ -1204,6 +1220,18 @@ def memory_stats_api():
     })
 
 
+@app.route("/api/memory/refine", methods=["POST"])
+def memory_refine_api():
+    """Trigger an immediate memory & context refinement pass."""
+    runtime = _runtime()
+    refiner = runtime.get("memory_refiner")
+    if not refiner:
+        active_agent = runtime["agent"]
+        refiner = MemoryRefiner(active_agent.mem, agent=active_agent, config=runtime.get("cfg", {}))
+    result = refiner.refine_cycle()
+    return jsonify({"ok": True, "result": result})
+
+
 # ==============================================================================
 # Config & Events Endpoints
 # ==============================================================================
@@ -1451,9 +1479,16 @@ def _progress_text(event):
         return f"[modelo] {event.get('model') or 'modelo local'} terminó la respuesta"
     if phase == "capability_started":
         payload = event.get("payload") or {}
-        return f"[capability] ejecutando {event.get('capability')} -> {payload.get('action') or 'run'} en {payload.get('dir') or payload.get('path') or '-'}"
+        server = event.get("server") or ""
+        server_txt = f" ({server})" if server else ""
+        action_or_tool = event.get("tool") or event.get("capability") or payload.get("action") or "ejecutar"
+        target = payload.get("dir") or payload.get("path") or payload.get("query") or payload.get("time_min") or ""
+        target_txt = f" en {target}" if target else ""
+        return f"[herramienta] ejecutando {action_or_tool}{server_txt}{target_txt}..."
     if phase == "capability_finished":
-        return f"[capability] {event.get('capability')} finalizó: {'OK' if event.get('ok') else event.get('error') or 'error'}"
+        action_or_tool = event.get("tool") or event.get("capability") or "Herramienta"
+        status_txt = "completada con éxito" if event.get("ok") else f"error ({event.get('error') or 'falló'})"
+        return f"[herramienta] {action_or_tool} {status_txt}"
     if phase == "folder_index_updated":
         return f"[memory] índice actualizado: {event.get('indexed', 0)} carpetas aprendidas en {event.get('parent')}"
     return f"[runtime] {phase}"
@@ -1575,6 +1610,7 @@ def create_app(config=None, agent_instance=None):
         internal_url=f"http://127.0.0.1:{int(os.environ.get('ADA_UI_PORT', '5005'))}",
         discover_existing=runtime_cfg.get("discover_external_triggers", True),
     )
+    mem_refiner = MemoryRefiner(runtime_agent.mem, agent=runtime_agent, config=runtime_cfg)
     runtime_app.extensions["ada_runtime"] = {
         "cfg": runtime_cfg,
         "config_path": None if isinstance(config, dict) else cfg_path,
@@ -1588,6 +1624,7 @@ def create_app(config=None, agent_instance=None):
         "model_benchmark": ModelBenchmark(runtime_cfg.get("ollama_url", "http://127.0.0.1:11434")),
         "mcp_manager": mcp_mgr,
         "trigger_manager": trigger_mgr,
+        "memory_refiner": mem_refiner,
         "doctor": HealthDoctor(runtime_agent, runtime_cfg, mcp_mgr, ollama_cli),
         "identity": {"version": ADA_VERSION, "started_at": datetime.now(timezone.utc).isoformat(), "reloaded_at": None, "hot_reload": False, "pid": os.getpid()},
         "agent_enabled": True,
