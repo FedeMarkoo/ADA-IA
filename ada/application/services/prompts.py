@@ -1,10 +1,16 @@
 """Prompt construction kept independent from model/provider execution."""
 
+import logging
+import time
+
+logger = logging.getLogger("ada.prompts")
+
 
 class PromptBuilder:
     def __init__(self, memory, mcp_manager=None):
         self.memory = memory
         self.mcp_manager = mcp_manager
+        self._proc_cache = (0.0, {})
 
     @staticmethod
     def system(language="auto"):
@@ -57,9 +63,9 @@ class PromptBuilder:
                         f"requiere_confirmación={bool(tool.get('requires_confirmation'))}]\n"
                     )
                 prompt += "Si te preguntan qué podés hacer, basate en este inventario y distinguí herramientas activas de detenidas."
-            except Exception:
+            except Exception as exc:
                 # MCP discovery must never prevent a normal conversational reply.
-                pass
+                logger.debug("mcp_discovery_failed: %s", exc)
         conversation = str(task.get("conversation_context") or "").strip()
         if conversation:
             prompt += (
