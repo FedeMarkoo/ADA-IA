@@ -33,6 +33,28 @@ FOOD_ACTIONS = {
 FOOD_MUTATIONS = FOOD_ACTIONS - {"advise", "list", "inventory_list", "budget_list", "plan_list"}
 
 
+def is_capability_discussion(text):
+    """Return True when capability words are being discussed, not commanded.
+
+    Natural requests such as "compará los riesgos de organizar archivos" used
+    to be routed as an actual filesystem mutation just because they contained
+    the infinitive "organizar".  Discussion markers take precedence over the
+    capability keyword so the chat model can answer the question safely.
+    """
+    value = str(text or "").lower()
+    capability_terms = re.search(
+        r"\b(archivos?|carpetas?|directorios?|fotos?|im[aá]genes?|lightroom|agente\s+local)\b",
+        value,
+    )
+    discussion_markers = re.search(
+        r"\b(ventajas?|desventajas?|riesgos?|pros?|contras?|enfoques?|alternativas?|"
+        r"compar(?:á|a|ar|ame|emos)|explic(?:á|a|ar|ame)|qu[eé]\s+conviene|"
+        r"recomendaci[oó]n|concepto|teor[ií]a)\b",
+        value,
+    )
+    return bool(capability_terms and discussion_markers)
+
+
 class IntentRouter:
     def __init__(self, model_manager, config=None, memory=None):
         self.model_manager = model_manager
@@ -54,11 +76,17 @@ class IntentRouter:
         return self.memory.json_schema(name)
 
     def route(self, text, history=""):
+        if is_capability_discussion(text):
+            return {"action": "ask", "complexity": 4, "confidence": 0.98}
         fallback = self._fallback(text)
         # A plain conversational question with no capability keyword does not
         # need a model call just to be classified as chat. This removes an
         # entire cold start from the most common path.
-        if fallback.get("action") == "ask" and fallback.get("confidence") == 0.0:
+        contextual_reference = bool(history and re.search(
+            r"\b(eso|esto|esa|ese|ah[ií]|adentro|anterior|antes|lo\s+que|me\s+refiero|resumen|listar)\b|^(?:y|tamb[ié]n)\b",
+            text.lower(),
+        ))
+        if fallback.get("action") == "ask" and fallback.get("confidence") == 0.0 and not contextual_reference:
             return fallback
         provider = self.model_manager.choose(
             {
@@ -77,7 +105,7 @@ class IntentRouter:
                 ollama_model=self.model_manager.select_model("router", role="router"),
                 temperature=0,
                 max_tokens=600,
-                timeout=self.config.get("router_timeout", 8),
+                timeout=self.config.get("router_timeout", 30),
                 format=self._schema("router"),
             )
             logger.info("router raw=%s", str(raw)[:1000])
@@ -125,7 +153,7 @@ class IntentRouter:
                 prompt,
                 temperature=0,
                 max_tokens=180,
-                timeout=self.config.get("router_timeout", 8),
+                timeout=self.config.get("router_timeout", 30),
                 format=self._schema("food_verify"),
             )
             result = self._decode(raw)
@@ -159,7 +187,7 @@ class IntentRouter:
                 prompt,
                 temperature=0,
                 max_tokens=400,
-                timeout=self.config.get("router_timeout", 8),
+                timeout=self.config.get("router_timeout", 30),
                 format=self._schema("food"),
             )
             candidate = self._decode(raw)

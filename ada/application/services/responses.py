@@ -27,6 +27,24 @@ def _filesystem_summary(result, item_key, label):
     return "\n".join(lines)
 
 
+def _drive_summary(result):
+    """Readable Drive listing, preserving direct cloud links."""
+    files = result.get("files") or []
+    if not files:
+        return "No encontré archivos en Google Drive."
+    lines = [f"Encontré {len(files)} archivos en Google Drive.", ""]
+    for item in files[:10]:
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("id") or "archivo sin nombre"
+            link = item.get("webViewLink") or item.get("link")
+            lines.append(f"• {name}" + (f" — {link}" if link else ""))
+        else:
+            lines.append(f"• {item}")
+    if len(files) > 10:
+        lines.append(f"\nHay {len(files) - 10} más.")
+    return "\n".join(lines)
+
+
 def text_from_result(result):
     if isinstance(result, dict):
         if result.get("error"):
@@ -39,9 +57,13 @@ def text_from_result(result):
                 "unknown_domain": "No pude determinar qué sección de comida usar.",
                 "dir not found": "Esa carpeta ya no está disponible en el disco.",
             }
+            if "proveedor no pudo" in error.lower() or "provider" in error.lower():
+                return "El modelo no pudo completar esta respuesta. Reintentá una vez; si vuelve a fallar, ADA cambiará de modelo automáticamente."
             return known.get(error, f"No pude completar la operación: {error}.")
         if result.get("action") == "list_dirs" and "dirs" in result:
             return _filesystem_summary(result, "dirs", "carpetas")
+        if result.get("fallback") == "google-rest" and "files" in result:
+            return _drive_summary(result)
         if result.get("action") in {"list_files", "search"} and "files" in result:
             label = "archivos"
             if result.get("action") == "search":

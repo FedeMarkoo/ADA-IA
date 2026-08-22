@@ -233,7 +233,7 @@ class ModelManager:
                     and float(item.get("parameters_b") or 0) <= 4
                     and float(item.get("min_ram_gb", 0) or 0) <= budget
                 ]
-            if mode == "light" or role == "router":
+            if mode == "light" or role == "router" or (mode == "hybrid" and role == "chat"):
                 ordered = sorted(
                     candidates,
                     key=lambda item: (float(item.get("min_ram_gb", 0)), float(item.get("parameters_b", 0)), item["name"]),
@@ -265,15 +265,18 @@ class ModelManager:
         settings = {
             "light": {
                 "cpu_limit_percent": 50, "ollama_num_thread": min(4, cores), "ollama_num_ctx": 4096,
-                "ollama_keep_alive": "2m", "model_timeout": 25, "chat_timeout_seconds": 35, "chat_max_tokens": 384,
+                "ollama_keep_alive": "2m", "chat_max_tokens": 256,
+                "model_role_max_tokens": {"chat": 256, "reasoning": 512, "coding": 768, "tools": 512},
             },
             "hybrid": {
                 "cpu_limit_percent": 75, "ollama_num_thread": min(6, cores), "ollama_num_ctx": 4096,
-                "ollama_keep_alive": "10m", "model_timeout": 50, "chat_timeout_seconds": 65, "chat_max_tokens": 768,
+                "ollama_keep_alive": "10m", "chat_max_tokens": 768,
+                "model_role_max_tokens": {"chat": 768, "reasoning": 1600, "coding": 2048, "tools": 1024},
             },
             "turbo": {
-                "cpu_limit_percent": 100, "ollama_num_thread": cores, "ollama_num_ctx": 8192,
-                "ollama_keep_alive": "30m", "model_timeout": 90, "chat_timeout_seconds": 110, "chat_max_tokens": 1200,
+                "cpu_limit_percent": 100, "ollama_num_thread": cores, "ollama_num_ctx": 90000,
+                "ollama_keep_alive": "30m", "chat_max_tokens": 1200,
+                "model_role_max_tokens": {"chat": 1200, "reasoning": 2400, "coding": 3200, "tools": 1600},
             },
         }
         return dict(settings.get(mode, {}))

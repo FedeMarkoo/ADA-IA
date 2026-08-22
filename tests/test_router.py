@@ -44,6 +44,15 @@ class IntentRouterTests(unittest.TestCase):
         self.assertEqual(result["action"], "ask")
         self.assertEqual(manager.calls, [])
 
+    def test_capability_discussion_is_not_executed_as_a_file_command(self):
+        manager = FakeModelManager('{"action":"organize"}')
+        result = self.router(manager).route(
+            "Analizá las ventajas y riesgos de usar un agente local para organizar archivos, "
+            "compará tres enfoques y dame una recomendación."
+        )
+        self.assertEqual(result["action"], "ask")
+        self.assertEqual(manager.calls, [])
+
     def test_model_plan_is_validated(self):
         manager = FakeModelManager(
             '{"action":"select_photo_batch","confidence":0.92,"steps":[{"action":"select_photo_batch"}]}'
@@ -81,6 +90,16 @@ class IntentRouterTests(unittest.TestCase):
             )
         self.assertEqual(result["action"], "analyze_photo")
         self.assertEqual(Path(result["path"]).suffix.lower(), ".arw")
+
+    def test_agent_rules_keep_capability_discussion_in_chat(self):
+        from ada.application.agent import Agent
+
+        with tempfile.TemporaryDirectory() as directory:
+            agent = Agent({"engine_provider": "unknown", "db_path": str(Path(directory) / "test.db")})
+            result = agent.parse_prompt(
+                "Analizá con calma las ventajas y riesgos de organizar archivos personales y compará enfoques."
+            )
+        self.assertEqual(result["action"], "ask")
 
 
 if __name__ == "__main__":
