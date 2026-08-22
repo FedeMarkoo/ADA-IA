@@ -274,7 +274,7 @@ class ModelManager:
                 "model_role_max_tokens": {"chat": 768, "reasoning": 1600, "coding": 2048, "tools": 1024},
             },
             "turbo": {
-                "cpu_limit_percent": 100, "ollama_num_thread": cores, "ollama_num_ctx": 70000,
+                "cpu_limit_percent": 100, "ollama_num_thread": cores, "ollama_num_ctx": 16000,
                 "ollama_keep_alive": "30m", "chat_max_tokens": 1200,
                 "model_role_max_tokens": {"chat": 1200, "reasoning": 2400, "coding": 3200, "tools": 1600},
             },
