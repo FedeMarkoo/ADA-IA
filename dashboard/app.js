@@ -727,102 +727,119 @@ function CoreView({ onSwitchTab }) {
       ]),
     ]),
     loadError ? h('div', { className: 'core-load-error', role: 'alert' }, loadError) : null,
-    h('div', {
-      className: 'core-network',
-      role: 'region',
-      'aria-label': `${statusText}. ${activity.label}. ${modelGroups.length} modelos y ${connectors.length} conectores visibles.`,
-      key: 'network',
-    }, [
-      h('svg', { className: 'core-link-layer', viewBox: '0 0 800 800', 'aria-hidden': 'true' }, [
-        h('circle', { cx: center, cy: center, r: connectorRadius, className: 'core-orbit orbit-outer', key: 'outer' }),
-        h('circle', { cx: center, cy: center, r: modelRadius, className: 'core-orbit orbit-inner', key: 'inner' }),
-        ...connectors.map((node, index) => {
-          const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
-          const outerX = center + connectorRadius * Math.cos(angle);
-          const outerY = center + connectorRadius * Math.sin(angle);
-          const innerX = center + 118 * Math.cos(angle);
-          const innerY = center + 118 * Math.sin(angle);
-          return h('line', {
-            key: `line-${node.id}`, x1: innerX, y1: innerY, x2: outerX, y2: outerY,
-            className: `core-link ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
-          });
-        }),
-      ]),
-      h('div', { className: 'core-sphere-wrap' }, [
-        h('div', { className: 'core-sphere-halo halo-one' }),
-        h('div', { className: 'core-sphere-halo halo-two' }),
-        h('div', { className: 'core-sphere' }, [
-          h('div', { className: 'core-sphere-grid' }),
-          h('span', { className: 'core-sphere-kicker' }, 'NÚCLEO LOCAL'),
-          h('strong', { className: 'core-sphere-name' }, 'ADA'),
-          h('span', { className: 'core-sphere-state' }, activity.label),
-          activity.model ? h('span', { className: 'core-sphere-model' }, activity.model) : null,
+    h('div', { className: 'core-layout', key: 'core-layout' }, [
+      h('div', {
+        className: 'core-network',
+        role: 'region',
+        'aria-label': `${statusText}. ${activity.label}. ${modelGroups.length} modelos y ${connectors.length} conectores visibles.`,
+        key: 'network',
+      }, [
+        h('svg', { className: 'core-link-layer', viewBox: '0 0 800 800', 'aria-hidden': 'true' }, [
+          h('circle', { cx: center, cy: center, r: connectorRadius, className: 'core-orbit orbit-outer', key: 'outer' }),
+          h('circle', { cx: center, cy: center, r: modelRadius, className: 'core-orbit orbit-inner', key: 'inner' }),
+          ...connectors.map((node, index) => {
+            const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
+            const outerX = center + connectorRadius * Math.cos(angle);
+            const outerY = center + connectorRadius * Math.sin(angle);
+            const innerX = center + 118 * Math.cos(angle);
+            const innerY = center + 118 * Math.sin(angle);
+            return h('line', {
+              key: `line-${node.id}`, x1: innerX, y1: innerY, x2: outerX, y2: outerY,
+              className: `core-link ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+            });
+          }),
         ]),
-      ]),
-      h('div', { className: 'core-model-orbit', 'aria-label': 'Modelos activos' },
-        modelGroups.map((model, index) => {
-          const angle = (-90 + (360 / Math.max(1, modelGroups.length)) * index) * Math.PI / 180;
-          const x = 50 + 19 * Math.cos(angle);
-          const y = 50 + 19 * Math.sin(angle);
-          const isActive = working && (
-            (activity.component === 'model' && (
-              activity.model === model.name || model.roles.includes(activity.role)
-            ))
-            || (activity.component === 'router' && model.roles.includes('router'))
-          );
-          return h('button', {
-            key: model.name,
-            type: 'button',
-            className: `core-model-node ${isActive ? 'active' : ''}`,
-            style: { left: `${x}%`, top: `${y}%` },
-            onClick: () => onSwitchTab('models'),
-            'aria-label': `${model.name}: ${model.roles.map(role => roleLabels[role] || role).join(', ')}`,
-          }, [
-            h('span', { className: 'core-node-signal' }),
-            h('strong', null, model.name),
-            h('span', null, model.roles.map(role => roleLabels[role] || role).join(' · ')),
-          ]);
-        })
-      ),
-      h('div', { className: 'core-connectors', 'aria-label': 'Conectores y MCP' },
-        connectors.map((node, index) => {
-          const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
-          const x = 50 + 40.5 * Math.cos(angle);
-          const y = 50 + 40.5 * Math.sin(angle);
-          return h('button', {
-            key: node.id,
-            type: 'button',
-            className: `core-connector ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
-            style: { left: `${x}%`, top: `${y}%` },
-            onClick: () => onSwitchTab(node.tab),
-            'aria-label': `${node.name}, ${node.kind}, ${node.online ? 'activo' : 'inactivo'}, ${node.meta}`,
-          }, [
-            h('span', { className: 'core-node-signal' }),
-            h('strong', null, node.name),
-            h('span', null, node.kind === 'MCP' ? node.meta : node.kind),
-          ]);
-        })
-      ),
-    ]),
-    h('div', { className: 'core-activity-panel', key: 'activity' }, [
-      h('div', { className: 'core-activity-main' }, [
-        h('span', { className: 'core-activity-icon', 'aria-hidden': 'true' }, h(Icon, { name: working ? 'bolt' : activity.status === 'error' ? 'alert' : 'check' })),
-        h('div', null, [
-          h('span', { className: 'core-activity-eyebrow' }, activity.phase === 'idle' ? 'ESTADO ACTUAL' : activity.phase.replaceAll('_', ' ').toUpperCase()),
-          h('strong', null, activity.label),
-          h('p', null, activity.detail),
+        h('div', { className: 'core-sphere-wrap' }, [
+          h('div', { className: 'core-sphere-halo halo-one' }),
+          h('div', { className: 'core-sphere-halo halo-two' }),
+          h('div', { className: 'core-sphere' }, [
+            h('div', { className: 'core-sphere-grid' }),
+            h('span', { className: 'core-sphere-kicker' }, 'NÚCLEO LOCAL'),
+            h('strong', { className: 'core-sphere-name' }, 'ADA'),
+            h('span', { className: 'core-sphere-state' }, activity.label),
+            activity.model ? h('span', { className: 'core-sphere-model' }, activity.model) : null,
+          ]),
         ]),
+        h('div', { className: 'core-model-orbit', 'aria-label': 'Modelos activos' },
+          modelGroups.map((model, index) => {
+            const angle = (-90 + (360 / Math.max(1, modelGroups.length)) * index) * Math.PI / 180;
+            const x = 50 + 19 * Math.cos(angle);
+            const y = 50 + 19 * Math.sin(angle);
+            const isActive = working && (
+              (activity.component === 'model' && (
+                activity.model === model.name || model.roles.includes(activity.role)
+              ))
+              || (activity.component === 'router' && model.roles.includes('router'))
+            );
+            return h('button', {
+              key: model.name,
+              type: 'button',
+              className: `core-model-node ${isActive ? 'active' : ''}`,
+              style: { left: `${x}%`, top: `${y}%` },
+              onClick: () => onSwitchTab('models'),
+              'aria-label': `${model.name}: ${model.roles.map(role => roleLabels[role] || role).join(', ')}`,
+            }, [
+              h('span', { className: 'core-node-signal' }),
+              h('strong', null, model.name),
+              h('span', null, model.roles.map(role => roleLabels[role] || role).join(' · ')),
+            ]);
+          })
+        ),
+        h('div', { className: 'core-connectors', 'aria-label': 'Conectores y MCP' },
+          connectors.map((node, index) => {
+            const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
+            const x = 50 + 40.5 * Math.cos(angle);
+            const y = 50 + 40.5 * Math.sin(angle);
+            return h('button', {
+              key: node.id,
+              type: 'button',
+              className: `core-connector ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+              style: { left: `${x}%`, top: `${y}%` },
+              onClick: () => onSwitchTab(node.tab),
+              'aria-label': `${node.name}, ${node.kind}, ${node.online ? 'activo' : 'inactivo'}, ${node.meta}`,
+            }, [
+              h('span', { className: 'core-node-signal' }),
+              h('strong', null, node.name),
+              h('span', null, node.kind === 'MCP' ? node.meta : node.kind),
+            ]);
+          })
+        ),
       ]),
-      activity.prompt ? h('div', { className: 'core-current-request' }, [
-        h('span', null, 'Pedido'),
-        h('p', null, activity.prompt),
-      ]) : null,
-      h('div', { className: 'core-recent-phases', 'aria-label': 'Últimas fases' },
-        (activity.recent || []).slice(-4).map((event, index) => h('span', {
-          key: `${event.at}-${index}`,
-          className: `core-phase phase-${event.status}`,
-        }, event.label))
-      ),
+      h('div', { className: 'core-activity-panel', key: 'activity' }, [
+        h('div', { className: 'core-activity-header' }, [
+          h('span', { className: 'core-activity-icon', 'aria-hidden': 'true' }, h(Icon, { name: working ? 'bolt' : activity.status === 'error' ? 'alert' : 'check' })),
+          h('div', { className: 'core-activity-title' }, [
+            h('span', { className: 'core-activity-eyebrow' }, activity.phase === 'idle' ? 'ESTADO ACTUAL' : activity.phase.replaceAll('_', ' ').toUpperCase()),
+            h('strong', null, activity.label),
+          ]),
+        ]),
+        h('div', { className: 'core-activity-body' }, [
+          h('p', { className: 'core-activity-desc' }, activity.detail || 'Núcleo en espera de nuevas instrucciones o disparadores.'),
+        ]),
+        activity.prompt ? h('div', { className: 'core-current-request' }, [
+          h('span', null, 'Pedido actual'),
+          h('p', null, activity.prompt),
+        ]) : null,
+        h('div', { className: 'core-panel-meta' }, [
+          h('div', { className: 'core-meta-item' }, [
+            h('span', { className: 'core-meta-label' }, 'Modo de trabajo'),
+            h('strong', { className: 'core-meta-val' }, ({ hybrid: 'Híbrido', turbo: 'Turbo', light: 'Liviano', manual: 'Manual' })[coreData?.models?.mode] || '—'),
+          ]),
+          h('div', { className: 'core-meta-item' }, [
+            h('span', { className: 'core-meta-label' }, 'Conexiones activas'),
+            h('strong', { className: 'core-meta-val text-accent' }, `${connectors.filter(c => c.online).length} de ${connectors.length}`),
+          ]),
+        ]),
+        (activity.recent && activity.recent.length > 0) ? h('div', { className: 'core-recent-phases', 'aria-label': 'Últimas fases' }, [
+          h('span', { className: 'core-recent-title' }, 'Flujo reciente'),
+          h('div', { className: 'core-phases-list' },
+            (activity.recent || []).slice(-4).map((event, index) => h('span', {
+              key: `${event.at}-${index}`,
+              className: `core-phase phase-${event.status}`,
+            }, event.label))
+          ),
+        ]) : null,
+      ]),
     ]),
   ]);
 }
