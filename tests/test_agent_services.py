@@ -17,6 +17,8 @@ class AgentServiceTests(unittest.TestCase):
         prompt = PromptBuilder(memory).task({"prompt": "regla"}, "es")
         self.assertIn("regla confiable", prompt)
         self.assertIn("Responde en español", prompt)
+        self.assertIn("respondelo completo ahora", prompt)
+        self.assertIn("no sean indispensables", prompt)
 
     def test_response_normalization_only_reads_structured_fields(self):
         self.assertEqual(text_from_result({"reply": "respuesta"}), "respuesta")

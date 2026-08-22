@@ -170,6 +170,35 @@ class RealChatFolderResolutionTests(unittest.TestCase):
             self.assertIn(str(events / "Sofia"), fourth["reply"])
             self.assertEqual(Path(state.current_path), events)
 
+    def test_drive_folder_name_and_summary_followups_keep_the_subject(self):
+        """Regression for the real “qué tiene Ara Samsung?” conversation."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "GoogleDrive"
+            samsung = base / "Ara Samsung"
+            for name in (
+                "360Panoramas", "AHIHI_COLLAGE", "DCIM", "Download",
+                "EditedOnlinePhotos", "WhatsApp", "bluetooth", "photocollage",
+            ):
+                (samsung / name).mkdir(parents=True)
+
+            calls = []
+            agent = self._filesystem_agent(base, calls)
+            service = WebChatService(agent, agent.cfg)
+            state = SimpleNamespace(conversation=[], pending_action=None, pending_path_action=None, current_path=None)
+
+            root, _ = service.handle("que carpetas tengo en gdrive?", state, "es")
+            contents, _ = service.handle("que tiene ara samsung?", state, "es")
+            summary, _ = service.handle("podes darme un resumen de lo que tiene?", state, "es")
+
+            self.assertIn("Ara Samsung", root["reply"])
+            self.assertIn("DCIM", contents["reply"])
+            self.assertEqual(Path(calls[1]["payload"]["dir"]), samsung)
+            self.assertEqual(len(calls), 2, "El resumen debe reutilizar el listado recién verificado")
+            self.assertIn("fotos y cámara", summary["reply"])
+            self.assertIn("WhatsApp", summary["reply"])
+            self.assertNotIn("mis capacidades", summary["reply"].lower())
+            self.assertEqual(Path(state.current_path), samsung)
+
     def test_discovered_folders_are_resolved_from_persistent_index(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "GoogleDrive"

@@ -41,6 +41,38 @@ class ChatPathRegressionTests(unittest.TestCase):
         self.assertFalse(getattr(state, "pending_path_action", None))
         self.assertEqual(calls[0]["payload"]["dir"], os.path.expanduser("~/Desktop"))
 
+    def test_generic_followup_receives_only_the_current_session_context(self):
+        captured = {}
+
+        class FakeAgent:
+            lang = "es"
+
+            def parse_prompt(self, text, history=None):
+                captured["router_history"] = history
+                return {"action": "ask", "complexity": 3}
+
+            def decide_and_run(self, task):
+                captured["task"] = task
+                return {"result": "respuesta contextual", "model": "test"}
+
+        state = SimpleNamespace(
+            conversation=[
+                {"role": "user", "text": "Contame sobre la carpeta Viajes"},
+                {"role": "assistant", "text": "La carpeta tiene fotos de Bariloche."},
+            ],
+            pending_action=None,
+            pending_path_action=None,
+            current_path=None,
+        )
+        service = WebChatService(FakeAgent(), {})
+
+        response, status = service.handle("resumime eso", state, "es")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(response["reply"], "respuesta contextual")
+        self.assertIn("Bariloche", captured["router_history"])
+        self.assertIn("Bariloche", captured["task"]["conversation_context"])
+
 
 class TelegramRegressionTests(unittest.TestCase):
     def test_processed_update_ids_are_bounded_and_deduplicated(self):

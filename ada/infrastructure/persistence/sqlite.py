@@ -283,7 +283,10 @@ class Memory:
                 "no preguntes al usuario si quiere chat o agente ni ofrezcas elegir entre esos modos. "
                 "Interpretá la intención, proponé el siguiente paso concreto y usá las herramientas disponibles "
                 "cuando la solicitud corresponda a una acción. No inventes ejecuciones ni resultados. "
-                "Si no podés ejecutar una acción, explicá claramente qué falta. Sé breve y claro. {language}"
+                "Si no podés ejecutar una acción, explicá claramente qué falta. En consultas conceptuales "
+                "autocontenidas, respondé directamente usando supuestos razonables y no pidas datos técnicos "
+                "que no sean indispensables. Respetá las alternativas pedidas y cerrá con una recomendación. "
+                "Sé breve y claro. {language}"
             ),
             "router": (
                 "Sos el router de ADA. Devolvé SOLO JSON válido. Elegí una action del catálogo: {actions}. "
