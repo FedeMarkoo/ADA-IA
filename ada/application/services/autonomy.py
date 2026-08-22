@@ -22,7 +22,9 @@ class AutonomyService:
             return {"ok": True, "status": "filtered", "topic": topic}
         action_name = str(rule["action"])
         if action_name not in self.agent.skills:
-            return {"ok": False, "error": "configured_action_unavailable", "action": action_name}
+            err_result = {"ok": False, "error": "configured_action_unavailable", "action": action_name}
+            self.agent.mem.record_audit(topic, request=rule, result=err_result, success=False)
+            return err_result
         arguments = dict(rule.get("payload") or {})
         if isinstance(payload, dict):
             arguments.setdefault("path", payload.get("path"))
@@ -63,8 +65,14 @@ class AutonomyService:
             if path.suffix.lower() not in allowed:
                 return False
         prefix = rule.get("path_prefix")
-        if prefix and not str(payload.get("path", "")).startswith(str(prefix)):
-            return False
+        if prefix:
+            raw_path = str(payload.get("path", "")).strip()
+            if not raw_path:
+                return False
+            try:
+                Path(raw_path).expanduser().resolve().relative_to(Path(prefix).expanduser().resolve())
+            except ValueError:
+                return False
         expected_event = rule.get("event_value")
         if expected_event is not None and payload.get("value") != expected_event:
             return False
