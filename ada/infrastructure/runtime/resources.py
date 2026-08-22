@@ -81,6 +81,21 @@ def hardware_profile():
             gpu_backend = "mps"
     except Exception:
         pass
+    if vram_gb == 0.0:
+        try:
+            import subprocess
+            smi = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                capture_output=True,
+                text=True,
+                timeout=1.5,
+            )
+            if smi.returncode == 0 and smi.stdout.strip():
+                mb = float(smi.stdout.strip().splitlines()[0])
+                vram_gb = round(mb / 1024.0, 1)
+                gpu_backend = "cuda"
+        except Exception:
+            pass
     try:
         disk_free_gb = round(shutil.disk_usage(Path.home()).free / (1024**3), 1)
     except OSError:
