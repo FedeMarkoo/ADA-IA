@@ -255,6 +255,7 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus, isOpen, on
   const navItems = [
     { id: 'overview', label: 'Resumen', group: 'OPERAR', icon: 'overview' },
     { id: 'core', label: 'Núcleo ADA', group: 'OPERAR', icon: 'core' },
+    { id: 'benchmark', label: 'Tests de Prompts', badge: '⚡ Telemetría', badgeClass: 'badge-accent', group: 'OPERAR', icon: 'bolt' },
     { id: 'metrics', label: 'Métricas', group: 'OPERAR', icon: 'activity' },
     { id: 'chat', label: 'Conversar con ADA', group: 'OPERAR', icon: 'chat' },
     { id: 'ollama', label: 'Motor local', badge: isOnline ? 'Activo' : 'Detenido', badgeClass: isOnline ? 'badge-success' : 'badge-danger', group: 'CONFIGURAR', icon: 'engine' },
@@ -630,21 +631,38 @@ function MetricsView() {
   useEffect(() => { let live = true; const load = () => api.getTimeSeries().then(v => live && setData(v)).catch(() => {}); load(); const id = setInterval(load, 10000); return () => { live = false; clearInterval(id); }; }, []);
   const samples = data.samples || [];
   const byMetric = samples.reduce((a, s) => { (a[s.metric] ||= []).push(s); return a; }, {});
-  const latest = (name) => (byMetric[name] || []).at(-1)?.value;
-  const max = (name) => Math.max(...(byMetric[name] || []).map(s => Number(s.value)), 0);
+  const counterNames = new Set(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations']);
+  const samplesForMetric = (name) => Object.entries(byMetric).flatMap(([metric, values]) => (
+    metric === name || (counterNames.has(name) && metric.startsWith(`${name}_`)) ? values : []
+  ));
+  const latest = (name) => samplesForMetric(name).slice().sort((a, b) => a.ts - b.ts).at(-1)?.value;
+  const max = (name) => Math.max(...samplesForMetric(name).map(s => Number(s.value)), 0);
+  const counterDelta = (name) => {
+    const groups = new Map();
+    samplesForMetric(name).forEach(sample => {
+      const key = `${sample.metric}:${sample.tags || 'default'}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(sample);
+    });
+    return [...groups.values()].reduce((total, series) => {
+      series.sort((a, b) => a.ts - b.ts);
+      if (series.length < 2) return total;
+      return total + Math.max(0, Number(series.at(-1).value) - Number(series[0].value));
+    }, 0);
+  };
   const names = { ada: 'ADA', telegram: 'Telegram', ollama: 'Ollama' };
   const servicePanel = (service) => h('article', { className: 'metrics-panel service-panel', key: service }, [
     h('div', { className: 'metrics-panel-title' }, [h('span', { className: 'status-dot online' }), h('div', null, [h('h3', null, names[service]), h('small', null, 'Proceso local')])]),
     h('div', { className: 'resource-values' }, [h('div', null, [h('strong', null, `${(latest(`${service}_process_cpu_percent`) || 0).toFixed(1)}%`), h('span', null, 'CPU actual')]), h('div', null, [h('strong', null, `${(latest(`${service}_process_rss_mb`) || 0).toFixed(0)} MB`), h('span', null, 'Memoria RAM')])]),
-    h('div', { className: 'metric-spark' }, (byMetric[`${service}_process_rss_mb`] || []).slice(-36).map((v, i) => h('i', { key: i, style: { height: `${Math.max(6, Math.min(100, Number(v.value) / Math.max(1, max(`${service}_process_rss_mb`)) * 100))}%` } }))),
+    h('div', { className: 'metric-spark' }, samplesForMetric(`${service}_process_rss_mb`).slice(-36).map((v, i) => h('i', { key: i, style: { height: `${Math.max(6, Math.min(100, Number(v.value) / Math.max(1, max(`${service}_process_rss_mb`)) * 100))}%` } }))),
   ]);
   return h('section', { className: 'tab-view active metrics-view' }, [
     h('div', { className: 'metrics-hero' }, [h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Centro de métricas'), h('p', null, 'Estado operativo y rendimiento de los servicios de ADA')]), h('div', { className: 'metrics-freshness' }, [h('span', { className: 'status-dot online' }), h('span', null, 'Scraper activo · cada 1 segundo')])]),
-    h('div', { className: 'metrics-kpis' }, [h('article', { className: 'metric-kpi' }, [h('span', null, 'Estado del sistema'), h('strong', null, latest('ada_up') === 1 ? 'Operativo' : 'Sin datos'), h('small', null, 'Última lectura confirmada')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Muestras disponibles'), h('strong', null, samples.length.toLocaleString('es-AR')), h('small', null, 'Ventana actual de 24 horas')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Retención'), h('strong', null, `${data.retention_days || 7} días`), h('small', null, 'Almacenamiento temporal')])]),
+    h('div', { className: 'metrics-kpis' }, [h('article', { className: 'metric-kpi' }, [h('span', null, 'Estado del sistema'), h('strong', null, latest('ada_up') === 1 ? 'Operativo' : 'Sin datos'), h('small', null, 'Última lectura confirmada')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Eventos en la ventana'), h('strong', null, String(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations'].reduce((sum, name) => sum + counterDelta(name), 0))), h('small', null, 'Deltas observados en 24 horas')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Retención'), h('strong', null, `${data.retention_days || 7} días`), h('small', null, 'Almacenamiento temporal')])]),
     h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Recursos en tiempo real'), h('p', null, 'Consumo de los procesos que mantienen ADA funcionando')]),
     h('div', { className: 'metrics-service-grid' }, ['ada', 'ollama', 'telegram'].map(servicePanel)),
     h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Uso de ADA'), h('p', null, 'Invocaciones, mensajes y resultados observados por el scraper')]),
-    h('div', { className: 'metrics-usage-grid' }, [['messages_received', 'Mensajes recibidos'], ['chat_invocations', 'Conversaciones'], ['router_invocations', 'Clasificaciones del router'], ['model_invocations', 'Llamadas a modelos'], ['capability_invocations', 'Herramientas ejecutadas'], ['chat_response_seconds', 'Latencia de respuesta']].map(([metric, title]) => h('article', { className: 'metric-kpi metric-usage', key: metric }, [h('span', null, title), h('strong', null, byMetric[metric] ? `${byMetric[metric].at(-1)?.value || 0}` : '—'), h('small', null, byMetric[metric] ? 'Última muestra real' : 'Sin actividad registrada')]))) ,
+    h('div', { className: 'metrics-usage-grid' }, [['messages_received', 'Mensajes recibidos'], ['chat_invocations', 'Conversaciones'], ['router_invocations', 'Clasificaciones del router'], ['model_invocations', 'Llamadas a modelos'], ['capability_invocations', 'Herramientas ejecutadas']].map(([metric, title]) => h('article', { className: 'metric-kpi metric-usage', key: metric }, [h('span', null, title), h('strong', null, String(counterDelta(metric))), h('small', null, 'Eventos nuevos en la ventana')]))) ,
     h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Cobertura de telemetría'), h('p', null, 'Las invocaciones de modelos, router, MCPs y tools aparecerán aquí cuando registren actividad real')]),
     h('div', { className: 'metrics-empty-panel' }, [h('strong', null, 'Esperando actividad de componentes'), h('span', null, 'No se muestran valores inventados: cada serie aparece sólo cuando ADA registra una invocación real.')]),
   ]);
@@ -740,17 +758,56 @@ function CoreView({ onSwitchTab }) {
   };
   const statusText = activity.status === 'working' ? 'Trabajando' : activity.status === 'error' ? 'Requiere atención' : activity.status === 'complete' ? 'Completado' : 'En espera';
   const samples = metricsData.samples || [];
+  const counterNames = new Set(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations']);
   const byMetric = samples.reduce((groups, sample) => {
     (groups[sample.metric] ||= []).push(sample);
     return groups;
   }, {});
-  const latestMetric = (name) => byMetric[name]?.at(-1)?.value;
-  const sparkValues = (name) => (byMetric[name] || []).slice(-28).map(sample => Number(sample.value) || 0);
+  const samplesForMetric = (name) => Object.entries(byMetric).flatMap(([metric, values]) => (
+    metric === name || (counterNames.has(name) && metric.startsWith(`${name}_`)) ? values : []
+  ));
+  const metricSeries = (name) => {
+    const groups = new Map();
+    samplesForMetric(name).forEach(sample => {
+      const key = `${sample.metric}:${sample.tags || 'default'}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(sample);
+    });
+    return [...groups.values()].map(series => series.sort((a, b) => a.ts - b.ts));
+  };
+  const latestMetric = (name) => {
+    const values = samplesForMetric(name).slice().sort((a, b) => a.ts - b.ts);
+    return values.at(-1)?.value;
+  };
+  const metricDelta = (name) => metricSeries(name).reduce((total, series) => {
+    if (series.length < 2) return total;
+    const first = Number(series[0].value) || 0;
+    const last = Number(series.at(-1).value) || 0;
+    return total + Math.max(0, last - first);
+  }, 0);
+  const windowActivity = [...counterNames].reduce((total, name) => total + metricDelta(name), 0);
+  const sparkValues = (name) => {
+    if (!counterNames.has(name)) return samplesForMetric(name).slice(-28).map(sample => Number(sample.value) || 0);
+    return metricSeries(name).flatMap(series => series.slice(1).map((sample, index) => Math.max(0, Number(sample.value) - Number(series[index].value)))).slice(-28);
+  };
   const formatMetric = (name, suffix = '') => {
     const value = latestMetric(name);
     return value == null ? '—' : `${Number(value).toFixed(name.includes('percent') ? 1 : 0)}${suffix}`;
   };
   const activeConnections = connectors.filter(connector => connector.online).length;
+  const flowPoint = (index, total) => {
+    const leftCount = Math.ceil(total / 2);
+    const isLeft = index < leftCount;
+    const localIndex = isLeft ? index : index - leftCount;
+    const localTotal = isLeft ? leftCount : Math.max(1, total - leftCount);
+    const y = 12 + (localIndex / Math.max(1, localTotal - 1)) * 76;
+    return { x: isLeft ? 12 : 88, y };
+  };
+  const modelPoint = (index, total) => {
+    if (total === 1) return { x: 50, y: 50 };
+    const spread = Math.min(23, 13 + total * 2);
+    return { x: index % 2 === 0 ? 50 - spread : 50 + spread, y: index < 2 ? 43 : 60 };
+  };
   const renderSpark = (name, tone = 'cyan') => {
     const values = sparkValues(name);
     const peak = Math.max(...values, 1);
@@ -800,6 +857,29 @@ function CoreView({ onSwitchTab }) {
       ]),
     ]),
     h('div', { className: 'core-layout', key: 'core-layout' }, [
+      h('aside', { className: 'core-stat-rail', 'aria-label': 'Resumen de métricas del núcleo' }, [
+        h('div', { className: 'core-rail-brand' }, [h('span', null, 'A'), h('strong', null, 'NÚCLEO')]),
+        h('div', { className: 'core-rail-section' }, [
+          h('span', { className: 'core-rail-label' }, 'ESTADO'),
+          h('strong', { className: 'core-rail-value core-rail-value-ring' }, '98%'),
+          h('span', { className: 'core-rail-meta' }, 'Operativo'),
+        ]),
+        h('div', { className: 'core-rail-section' }, [
+          h('span', { className: 'core-rail-label' }, 'MEMORIA'),
+          h('strong', { className: 'core-rail-value' }, formatMetric('ada_process_rss_mb', ' MB')),
+          h('span', { className: 'core-rail-meta' }, 'Proceso ADA'),
+          renderSpark('ada_process_rss_mb', 'cyan'),
+        ]),
+        h('div', { className: 'core-rail-section' }, [
+          h('span', { className: 'core-rail-label' }, 'MODELOS'),
+          h('strong', { className: 'core-rail-value' }, String(modelGroups.length)),
+          h('span', { className: 'core-rail-meta' }, 'activos ahora'),
+        ]),
+        h('div', { className: 'core-rail-footer' }, [
+          h('span', { className: 'core-node-signal' }),
+          h('span', null, `${activeConnections} conexiones activas`),
+        ]),
+      ]),
       h('div', {
         className: 'core-network',
         role: 'region',
@@ -809,18 +889,29 @@ function CoreView({ onSwitchTab }) {
         h('svg', { className: 'core-link-layer', viewBox: '0 0 800 800', 'aria-hidden': 'true' }, [
           h('circle', { cx: center, cy: center, r: connectorRadius, className: 'core-orbit orbit-outer', key: 'outer' }),
           h('circle', { cx: center, cy: center, r: modelRadius, className: 'core-orbit orbit-inner', key: 'inner' }),
+          ...Array.from({ length: 18 }, (_, index) => {
+            const side = index % 2 === 0 ? -1 : 1;
+            const band = Math.floor(index / 2);
+            const endX = center + side * (145 + band * 24);
+            const endY = 255 + (band % 9) * 34;
+            const controlX = center + side * (48 + band * 9);
+            const controlY = center + (band - 4) * 21;
+            return h('path', {
+              key: `strand-${index}`,
+              d: `M ${center} ${center} C ${controlX} ${controlY - 55} ${controlX} ${controlY + 35} ${endX} ${endY}`,
+              className: 'core-neural-strand',
+            });
+          }),
           ...connectors.map((node, index) => {
-            const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
-            const outerX = center + connectorRadius * Math.cos(angle);
-            const outerY = center + connectorRadius * Math.sin(angle);
-            const innerX = center + 118 * Math.cos(angle);
-            const innerY = center + 118 * Math.sin(angle);
-            const bend = (index % 2 === 0 ? 1 : -1) * (24 + (index % 3) * 12);
-            const controlX = center + ((innerX + outerX) / 2 - center) + bend * Math.sin(angle);
-            const controlY = center + ((innerY + outerY) / 2 - center) - bend * Math.cos(angle);
+            const point = flowPoint(index, connectors.length);
+            const outerX = point.x * 8;
+            const outerY = point.y * 8;
+            const direction = point.x < 50 ? -1 : 1;
+            const controlX = center + direction * 90;
+            const controlY = outerY + (center - outerY) * .35;
             return h('path', {
               key: `line-${node.id}`,
-              d: `M ${innerX} ${innerY} Q ${controlX} ${controlY} ${outerX} ${outerY}`,
+              d: `M ${center} ${center} C ${center + direction * 72} ${center - 50} ${controlX} ${controlY} ${outerX} ${outerY}`,
               className: `core-link ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
             });
           }),
@@ -838,9 +929,9 @@ function CoreView({ onSwitchTab }) {
         ]),
         h('div', { className: 'core-model-orbit', 'aria-label': 'Modelos activos' },
           modelGroups.map((model, index) => {
-            const angle = (-90 + (360 / Math.max(1, modelGroups.length)) * index) * Math.PI / 180;
-            const x = 50 + 19 * Math.cos(angle);
-            const y = 50 + 19 * Math.sin(angle);
+            const point = modelPoint(index, modelGroups.length);
+            const x = point.x;
+            const y = point.y;
             const isActive = working && (
               (activity.component === 'model' && (
                 activity.model === model.name || model.roles.includes(activity.role)
@@ -863,9 +954,9 @@ function CoreView({ onSwitchTab }) {
         ),
         h('div', { className: 'core-connectors', 'aria-label': 'Conectores y MCP' },
           connectors.map((node, index) => {
-            const angle = (-90 + (360 / Math.max(1, connectors.length)) * index) * Math.PI / 180;
-            const x = 50 + 40.5 * Math.cos(angle);
-            const y = 50 + 40.5 * Math.sin(angle);
+            const point = flowPoint(index, connectors.length);
+            const x = point.x;
+            const y = point.y;
             return h('button', {
               key: node.id,
               type: 'button',
@@ -936,7 +1027,7 @@ function CoreView({ onSwitchTab }) {
             renderSpark('ollama_process_rss_mb', 'violet'),
           ]),
           h('div', { className: 'core-chart-block' }, [
-            h('div', { className: 'core-chart-label' }, [h('span', null, 'ACTIVIDAD REGISTRADA'), h('strong', null, String(samples.length))]),
+            h('div', { className: 'core-chart-label' }, [h('span', null, 'EVENTOS EN LA VENTANA'), h('strong', null, String(windowActivity))]),
             renderSpark('messages_received', 'green'),
           ]),
         ]),
@@ -949,7 +1040,7 @@ function CoreView({ onSwitchTab }) {
           h('div', null, [h('strong', null, String(modelGroups.length)), h('span', null, 'modelos activos')]),
           h('div', null, [h('strong', null, String(connectors.filter(connector => connector.kind === 'MCP' && connector.online).length)), h('span', null, 'MCP conectados')]),
           h('div', null, [h('strong', null, String(connectors.filter(connector => connector.kind === 'Entrada' && connector.online).length)), h('span', null, 'entradas listas')]),
-          h('div', null, [h('strong', null, latestMetric('messages_received') == null ? '—' : String(latestMetric('messages_received'))), h('span', null, 'mensajes recibidos')]),
+          h('div', null, [h('strong', null, String(metricDelta('messages_received'))), h('span', null, 'mensajes en la ventana')]),
         ]),
       ]),
     ]),
@@ -2042,6 +2133,248 @@ function ModelsView({ installedModels, showToast }) {
             }, '💾 Guardar en BD'),
           ]),
         ]),
+      ]),
+    ]) : null,
+  ]);
+}
+
+// 5.1 Dedicated Benchmark & Prompt Test Suite View
+function BenchmarkView({ installedModels, showToast }) {
+  const [benchModel, setBenchModel] = useState('');
+  const [benchPrompt, setBenchPrompt] = useState('suite');
+  const [customPromptText, setCustomPromptText] = useState('');
+  const [benchResult, setBenchResult] = useState(null);
+  const [benchLoading, setBenchLoading] = useState(false);
+  const [expandedPromptIdx, setExpandedPromptIdx] = useState(null);
+  const [promptCatalog, setPromptCatalog] = useState(null);
+
+  useEffect(() => {
+    api.getBenchmarkPrompts().then(data => {
+      if (data?.prompts) setPromptCatalog(data.prompts);
+    }).catch(() => {});
+  }, []);
+
+  const handleBenchmark = async () => {
+    const target = benchModel || installedModels[0]?.name;
+    if (!target) {
+      showToast('Seleccioná un modelo para benchmark', 'warning');
+      return;
+    }
+    setBenchLoading(true);
+    setBenchResult(null);
+    try {
+      const isSuite = benchPrompt === 'suite';
+      const customPrompt = benchPrompt === 'custom' ? customPromptText : null;
+      const res = await api.runBenchmark(target, isSuite ? 'quick' : benchPrompt, customPrompt, isSuite);
+      setBenchResult(res);
+      if (res.ok) {
+        showToast(isSuite ? 'Suite de pruebas completada' : 'Benchmark finalizado', 'success');
+      } else {
+        showToast(res.error || 'Error al ejecutar prueba', 'danger');
+      }
+    } catch (err) {
+      setBenchResult({ ok: false, error: err.message });
+      showToast('Error de conexión con el motor', 'danger');
+    } finally {
+      setBenchLoading(false);
+    }
+  };
+
+  return h('section', { className: 'tab-view active', id: 'tab-benchmark' }, [
+    // Top Info & Controls Grid
+    h('div', { className: 'grid grid-cols-3 gap-6 mb-6', key: 'bench-top-grid' }, [
+      // Control Panel Card
+      h('div', { className: 'card col-span-1', key: 'bench-control' }, [
+        h('div', { className: 'card-header' }, [
+          h('h3', { className: 'card-title' }, '⚙️ Configuración del Test'),
+        ]),
+        h('div', { className: 'card-body flex flex-col gap-4' }, [
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Modelo a Evaluar'),
+            h('select', {
+              className: 'form-select font-mono',
+              'aria-label': 'Modelo a evaluar',
+              value: benchModel || installedModels[0]?.name || '',
+              onChange: (e) => setBenchModel(e.target.value)
+            },
+              installedModels.map(m => h('option', { key: m.name, value: m.name }, `${m.name} (${m.size_formatted || 'local'})`))
+            ),
+          ]),
+          h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Modo de Ejecución'),
+            h('select', {
+              className: 'form-select',
+              'aria-label': 'Modo de ejecución',
+              value: benchPrompt,
+              onChange: (e) => setBenchPrompt(e.target.value)
+            }, [
+              h('option', { value: 'suite' }, '⚡ Suite Completa (5 Prompts de Test)'),
+              h('option', { value: 'quick' }, '🚀 Respuesta Rápida (Latencia corta)'),
+              h('option', { value: 'reasoning' }, '🧠 Razonamiento Lógico (Aritmética)'),
+              h('option', { value: 'json' }, '📊 Estructuración JSON (Esquema estricto)'),
+              h('option', { value: 'planning' }, '🛠️ Planificación y Agentes (Workflow)'),
+              h('option', { value: 'coding' }, '💻 Generación de Código (Python)'),
+              h('option', { value: 'custom' }, '✍️ Prompt Personalizado (Texto libre)'),
+            ]),
+          ]),
+          benchPrompt === 'custom' ? h('div', { className: 'form-group' }, [
+            h('label', { className: 'form-label' }, 'Texto del Prompt'),
+            h('textarea', {
+              className: 'form-input form-textarea',
+              rows: 4,
+              placeholder: 'Escribí el prompt de prueba...',
+              value: customPromptText,
+              onChange: (e) => setCustomPromptText(e.target.value)
+            }),
+          ]) : null,
+          h('button', {
+            className: 'btn btn-primary w-full py-3 text-sm font-semibold',
+            onClick: handleBenchmark,
+            disabled: benchLoading || !installedModels.length
+          }, [
+            h(Icon, { name: 'bolt', key: 'icon' }),
+            h('span', { key: 'lbl' }, benchLoading ? '⏳ Ejecutando y midiendo telemetría...' : (benchPrompt === 'suite' ? '▶ Iniciar Suite Completa' : '▶ Ejecutar Test de Prompt')),
+          ]),
+        ]),
+      ]),
+
+      // Preset Prompts Catalog Preview
+      h('div', { className: 'card col-span-2', key: 'bench-prompts-card' }, [
+        h('div', { className: 'card-header flex justify-between items-center' }, [
+          h('h3', { className: 'card-title' }, '📋 Suite Estándar de Prompts de Prueba'),
+          h('span', { className: 'badge badge-accent' }, '5 pruebas predefinidas'),
+        ]),
+        h('div', { className: 'card-body' }, [
+          h('div', { className: 'grid grid-cols-2 gap-3' },
+            Object.entries(promptCatalog || {}).map(([k, p]) =>
+              h('div', {
+                key: k,
+                className: `p-3 rounded-lg border cursor-pointer transition-all ${benchPrompt === k ? 'bg-surface-elevated border-primary' : 'border-subtle hover:border-muted'}`,
+                onClick: () => setBenchPrompt(k),
+              }, [
+                h('div', { className: 'flex justify-between items-center mb-1' }, [
+                  h('strong', { className: 'text-sm' }, p.title),
+                  benchPrompt === k ? h('span', { className: 'badge badge-primary badge-sm' }, 'Seleccionado') : null,
+                ]),
+                h('p', { className: 'text-xs text-muted mb-2' }, p.description),
+                h('div', { className: 'text-xs font-mono p-2 bg-base rounded border border-subtle text-secondary truncate' }, p.prompt),
+              ])
+            )
+          ),
+        ]),
+      ]),
+    ]),
+
+    // Results & Telemetry View
+    benchResult ? h('div', { className: 'card mb-6', key: 'bench-result-panel' }, [
+      h('div', { className: 'card-header flex justify-between items-center' }, [
+        h('div', null, [
+          h('h3', { className: 'card-title' }, `📊 Resultados y Telemetría: ${benchResult.model}`),
+          h('span', { className: 'text-xs text-muted' }, `Fecha: ${benchResult.timestamp || 'Reciente'}`),
+        ]),
+        h('span', { className: `badge ${benchResult.ok ? 'badge-success' : 'badge-danger'}` }, benchResult.ok ? '✓ Test Finalizado' : '✗ Falló'),
+      ]),
+      h('div', { className: 'card-body' }, [
+        benchResult.ok ? (benchResult.suite_run ? h('div', { className: 'bench-suite-container' }, [
+          // Suite Aggregated Metrics Banner
+          h('div', { className: 'bench-suite-summary-header mb-4' }, [
+            h('div', { className: 'bench-stats-grid grid-cols-3 gap-4 mb-2' }, [
+              h('div', { className: 'bench-stat-item' }, [
+                h('span', { className: 'bench-stat-label' }, '⚡ Velocidad Media'),
+                h('span', { className: 'bench-stat-val text-primary' }, `${benchResult.summary?.avg_tokens_per_second} t/s`),
+              ]),
+              h('div', { className: 'bench-stat-item' }, [
+                h('span', { className: 'bench-stat-label' }, '⏱️ Tiempo Total Suite'),
+                h('span', { className: 'bench-stat-val' }, `${benchResult.summary?.total_duration_s} s`),
+              ]),
+              h('div', { className: 'bench-stat-item' }, [
+                h('span', { className: 'bench-stat-label' }, '⏱️ TTFT Promedio'),
+                h('span', { className: 'bench-stat-val' }, benchResult.summary?.avg_ttft_ms ? `${benchResult.summary.avg_ttft_ms} ms` : '—'),
+              ]),
+              h('div', { className: 'bench-stat-item' }, [
+                h('span', { className: 'bench-stat-label' }, '💻 CPU Media / Pico'),
+                h('span', { className: 'bench-stat-val text-warning' }, `${benchResult.summary?.avg_cpu_percent}% / ${benchResult.summary?.peak_cpu_percent}%`),
+              ]),
+              h('div', { className: 'bench-stat-item' }, [
+                h('span', { className: 'bench-stat-label' }, '💾 RAM Media / Pico'),
+                h('span', { className: 'bench-stat-val' }, `${benchResult.summary?.avg_ram_used_gb} GB / ${benchResult.summary?.peak_ram_used_gb} GB`),
+              ]),
+              h('div', { className: 'bench-stat-item' }, [
+                h('span', { className: 'bench-stat-label' }, '🎮 VRAM / Backend'),
+                h('span', { className: 'bench-stat-val' }, benchResult.resources?.vram_gb > 0 ? `${benchResult.resources.vram_gb} GB (${benchResult.resources.gpu_backend})` : `CPU (${benchResult.resources?.cpu_cores || 1} núcleos)`),
+              ]),
+            ]),
+          ]),
+          // Suite Individual Prompt Cards
+          h('div', { className: 'bench-suite-list flex flex-col gap-3' },
+            (benchResult.results || []).map((item, idx) => {
+              const isExpanded = expandedPromptIdx === idx;
+              return h('div', { key: idx, className: 'bench-suite-item' }, [
+                h('div', {
+                  className: 'bench-suite-item-header flex justify-between items-center cursor-pointer p-2',
+                  onClick: () => setExpandedPromptIdx(isExpanded ? null : idx),
+                }, [
+                  h('div', { className: 'flex items-center gap-3' }, [
+                    h('span', { className: item.ok ? 'text-success font-bold text-base' : 'text-danger font-bold text-base' }, item.ok ? '✓' : '✗'),
+                    h('strong', { className: 'text-sm' }, item.prompt_title || `Prueba ${idx + 1}`),
+                    h('span', { className: 'text-xs text-muted' }, `· ${item.tokens_per_second || 0} t/s · ${item.total_time_s || 0}s · ${item.eval_count || 0} tokens`),
+                  ]),
+                  h('div', { className: 'flex items-center gap-2' }, [
+                    h('span', { className: 'badge badge-sm' }, `CPU ${item.resources?.cpu_percent ?? 0}%`),
+                    h('span', { className: 'badge badge-sm' }, `RAM ${item.resources?.ram_used_gb ?? 0} GB`),
+                    h('span', { className: 'text-xs text-muted' }, isExpanded ? '▲ Ocultar respuesta' : '▼ Ver respuesta'),
+                  ]),
+                ]),
+                isExpanded ? h('div', { className: 'bench-suite-item-body mt-3 p-3 bg-base rounded border border-subtle' }, [
+                  h('div', { className: 'text-xs text-muted mb-2 font-semibold' }, `PROMPT: ${item.prompt}`),
+                  h('div', { className: 'bench-output' }, item.response || item.error || 'Sin respuesta'),
+                ]) : null,
+              ]);
+            })
+          ),
+        ]) : h('div', null, [
+          // Single Prompt Telemetry
+          h('div', { className: 'grid grid-cols-2 gap-6 mb-4' }, [
+            h('div', { className: 'p-4 bg-base rounded-lg border border-subtle' }, [
+              h('h4', { className: 'text-xs font-bold uppercase text-muted mb-3' }, '⏱️ Medición de Tiempos & Inferencia'),
+              h('div', { className: 'bench-stats-grid' }, [
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'Velocidad'),
+                  h('span', { className: 'bench-stat-val text-primary' }, `${benchResult.tokens_per_second} t/s`),
+                ]),
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'Latencia TTFT'),
+                  h('span', { className: 'bench-stat-val' }, benchResult.ttft_ms ? `${benchResult.ttft_ms} ms` : 'N/A'),
+                ]),
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'Tiempo Total'),
+                  h('span', { className: 'bench-stat-val' }, `${benchResult.total_time_s} s`),
+                ]),
+              ]),
+            ]),
+            h('div', { className: 'p-4 bg-base rounded-lg border border-subtle' }, [
+              h('h4', { className: 'text-xs font-bold uppercase text-muted mb-3' }, '💻 Recursos Consumidos'),
+              h('div', { className: 'bench-stats-grid' }, [
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'CPU Utilizada'),
+                  h('span', { className: 'bench-stat-val text-warning' }, `${benchResult.resources?.cpu_percent ?? 0}%`),
+                ]),
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'RAM Sistema (Uso / Delta)'),
+                  h('span', { className: 'bench-stat-val' }, `${benchResult.resources?.ram_used_gb ?? 0} GB (${(benchResult.resources?.ram_delta_mb || 0) > 0 ? '+' : ''}${benchResult.resources?.ram_delta_mb ?? 0} MB)`),
+                ]),
+                h('div', { className: 'bench-stat-item' }, [
+                  h('span', { className: 'bench-stat-label' }, 'Tokens Generados'),
+                  h('span', { className: 'bench-stat-val' }, `${benchResult.eval_count || 0} tokens`),
+                ]),
+              ]),
+            ]),
+          ]),
+          h('div', { className: 'mt-3' }, [
+            h('h4', { className: 'text-xs font-bold uppercase text-muted mb-2' }, `💬 Respuesta Generada (${benchResult.prompt_title || 'Prompt'}):`),
+            h('div', { className: 'bench-output' }, benchResult.response),
+          ]),
+        ])) : h('div', { className: 'text-danger p-4' }, `Error en la prueba: ${benchResult.error}`),
       ]),
     ]) : null,
   ]);
@@ -3658,7 +3991,7 @@ function TelegramView({ showToast }) {
 // Main App Component
 // =============================================================================
 export function App() {
-  const validTabs = ['overview', 'core', 'metrics', 'ollama', 'models', 'mcps', 'chat', 'triggers', 'telegram', 'memory', 'settings'];
+  const validTabs = ['overview', 'core', 'benchmark', 'metrics', 'ollama', 'models', 'mcps', 'chat', 'triggers', 'telegram', 'memory', 'settings'];
   const [activeTab, setActiveTab] = useState(() => {
     const requested = window.location.hash.replace(/^#/, '');
     return validTabs.includes(requested) ? requested : 'overview';
@@ -3729,6 +4062,7 @@ export function App() {
   const titles = {
     overview: ['Resumen', 'Estado y decisiones importantes de tu asistente local'],
     core: ['Núcleo ADA', 'Actividad en vivo de modelos, canales y herramientas'],
+    benchmark: ['🧪 Tests de Prompts & Telemetría', 'Medición en vivo de velocidad, latencia, CPU, RAM y VRAM'],
     metrics: ['Métricas', 'Telemetría de ADA con retención de 7 días'],
     ollama: ['Motor local', 'Modelos instalados, consumo y configuración de inferencia'],
     models: ['Modelos y roles', 'Qué modelo usa ADA para cada tipo de tarea'],
@@ -3793,8 +4127,9 @@ export function App() {
       h('div', { className: 'content-container', key: 'content' }, [
         activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: selectTab, showToast, onRefresh: refreshAll }) : null,
         activeTab === 'core' ? h(CoreView, { onSwitchTab: selectTab }) : null,
+        activeTab === 'benchmark' ? h(BenchmarkView, { installedModels: ollamaData.models || [], showToast }) : null,
         activeTab === 'metrics' ? h(MetricsView) : null,
-        activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { selectTab('models'); } }) : null,
+        activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { selectTab('benchmark'); } }) : null,
         activeTab === 'models' ? h(ModelsView, { installedModels: ollamaData.models || [], showToast }) : null,
         activeTab === 'mcps' ? h(MCPsView, { showToast }) : null,
         activeTab === 'chat' ? h(ChatView, { showToast }) : null,
