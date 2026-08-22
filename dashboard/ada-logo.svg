@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#311042"/>
+    </linearGradient>
+    <linearGradient id="glow-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#c084fc"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg-grad)"/>
+  <circle cx="128" cy="128" r="88" stroke="url(#glow-grad)" stroke-width="4" fill="none" opacity="0.3" filter="url(#glow)"/>
+  <circle cx="128" cy="128" r="88" stroke="url(#glow-grad)" stroke-width="2" fill="none" opacity="0.6"/>
+  <text x="128" y="152" font-family="'Outfit', 'Inter', 'Segoe UI', sans-serif" font-weight="800" font-size="92" fill="url(#glow-grad)" text-anchor="middle" filter="url(#glow)">ADA</text>
+  <text x="128" y="152" font-family="'Outfit', 'Inter', 'Segoe UI', sans-serif" font-weight="800" font-size="92" fill="#ffffff" text-anchor="middle">ADA</text>
+  <circle cx="128" cy="190" r="4" fill="#38bdf8" filter="url(#glow)"/>
+</svg>

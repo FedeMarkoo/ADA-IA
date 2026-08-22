@@ -12,12 +12,15 @@ from ada.application.agent import Agent
 from ada.application.services.web_chat import WebChatService
 from ada.config import load_config, validate_config
 from ada.infrastructure.runtime.resources import hardware_profile, recommended_threads
+from ada.infrastructure.runtime.triggers import TriggerManager
 from ada.interfaces.i18n import tr
 from ada.ollama.client import OllamaClient
 from ada.models.catalog import ModelCatalog
 from ada.models.benchmark import ModelBenchmark
 from ada.mcps.manager import MCPManager
 from ada.interfaces.web.doctor import HealthDoctor
+from ada.infrastructure.runtime.duplicates import detect_duplicates
+from ada.infrastructure.observability_timeseries import TimeSeriesStore
 from ada.infrastructure.persistence.debug_log import DebugLog
 import re
 import secrets
@@ -26,6 +29,30 @@ from datetime import datetime, timezone
 
 ADA_VERSION = "0.1.0"
 PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
+
+TIMEOUT_PRESETS = {
+    "fast": {"router_timeout": 10, "model_timeout": 60, "chat_timeout_seconds": 120, "food_advisor_timeout": 60},
+    "balanced": {"router_timeout": 20, "model_timeout": 180, "chat_timeout_seconds": 300, "food_advisor_timeout": 120},
+    "patient": {"router_timeout": 30, "model_timeout": 300, "chat_timeout_seconds": 900, "food_advisor_timeout": 180},
+}
+
+
+def _ollama_config_payload(config):
+    return {
+        "cpu_limit_percent": config.get("cpu_limit_percent", 50),
+        "ollama_num_thread": config.get("ollama_num_thread"),
+        "ollama_num_ctx": config.get("ollama_num_ctx", 4096),
+        "ollama_keep_alive": config.get("ollama_keep_alive", "5m"),
+        "ollama_temperature": config.get("ollama_temperature", 0.2),
+        "timeout_profile": config.get("timeout_profile", "patient"),
+        "router_timeout": config.get("router_timeout", 30),
+        "model_timeout": config.get("model_timeout", 300),
+        "chat_timeout_seconds": config.get("chat_timeout_seconds", 900),
+        "food_advisor_timeout": config.get("food_advisor_timeout", 180),
+        "timeout_presets": TIMEOUT_PRESETS,
+        "recommended_threads": recommended_threads(config),
+        "hardware": hardware_profile(),
+    }
 
 def _find_project_root() -> Path:
     p = Path(__file__).resolve().parent
@@ -68,6 +95,13 @@ def protect_mutating_requests():
         if (request.content_type or "").split(";", 1)[0].lower() != "application/json":
             return jsonify({"error": "content_type_must_be_json"}), 415
         expected = os.environ.get("ADA_EVENT_TOKEN") or _runtime()["cfg"].get("event_token")
+        if not expected:
+            try:
+                from ada.infrastructure.credentials import SecureVault
+
+                expected = SecureVault().get("event_token") or SecureVault().get("ada_event_token")
+            except Exception:
+                expected = None
         supplied = request.headers.get("X-ADA-Event-Token", "")
         if not expected or not supplied or not secrets.compare_digest(str(expected), supplied):
             return jsonify({"error": "event_token_required"}), 403
@@ -105,12 +139,18 @@ def hide_provider_metadata(response):
 cfg_path = PROJECT_ROOT / "ada" / "config.json" if (PROJECT_ROOT / "ada" / "config.json").exists() else PROJECT_ROOT / "config.json"
 cfg = load_config(cfg_path, PROJECT_ROOT)
 
-agent = Agent(cfg)
-web_chat = WebChatService(agent, cfg)
+mcp_manager = MCPManager(cfg)
+agent = Agent(cfg, mcp_manager=mcp_manager)
+web_chat = WebChatService(agent, cfg, mcp_manager=mcp_manager)
 ollama_client = OllamaClient(cfg.get("ollama_url", "http://127.0.0.1:11434"))
 model_catalog = ModelCatalog(cfg)
 model_benchmark = ModelBenchmark(cfg.get("ollama_url", "http://127.0.0.1:11434"))
-mcp_manager = MCPManager(cfg)
+trigger_manager = TriggerManager(
+    cfg,
+    PROJECT_ROOT,
+    config_path=cfg_path,
+    internal_url=f"http://127.0.0.1:{int(os.environ.get('ADA_UI_PORT', '5005'))}",
+)
 
 
 class PersistentConversation(list):
@@ -138,6 +178,7 @@ class WebSessionState:
         self.pending_action: Optional[Dict[str, Any]] = None
         self.pending_path_action: Optional[Dict[str, Any]] = None
         self.current_path = memory.get_folder_context(session_id) if hasattr(memory, "get_folder_context") else None
+        self.last_result: Optional[Dict[str, Any]] = None
         self.lock = threading.RLock()
 
 
@@ -150,6 +191,75 @@ def _chat_workers(config):
     if configured is not None:
         return max(1, min(32, int(configured)))
     return max(2, min(8, os.cpu_count() or 2))
+
+
+def _new_activity_state():
+    now = time.time()
+    return {
+        "status": "idle", "phase": "idle", "label": "ADA está lista",
+        "detail": "Esperando una tarea", "component": None, "model": None,
+        "role": None, "channel": None, "prompt": "", "session_id": None,
+        "started_at": None, "updated_at": now, "recent": [],
+    }
+
+
+def _activity_descriptor(phase, details):
+    action = details.get("action")
+    capability = details.get("capability")
+    descriptors = {
+        "received": ("working", "Recibí el pedido", "Preparando la ejecución", "agent"),
+        "route_local": ("working", "Eligiendo una ruta local", str(action or "filesystem"), "filesystem"),
+        "route_rule": ("working", "Interpretando el pedido", str(action or "regla local"), "router"),
+        "folder_resolver_started": ("working", "Buscando la carpeta", str(details.get("context_path") or "Google Drive"), "filesystem"),
+        "folder_resolver_finished": ("working", "Carpeta localizada", str(details.get("path") or details.get("status") or ""), "filesystem"),
+        "router_model_started": ("working", "Entendiendo la intención", "Clasificador de pedidos", "router"),
+        "router_model_finished": ("working", "Intención comprendida", str(action or "conversación"), "router"),
+        "model_started": ("working", "Pensando con el modelo", str(details.get("model") or "modelo local"), "model"),
+        "model_finished": ("working", "Respuesta generada", str(details.get("model") or "modelo local"), "model"),
+        "capability_started": ("working", "Ejecutando una herramienta", str(capability or "capability"), str(capability or "tools")),
+        "capability_finished": ("working", "Herramienta finalizada", str(capability or "capability"), str(capability or "tools")),
+        "folder_index_updated": ("working", "Actualizando memoria de carpetas", str(details.get("parent") or ""), "sqlite-memory"),
+        "completed": ("complete", "Tarea completada", str(details.get("detail") or "Resultado entregado"), None),
+        "error": ("error", "La tarea terminó con un error", str(details.get("detail") or details.get("error") or "Error"), None),
+        "timeout": ("error", "La tarea agotó el tiempo configurado", str(details.get("detail") or "Timeout"), None),
+    }
+    return descriptors.get(phase, ("working", "ADA está trabajando", phase.replace("_", " "), details.get("component")))
+
+
+def _activity_update(runtime, phase, details=None, session_id=None):
+    details = dict(details or {})
+    lock = runtime.setdefault("activity_lock", threading.RLock())
+    with lock:
+        state = runtime.setdefault("activity", _new_activity_state())
+        now = time.time()
+        status_value, label, detail, component = _activity_descriptor(phase, details)
+        if phase == "received":
+            state["started_at"] = now
+            state["prompt"] = str(details.get("message") or "")[:500]
+            state["channel"] = details.get("channel") or details.get("source") or "web"
+            state["model"] = None
+            state["role"] = None
+        if phase == "model_started":
+            state["model"] = details.get("model")
+            state["role"] = details.get("role")
+        state.update({
+            "status": status_value, "phase": phase, "label": label,
+            "detail": detail[:500], "component": component,
+            "session_id": session_id or state.get("session_id"), "updated_at": now,
+        })
+        recent = list(state.get("recent") or [])
+        recent.append({"phase": phase, "label": label, "detail": detail[:180], "status": status_value, "at": now})
+        state["recent"] = recent[-12:]
+
+
+def _activity_snapshot(runtime):
+    lock = runtime.setdefault("activity_lock", threading.RLock())
+    with lock:
+        snapshot = dict(runtime.setdefault("activity", _new_activity_state()))
+        snapshot["recent"] = [dict(item) for item in snapshot.get("recent") or []]
+    if snapshot.get("status") == "complete" and time.time() - float(snapshot.get("updated_at") or 0) > 8:
+        snapshot.update({"status": "idle", "phase": "idle", "label": "ADA está lista", "detail": "Esperando una tarea", "component": None})
+    return snapshot
 
 
 chat_executor = ThreadPoolExecutor(max_workers=_chat_workers(cfg), thread_name_prefix="ada-chat")
@@ -167,10 +277,13 @@ app.extensions["ada_runtime"] = {
     "model_catalog": model_catalog,
     "model_benchmark": model_benchmark,
     "mcp_manager": mcp_manager,
+    "trigger_manager": trigger_manager,
     "identity": {"version": ADA_VERSION, "started_at": PROCESS_STARTED_AT, "reloaded_at": None, "hot_reload": False, "pid": os.getpid()},
     "agent_enabled": True,
     "debug_enabled": False,
     "debug_log": DebugLog(cfg.get("debug_log_path", str(Path.home() / "Desktop/ADA_Data/debug-log.db"))),
+    "activity": _new_activity_state(),
+    "activity_lock": threading.RLock(),
 }
 
 
@@ -189,6 +302,7 @@ def _runtime():
             "model_catalog": model_catalog,
             "model_benchmark": model_benchmark,
             "mcp_manager": mcp_manager,
+            "trigger_manager": trigger_manager,
         },
     )
     # Debug mode is persisted in debug-log.db so the UI and chat endpoints
@@ -299,14 +413,58 @@ def status():
                 "agent": active_agent.metrics.snapshot(),
                 "models": active_agent.model_manager.metrics.snapshot(),
             },
+            "duplicates": detect_duplicates(),
         }
     )
+
+
+@app.route("/api/core/state")
+def core_state_api():
+    """Return the live topology and current execution phase for the core view."""
+    runtime = _runtime()
+    summary = runtime["agent"].model_manager.selection_summary()
+    return jsonify({
+        "activity": _activity_snapshot(runtime),
+        "models": {"mode": summary.get("mode", "manual"), "active": summary.get("active", {})},
+        "connectors": {
+            "telegram": get_telegram_service_status(),
+            "mcps": runtime.get("mcp_manager", MCPManager()).list_servers(),
+            "triggers": runtime.get("trigger_manager", trigger_manager).list_triggers(),
+        },
+        "server_time": time.time(),
+    })
 
 
 @app.route("/api/metrics")
 def metrics_api():
     active_agent = _runtime()["agent"]
     return jsonify({"agent": active_agent.metrics.snapshot(), "models": active_agent.model_manager.metrics.snapshot()})
+
+@app.route("/metrics")
+def prometheus_metrics():
+    """Prometheus-compatible exposition endpoint; scraping is external."""
+    runtime = _runtime(); agent = runtime["agent"]
+    lines = ["# TYPE ada_up gauge", "ada_up 1"]
+    for namespace, snapshot in (("agent", agent.metrics.snapshot()), ("models", agent.model_manager.metrics.snapshot())):
+        for key, value in snapshot.get("counters", {}).items():
+            safe = re.sub(r"[^a-zA-Z0-9_]", "_", key)
+            lines.append(f'ada_{namespace}_counter{{name="{safe}"}} {float(value)}')
+        for key, timing in snapshot.get("timings", {}).items():
+            safe = re.sub(r"[^a-zA-Z0-9_]", "_", key)
+            lines.append(f'ada_{namespace}_timing_count{{name="{safe}"}} {timing.get("count", 0)}')
+            lines.append(f'ada_{namespace}_timing_avg_seconds{{name="{safe}"}} {timing.get("avg_seconds", 0)}')
+    return Response("\n".join(lines) + "\n", mimetype="text/plain; version=0.0.4")
+
+@app.route("/api/metrics/timeseries")
+def metrics_timeseries_api():
+    store = TimeSeriesStore()
+    hours = max(1, min(24 * 7, int(request.args.get("hours", 24))))
+    since = time.time() - hours * 3600
+    with __import__('sqlite3').connect(store.path) as db:
+        rows = db.execute("SELECT ts,name,labels,value FROM prometheus_samples WHERE ts>=? ORDER BY ts ASC", (since,)).fetchall()
+    samples = [{"ts": r[0], "metric": r[1], "tags": r[2], "value": r[3], "component": (r[2].split('=')[1].strip('"') if 'component=' in r[2] else "ada")} for r in rows]
+    last_sample_at = max((item["ts"] for item in samples), default=None)
+    return jsonify({"retention_days": 7, "source": "external_scraper", "last_sample_at": last_sample_at, "stale": last_sample_at is None or time.time() - last_sample_at > 5, "samples": samples})
 
 
 # ==============================================================================
@@ -444,47 +602,50 @@ def ollama_config_api():
     cfg_data = runtime.get("cfg", {})
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
+        candidate = dict(cfg_data)
         if "cpu_limit_percent" in data:
-            cfg_data["cpu_limit_percent"] = max(10, min(100, int(data["cpu_limit_percent"])))
+            candidate["cpu_limit_percent"] = max(10, min(100, int(data["cpu_limit_percent"])))
         if "ollama_num_thread" in data:
             val = data["ollama_num_thread"]
-            cfg_data["ollama_num_thread"] = int(val) if val else None
+            candidate["ollama_num_thread"] = int(val) if val else None
         if "ollama_num_ctx" in data:
             val = data["ollama_num_ctx"]
-            cfg_data["ollama_num_ctx"] = int(val) if val else None
+            candidate["ollama_num_ctx"] = int(val) if val else None
         if "ollama_keep_alive" in data:
-            cfg_data["ollama_keep_alive"] = str(data["ollama_keep_alive"])
+            candidate["ollama_keep_alive"] = str(data["ollama_keep_alive"])
         if "ollama_temperature" in data:
-            cfg_data["ollama_temperature"] = float(data["ollama_temperature"])
+            candidate["ollama_temperature"] = float(data["ollama_temperature"])
 
-        # Persist to disk
-        config_path = os.path.join(os.path.dirname(__file__), "..", "..", "config.json")
+        requested_profile = str(data.get("timeout_profile", candidate.get("timeout_profile", "patient"))).lower()
+        if requested_profile in TIMEOUT_PRESETS:
+            candidate.update(TIMEOUT_PRESETS[requested_profile])
+            candidate["timeout_profile"] = requested_profile
+        elif requested_profile == "custom":
+            candidate["timeout_profile"] = "custom"
+            for key in ("router_timeout", "model_timeout", "chat_timeout_seconds", "food_advisor_timeout"):
+                if key in data:
+                    candidate[key] = float(data[key])
+        else:
+            return jsonify({"error": "invalid_timeout_profile"}), 400
+
         try:
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(cfg_data, f, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
+            validate_config(candidate)
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": "invalid_config", "message": str(exc)}), 400
 
+        cfg_data.clear()
+        cfg_data.update(candidate)
+        active_agent.cfg = cfg_data
         active_agent.model_manager.reload(cfg_data)
-        return jsonify({"ok": True, "config": {
-            "cpu_limit_percent": cfg_data.get("cpu_limit_percent", 50),
-            "ollama_num_thread": cfg_data.get("ollama_num_thread"),
-            "ollama_num_ctx": cfg_data.get("ollama_num_ctx", 4096),
-            "ollama_keep_alive": cfg_data.get("ollama_keep_alive", "5m"),
-            "ollama_temperature": cfg_data.get("ollama_temperature", 0.2),
-            "recommended_threads": recommended_threads(cfg_data),
-            "hardware": hardware_profile(),
-        }})
+        active_agent.router.config = cfg_data
+        active_agent.policy.config = cfg_data
+        runtime["web_chat"].config = cfg_data
+        target = runtime.get("config_path")
+        if target:
+            Path(target).write_text(json.dumps(cfg_data, indent=2, ensure_ascii=False), encoding="utf-8")
+        return jsonify({"ok": True, "config": _ollama_config_payload(cfg_data)})
 
-    return jsonify({
-        "cpu_limit_percent": cfg_data.get("cpu_limit_percent", 50),
-        "ollama_num_thread": cfg_data.get("ollama_num_thread"),
-        "ollama_num_ctx": cfg_data.get("ollama_num_ctx", 4096),
-        "ollama_keep_alive": cfg_data.get("ollama_keep_alive", "5m"),
-        "ollama_temperature": cfg_data.get("ollama_temperature", 0.2),
-        "recommended_threads": recommended_threads(cfg_data),
-        "hardware": hardware_profile(),
-    })
+    return jsonify(_ollama_config_payload(cfg_data))
 
 
 @app.route("/api/ollama/details")
@@ -769,7 +930,10 @@ def mcps_tool_run_api():
     runtime = _runtime()
     manager = runtime.get("mcp_manager") or MCPManager()
     active_agent = runtime.get("agent")
+    started = time.monotonic()
+    active_agent.metrics.increment("tool_invocations", tags={"tool": tool_name})
     result = manager.execute_tool(tool_name, parameters, active_agent)
+    active_agent.metrics.observe("tool_response_seconds", time.monotonic() - started, tags={"tool": tool_name, "status": "error" if isinstance(result, dict) and result.get("error") else "ok"})
     return jsonify(result)
 
 
@@ -777,9 +941,6 @@ def mcps_tool_run_api():
 # Telegram Bot Service Controller & Endpoints
 # ==============================================================================
 
-_telegram_listener = None
-_telegram_thread = None
-_telegram_lock = threading.Lock()
 _telegram_history = []
 _telegram_history_lock = threading.Lock()
 
@@ -833,28 +994,22 @@ def record_telegram_interaction(data: dict, reply: str):
 
 
 def get_telegram_service_status() -> Dict[str, Any]:
-    global _telegram_listener, _telegram_thread
-    cfg_data = _runtime().get("cfg", {}) if "ada_runtime" in current_app.extensions else load_config(cfg_path, PROJECT_ROOT)
+    runtime = _runtime()
+    cfg_data = runtime.get("cfg", {})
     tg_cfg = cfg_data.get("telegram", {}) if isinstance(cfg_data.get("telegram"), dict) else {}
     token = _resolve_telegram_token(cfg_data)
-    is_configured = bool(token)
-
-    is_running = False
-    with _telegram_lock:
-        if _telegram_thread and _telegram_thread.is_alive() and _telegram_listener and not getattr(_telegram_listener, "stop_event", threading.Event()).is_set():
-            is_running = True
+    manager = runtime.get("trigger_manager", trigger_manager)
+    status = manager.telegram_status()
 
     masked_token = None
     if token:
         masked_token = token[:6] + "..." + token[-4:] if len(token) > 10 else "***"
 
-    return {
-        "ok": is_running and is_configured,
-        "configured": is_configured,
-        "running": is_running,
-        "token_set": is_configured,
+    return {**status,
+        "ok": status.get("ok", False) and bool(token),
+        "configured": bool(token),
+        "token_set": bool(token),
         "token_masked": masked_token,
-        "status": "running" if is_running else ("stopped" if is_configured else "not_configured"),
         "poll_seconds": float(tg_cfg.get("poll_seconds", 2)),
         "allowed_chat_ids": list(tg_cfg.get("allowed_chat_ids", [])),
         "inbox": str(tg_cfg.get("inbox", "~/Desktop/ADA_Data/telegram_inbox")),
@@ -863,41 +1018,32 @@ def get_telegram_service_status() -> Dict[str, Any]:
 
 
 def start_telegram_service() -> Dict[str, Any]:
-    global _telegram_listener, _telegram_thread
-    from telegram.bot import TelegramListener
-
-    cfg_data = _runtime().get("cfg", {}) if "ada_runtime" in current_app.extensions else load_config(cfg_path, PROJECT_ROOT)
-    token = _resolve_telegram_token(cfg_data)
-    if not token:
-        return {"ok": False, "error": "Token de Telegram no encontrado. Configuralo en la Bóveda de Credenciales (vault.db) desde el Gestor Web."}
-
-    os.environ["TELEGRAM_BOT_TOKEN"] = token
-
-    with _telegram_lock:
-        if _telegram_thread and _telegram_thread.is_alive() and _telegram_listener and not _telegram_listener.stop_event.is_set():
-            return {"ok": True, "message": "El bot de Telegram ya se encuentra en ejecución"}
-
-        port = int(os.environ.get("ADA_UI_PORT", "5005"))
-        _telegram_listener = TelegramListener(cfg_data, base_url=f"http://127.0.0.1:{port}")
-        _telegram_thread = _telegram_listener.start()
-
-    return {"ok": True, "message": "Bot de Telegram iniciado correctamente en segundo plano"}
+    return _runtime().get("trigger_manager", trigger_manager).start("telegram")
 
 
 def stop_telegram_service() -> Dict[str, Any]:
-    global _telegram_listener, _telegram_thread
-    with _telegram_lock:
-        if _telegram_listener:
-            _telegram_listener.stop()
-            _telegram_listener = None
-            _telegram_thread = None
-    return {"ok": True, "message": "Bot de Telegram detenido"}
+    return _runtime().get("trigger_manager", trigger_manager).stop("telegram")
 
 
 def restart_telegram_service() -> Dict[str, Any]:
-    stop_telegram_service()
-    time.sleep(0.5)
-    return start_telegram_service()
+    return _runtime().get("trigger_manager", trigger_manager).restart("telegram")
+
+
+@app.route("/api/triggers")
+def triggers_api():
+    manager = _runtime().get("trigger_manager", trigger_manager)
+    return jsonify(manager.summary(reconcile=True))
+
+
+@app.route("/api/triggers/<trigger_id>/<action>", methods=["POST"])
+def trigger_action_api(trigger_id, action):
+    manager = _runtime().get("trigger_manager", trigger_manager)
+    handlers = {"start": manager.start, "stop": manager.stop, "restart": manager.restart}
+    handler = handlers.get(action)
+    if not handler:
+        return jsonify({"ok": False, "error": "Acción de disparador no válida."}), 404
+    result = handler(trigger_id)
+    return jsonify(result), (200 if result.get("ok") else 409)
 
 
 @app.route("/api/telegram/status")
@@ -928,6 +1074,7 @@ def telegram_history_api():
 
 @app.route("/api/telegram/config", methods=["POST"])
 def telegram_config_api():
+    runtime = _runtime()
     body = request.get_json(silent=True) or {}
     token = str(body.get("token", "")).strip()
     allowed_chat_ids = body.get("allowed_chat_ids")
@@ -960,6 +1107,9 @@ def telegram_config_api():
 
     cfg_data["telegram"]["enabled"] = True
     target_cfg_path.write_text(json.dumps(cfg_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    runtime["cfg"]["telegram"] = dict(cfg_data["telegram"])
+    runtime.get("trigger_manager", trigger_manager).config = runtime["cfg"]
 
     return jsonify({"ok": True, "message": "Token cifrado con AES-256 en SecureVault (vault.db) y configuración actualizada", "status": get_telegram_service_status()})
 
@@ -1070,6 +1220,7 @@ def config_api():
         runtime["cfg"] = candidate
         runtime["agent"].cfg = candidate
         runtime["agent"].model_manager.reload(candidate)
+        runtime.get("trigger_manager", trigger_manager).config = candidate
         return jsonify({"ok": True, "config": candidate})
     safe_config = dict(runtime.get("cfg", {}))
     # sanitize sensitive paths / keys if needed
@@ -1096,6 +1247,13 @@ def restart_all():
     mcp_result = manager.restart_all_servers()
     ollama_status = runtime["agent"].model_manager.local_runtime.restart()
     runtime["agent"].model_manager.reload(runtime.get("cfg"))
+    managed_triggers = runtime.get("trigger_manager", trigger_manager)
+    telegram_state = managed_triggers.telegram_status()
+    trigger_result = (
+        managed_triggers.restart("telegram")
+        if telegram_state.get("desired_state") == "running"
+        else {"ok": True, "message": "Telegram permanece detenido por configuración"}
+    )
     runtime["agent_enabled"] = True
     with runtime["session_states_lock"]:
         runtime["session_states"].clear()
@@ -1103,8 +1261,9 @@ def restart_all():
         "mcps": mcp_result,
         "ollama": ollama_status.as_dict(),
         "agent": {"enabled": True, "reloaded": True},
+        "triggers": {"telegram": trigger_result},
     }
-    ok = bool(mcp_result.get("ok", True)) and bool(ollama_status.available)
+    ok = bool(mcp_result.get("ok", True)) and bool(ollama_status.available) and bool(trigger_result.get("ok"))
     _log_lifecycle(runtime, "system", "restart_all", {"ok": ok, **result})
     return jsonify({"ok": ok, **result})
 
@@ -1176,6 +1335,7 @@ def conversation_api():
             state.pending_action = None
             state.pending_path_action = None
             state.current_path = None
+            state.last_result = None
             if hasattr(_runtime()["agent"].mem, "clear_folder_context"):
                 _runtime()["agent"].mem.clear_folder_context(state.session_id)
             return jsonify({"ok": True, "messages": []})
@@ -1187,6 +1347,10 @@ def chat():
     data = request.get_json() or {}
     request_started = time.monotonic()
     runtime = _runtime()
+    telemetry = runtime["agent"].metrics
+    source = str(data.get("source") or "web")
+    telemetry.increment("messages_received", tags={"source": source})
+    telemetry.increment("chat_invocations", tags={"source": source})
     if not runtime.get("agent_enabled", True):
         return jsonify({"error": "agent_disabled", "message": "ADA Agent Core está apagado."}), 503
     state = _session_state()
@@ -1195,11 +1359,26 @@ def chat():
         debug.write("chat_request", {"message": data.get("message", ""), "lang": data.get("lang"), "source": data.get("source")}, session_id=state.session_id)
 
     def progress(phase, details):
+        activity_details = dict(details)
+        if phase == "router_model_started": telemetry.increment("router_invocations", tags={"source": source})
+        elif phase == "model_started": telemetry.increment("model_invocations", tags={"model": str(details.get("model") or "unknown")})
+        elif phase == "capability_started": telemetry.increment("capability_invocations", tags={"capability": str(details.get("capability") or "unknown")})
+        if phase == "received":
+            activity_details["channel"] = data.get("source") or "web"
+        _activity_update(runtime, phase, activity_details, session_id=state.session_id)
         if debug:
             debug.write("chat_phase", {"phase": phase, **details}, session_id=state.session_id)
 
     with state.lock:
         payload, status_code = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"), progress=progress)
+    telemetry.observe("chat_response_seconds", time.monotonic() - request_started, tags={"source": source, "status": "error" if payload.get("error") else "ok"})
+    telemetry.increment("chat_errors" if payload.get("error") else "chat_successes", tags={"source": source})
+    _activity_update(
+        runtime,
+        "error" if payload.get("error") else "completed",
+        {"detail": payload.get("message") or payload.get("reply") or payload.get("error")},
+        session_id=state.session_id,
+    )
     if debug:
         debug.write(
             "chat_result",
@@ -1236,6 +1415,10 @@ def _run_chat_in_worker(data, session_id, runtime_app, progress_queue):
         def progress(phase, details):
             event = {"phase": phase, **details}
             progress_queue.put(event)
+            activity_details = dict(details)
+            if phase == "received":
+                activity_details["channel"] = data.get("source") or "web"
+            _activity_update(runtime, phase, activity_details, session_id=state.session_id)
             if debug:
                 debug.write("chat_phase", event, session_id=state.session_id)
 
@@ -1262,6 +1445,10 @@ def _progress_text(event):
         return "[router] consultando clasificador de intención..."
     if phase == "router_model_finished":
         return f"[router] intención: {event.get('action')}"
+    if phase == "model_started":
+        return f"[modelo] usando {event.get('model') or 'modelo local'} para {event.get('role') or 'chat'}..."
+    if phase == "model_finished":
+        return f"[modelo] {event.get('model') or 'modelo local'} terminó la respuesta"
     if phase == "capability_started":
         payload = event.get("payload") or {}
         return f"[capability] ejecutando {event.get('capability')} -> {payload.get('action') or 'run'} en {payload.get('dir') or payload.get('path') or '-'}"
@@ -1300,7 +1487,7 @@ def chat_stream():
         try:
             last_update = time.monotonic()
             started_at = last_update
-            hard_timeout = max(5, float(_runtime().get("cfg", {}).get("chat_timeout_seconds", 30)))
+            hard_timeout = max(5, float(_runtime().get("cfg", {}).get("chat_timeout_seconds", 900)))
             while not future.done():
                 while True:
                     try:
@@ -1310,7 +1497,10 @@ def chat_stream():
                     yield _sse("status", {"text": _progress_text(phase_event)})
                 if time.monotonic() - started_at >= hard_timeout:
                     future.cancel()
-                    timeout_message = f"La tarea superó el límite de {int(hard_timeout)} segundos y fue cancelada."
+                    timeout_minutes = hard_timeout / 60
+                    timeout_label = f"{timeout_minutes:g} minutos" if hard_timeout >= 60 else f"{int(hard_timeout)} segundos"
+                    timeout_message = f"La tarea superó el límite configurado de {timeout_label} y fue cancelada. Podés ampliarlo desde Motor local → Paciencia del agente."
+                    _activity_update(_runtime(), "timeout", {"detail": timeout_message}, session_id=state.session_id)
                     if debug:
                         debug.write("chat_timeout", {"timeout_seconds": hard_timeout, "message": text}, session_id=state.session_id, level="ERROR")
                     yield _sse("error", {"text": timeout_message})
@@ -1328,6 +1518,12 @@ def chat_stream():
                     break
                 yield _sse("status", {"text": _progress_text(phase_event)})
             payload = future.result()
+            _activity_update(
+                _runtime(),
+                "error" if payload.get("error") else "completed",
+                {"detail": payload.get("message") or payload.get("reply") or payload.get("error")},
+                session_id=state.session_id,
+            )
             if debug:
                 debug.write(
                     "chat_result",
@@ -1343,6 +1539,7 @@ def chat_stream():
             if debug:
                 debug.write("chat_error", {"message": str(error), "request": text}, session_id=state.session_id, level="ERROR")
             failure = f"La tarea terminó con un error: {error}"
+            _activity_update(_runtime(), "error", {"detail": failure}, session_id=state.session_id)
             state.conversation.extend([{"role": "assistant", "text": failure, "kind": "error"}])
             yield _sse("error", {"text": failure})
         yield _sse("done", {"ok": True})
@@ -1362,15 +1559,27 @@ def chat_stream():
 def create_app(config=None, agent_instance=None):
     """Create an isolated Flask application with injectable ADA dependencies."""
     runtime_cfg = dict(config) if isinstance(config, dict) else load_config(cfg_path, PROJECT_ROOT)
-    runtime_agent = agent_instance or Agent(runtime_cfg)
     runtime_app = Flask(__name__, static_folder=str(DASHBOARD_DIR), static_url_path="/static")
     ollama_cli = OllamaClient(runtime_cfg.get("ollama_url", "http://127.0.0.1:11434"))
     mcp_mgr = MCPManager(runtime_cfg)
+    runtime_agent = agent_instance or Agent(runtime_cfg, mcp_manager=mcp_mgr)
+    if agent_instance is not None:
+        runtime_agent.mcp_manager = mcp_mgr
+        if hasattr(runtime_agent, "prompt_builder"):
+            runtime_agent.prompt_builder.mcp_manager = mcp_mgr
+    trigger_mgr = TriggerManager(
+        runtime_cfg,
+        PROJECT_ROOT,
+        config_path=None if isinstance(config, dict) else cfg_path,
+        state_dir=runtime_cfg.get("trigger_state_dir"),
+        internal_url=f"http://127.0.0.1:{int(os.environ.get('ADA_UI_PORT', '5005'))}",
+        discover_existing=runtime_cfg.get("discover_external_triggers", True),
+    )
     runtime_app.extensions["ada_runtime"] = {
         "cfg": runtime_cfg,
         "config_path": None if isinstance(config, dict) else cfg_path,
         "agent": runtime_agent,
-        "web_chat": WebChatService(runtime_agent, runtime_cfg),
+        "web_chat": WebChatService(runtime_agent, runtime_cfg, mcp_manager=mcp_mgr),
         "session_states": {},
         "session_states_lock": threading.RLock(),
         "chat_executor": ThreadPoolExecutor(max_workers=_chat_workers(runtime_cfg), thread_name_prefix="ada-chat"),
@@ -1378,11 +1587,14 @@ def create_app(config=None, agent_instance=None):
         "model_catalog": ModelCatalog(runtime_cfg),
         "model_benchmark": ModelBenchmark(runtime_cfg.get("ollama_url", "http://127.0.0.1:11434")),
         "mcp_manager": mcp_mgr,
+        "trigger_manager": trigger_mgr,
         "doctor": HealthDoctor(runtime_agent, runtime_cfg, mcp_mgr, ollama_cli),
         "identity": {"version": ADA_VERSION, "started_at": datetime.now(timezone.utc).isoformat(), "reloaded_at": None, "hot_reload": False, "pid": os.getpid()},
         "agent_enabled": True,
         "debug_enabled": False,
         "debug_log": DebugLog(runtime_cfg.get("debug_log_path", str(Path.home() / "Desktop/ADA_Data/debug-log.db"))),
+        "activity": _new_activity_state(),
+        "activity_lock": threading.RLock(),
     }
     runtime_app.before_request(protect_mutating_requests)
     runtime_app.after_request(hide_provider_metadata)
@@ -1403,6 +1615,9 @@ def create_app(config=None, agent_instance=None):
 
 def main():
     port = int(os.environ.get("ADA_UI_PORT", "5005"))
+    trigger_manager.internal_url = f"http://127.0.0.1:{port}"
+    trigger_manager.reconcile()
+    trigger_manager.start_watchdog()
     app.run(host="127.0.0.1", port=port)
 
 

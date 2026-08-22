@@ -1,11 +1,19 @@
 """Unit tests for the new Gestor Web API endpoints, lifecycle controls and Health Doctor."""
 
 import json
+import tempfile
 from ada.interfaces.web.server import create_app
 
 
 def test_gestor_endpoints():
-    app = create_app({"allowed_roots": ["/tmp"]})
+    trigger_state = tempfile.TemporaryDirectory()
+    app = create_app({
+        "allowed_roots": ["/tmp"],
+        "db_path": ":memory:",
+        "trigger_state_dir": trigger_state.name,
+        "discover_external_triggers": False,
+        "telegram": {"enabled": False, "token": ""},
+    })
     client = app.test_client()
 
     # Get CSRF token
@@ -37,6 +45,49 @@ def test_gestor_endpoints():
     assert "health" in data
     assert "runtime" in data
 
+    # Live ADA core exposes its topology and real execution phases.
+    res = client.get("/api/core/state")
+    assert res.status_code == 200
+    core = res.get_json()
+    assert "activity" in core
+    assert "active" in core["models"]
+    assert "telegram" in core["connectors"]
+    assert isinstance(core["connectors"]["mcps"], list)
+    assert isinstance(core["connectors"]["triggers"], list)
+
+    res = client.get("/api/triggers")
+    assert res.status_code == 200
+    triggers = res.get_json()
+    assert [item["id"] for item in triggers["triggers"]] == [
+        "telegram", "removable-device", "calendar", "cron", "webhook"
+    ]
+    assert triggers["triggers"][0]["managed_externally"] is True
+    assert triggers["triggers"][1]["status"] == "ready"
+
+    res = client.post("/api/chat", headers=headers, data=json.dumps({"message": "hola", "lang": "es"}))
+    assert res.status_code == 200
+    core = client.get("/api/core/state").get_json()
+    assert core["activity"]["status"] == "complete"
+    assert [event["phase"] for event in core["activity"]["recent"]][-2:] == ["received", "completed"]
+
+    # Agent patience is configurable and remains independent from model mode.
+    res = client.get("/api/ollama/config")
+    assert res.status_code == 200
+    timeout_data = res.get_json()
+    assert timeout_data["timeout_profile"] == "patient"
+    assert timeout_data["chat_timeout_seconds"] == 900
+    assert "patient" in timeout_data["timeout_presets"]
+
+    res = client.post("/api/ollama/config", headers=headers, data=json.dumps({
+        "timeout_profile": "custom",
+        "router_timeout": 42,
+        "model_timeout": 240,
+        "chat_timeout_seconds": 1200,
+        "food_advisor_timeout": 180,
+    }))
+    assert res.status_code == 200
+    assert res.get_json()["config"]["chat_timeout_seconds"] == 1200
+
     # 3. Models catalog & policy
     res = client.get("/api/models/catalog")
     assert res.status_code == 200
@@ -49,6 +100,12 @@ def test_gestor_endpoints():
     data = res.get_json()
     assert "models" in data
     assert "active" in data
+
+    res = client.post("/api/models/policy", headers=headers, data=json.dumps({"selection_mode": "hybrid"}))
+    assert res.status_code == 200
+    res = client.get("/api/ollama/config")
+    assert res.get_json()["chat_timeout_seconds"] == 1200
+    assert res.get_json()["timeout_profile"] == "custom"
 
     # 4. MCPs servers & tools
     res = client.get("/api/mcps/servers")
