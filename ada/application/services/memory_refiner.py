@@ -80,24 +80,27 @@ class MemoryRefiner:
         with self._lock:
             self._stop_event.set()
             if self._thread:
-                self._thread.join(timeout=2.0)
+                self._thread.join(timeout=5.0)
+                if self._thread.is_alive():
+                    logger.warning("memory_refiner thread did not stop within timeout")
                 self._thread = None
 
     def refine_cycle(self) -> Dict[str, Any]:
         """Execute one complete refinement pass over conversations, knowledge, and memories."""
+        extracted_facts = self._extract_knowledge_from_conversations()
+        pruned_memories = self._prune_stale_memories()
+        pruned_tasks = self._prune_old_tasks()
         with self._lock:
             self._last_run = time.time()
-            extracted_facts = self._extract_knowledge_from_conversations()
-            pruned_memories = self._prune_stale_memories()
-            pruned_tasks = self._prune_old_tasks()
-            summary = {
-                "extracted_facts": extracted_facts,
-                "pruned_memories": pruned_memories,
-                "pruned_tasks": pruned_tasks,
-                "timestamp": self._last_run,
-            }
-            logger.info("memory_refiner_completed: %s", summary)
-            return summary
+            current_time = self._last_run
+        summary = {
+            "extracted_facts": extracted_facts,
+            "pruned_memories": pruned_memories,
+            "pruned_tasks": pruned_tasks,
+            "timestamp": current_time,
+        }
+        logger.info("memory_refiner_completed: %s", summary)
+        return summary
 
     def _extract_knowledge_from_conversations(self) -> int:
         """Scan recent conversations for user preferences, facts, and corrections."""
@@ -145,7 +148,7 @@ class MemoryRefiner:
             if fact:
                 if not self._fact_already_known(fact):
                     self.memory.add_knowledge(
-                        name=f"learned_pref_{int(time.time())}_{count}",
+                        name=f"learned_pref_{time.time_ns()}_{count}",
                         content=fact,
                         source=f"conversation:{session}",
                     )
@@ -156,7 +159,7 @@ class MemoryRefiner:
             if correction:
                 if not self._fact_already_known(correction):
                     self.memory.add_knowledge(
-                        name=f"learned_correction_{int(time.time())}_{count}",
+                        name=f"learned_correction_{time.time_ns()}_{count}",
                         content=f"Corrección del usuario: {correction}",
                         source=f"conversation:{session}",
                     )
@@ -166,7 +169,6 @@ class MemoryRefiner:
 
     def _detect_user_fact_or_preference(self, text: str) -> Optional[str]:
         """Detect direct user facts or permanent system preferences."""
-        low = text.lower()
         patterns = [
             r"\b(?:mi|mis)\s+(?:nombre|cumpleaños|mail|correo|carpeta|directorio|preferencia|equipo)\s+(?:es|son)\s+([^\n\.\?]+)",
             r"\b(?:guard[ao]|descarg[ao]|almacen[ao])\s+(?:siempre\s+)?(?:los|las|mis)?\s*(?:fotos?|archivos?|documentos?)\s+en\s+([^\n\.\?]+)",
@@ -178,7 +180,7 @@ class MemoryRefiner:
             match = re.search(pat, text, re.IGNORECASE)
             if match:
                 clean_fact = text.strip()
-                if len(clean_fact) >= 8 and len(clean_fact) <= 300:
+                if 8 <= len(clean_fact) <= 300:
                     return clean_fact
         return None
 
