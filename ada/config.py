@@ -1,19 +1,16 @@
 """Validated configuration loading for ADA."""
 
 import json
+import logging
 import os
 from pathlib import Path
 
-
-def _path(value, base):
-    if not value:
-        return value
-    val_str = str(value)
-    if val_str.startswith("~"):
 logger = logging.getLogger("ada.config")
 
 
 def _path(value, root: Path) -> str:
+    if not value:
+        return ""
     path = Path(os.path.expanduser(str(value)))
     if not path.is_absolute():
         path = (root / path).resolve()
