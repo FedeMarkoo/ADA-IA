@@ -67,24 +67,21 @@ class Memory:
     def _migrate_sensitive_rows(self):
         if not self._encrypted:
             return
-        columns = (
-            ("images", "path"),
-            ("images", "meta"),
-            ("memories", "content"),
-            ("memories", "meta"),
-            ("tasks", "task"),
-            ("tasks", "result"),
-            ("procedures", "instructions"),
-            ("procedures", "meta"),
-            ("conversation_messages", "text"),
-            ("audit_log", "request"),
-            ("audit_log", "result"),
-        )
-        for table, column in columns:
-            for row in self.conn.execute(f"SELECT id, {column} FROM {table}").fetchall():
-                value = row[column]
-                if value is not None and not str(value).startswith("ada:v1:"):
-                    self.conn.execute(f"UPDATE {table} SET {column}=? WHERE id=?", (self._seal(value), row["id"]))
+        ALLOWED_COLUMNS = {
+            "images": {"path", "meta"},
+            "memories": {"content", "meta"},
+            "tasks": {"task", "result"},
+            "procedures": {"instructions", "meta"},
+            "conversation_messages": {"text"},
+            "audit_log": {"request", "result"},
+        }
+        for table, cols in ALLOWED_COLUMNS.items():
+            for column in cols:
+                for row in self.conn.execute(f"SELECT id, {column} FROM {table}").fetchall():
+                    value = row[column]
+                    if value is not None and not str(value).startswith("ada:v1:"):
+                        self.conn.execute(f"UPDATE {table} SET {column}=? WHERE id=?", (self._seal(value), row["id"]))
+        self.conn.commit()
 
     def _ensure_tables(self):
         self.conn.executescript("""
@@ -200,6 +197,7 @@ class Memory:
                 (self.SCHEMA_VERSION,),
             )
             self.conn.execute("PRAGMA user_version = 1")
+            self.conn.commit()
             version = 1
         if version < 2:
             columns = {row[1] for row in self.conn.execute("PRAGMA table_info(events)").fetchall()}
@@ -219,6 +217,7 @@ class Memory:
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key)")
             self.conn.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)")
             self.conn.execute("PRAGMA user_version = 2")
+            self.conn.commit()
 
     def _seed_dynamic_ai_defaults(self):
         aliases = {
@@ -517,7 +516,7 @@ class Memory:
                 ).fetchall()
                 return [self._open(row["content"]) for row in rows]
         rows = self.conn.execute(
-            "SELECT content, meta FROM memories WHERE kind='knowledge' ORDER BY id DESC LIMIT 10000"
+            "SELECT content, meta FROM memories WHERE kind='knowledge' ORDER BY id DESC LIMIT 500"
         ).fetchall()
         if not query:
             return [self._open(row["content"]) for row in rows[:limit]]
@@ -552,10 +551,10 @@ class Memory:
             return [self._open(row["content"]) for row in rows]
         if kind:
             rows = self.conn.execute(
-                "SELECT content FROM memories WHERE kind=? ORDER BY id DESC LIMIT 10000", (kind,)
+                "SELECT content FROM memories WHERE kind=? ORDER BY id DESC LIMIT 500", (kind,)
             ).fetchall()
         else:
-            rows = self.conn.execute("SELECT content FROM memories ORDER BY id DESC LIMIT 10000").fetchall()
+            rows = self.conn.execute("SELECT content FROM memories ORDER BY id DESC LIMIT 500").fetchall()
         scored = []
         for row in rows:
             content = self._open(row["content"])
@@ -565,6 +564,25 @@ class Memory:
                 scored.append((score, content))
         scored.sort(key=lambda item: item[0], reverse=True)
         return [content for _, content in scored[:k]]
+
+    def list_recent_sessions(self, limit=20):
+        """Return distinct session names ordered by recent activity."""
+        rows = self.conn.execute(
+            "SELECT DISTINCT session FROM conversation_messages ORDER BY id DESC LIMIT ?",
+            (max(1, int(limit)),)
+        ).fetchall()
+        return [row[0] for row in rows if row[0]]
+
+    def prune_by_kind_and_age(self, kinds=("note", "task_result"), days=30):
+        """Prune transient memories older than the given days."""
+        with self._lock:
+            placeholders = ",".join("?" for _ in kinds)
+            cursor = self.conn.execute(
+                f"DELETE FROM memories WHERE kind IN ({placeholders}) AND created_at < datetime('now', ?)",
+                (*kinds, f"-{max(1, int(days))} days")
+            )
+            self.conn.commit()
+            return cursor.rowcount
 
     def add_procedure(self, name, instructions, meta=None):
         with self._lock:

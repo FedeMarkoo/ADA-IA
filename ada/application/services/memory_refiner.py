@@ -104,17 +104,18 @@ class MemoryRefiner:
 
     def _extract_knowledge_from_conversations(self) -> int:
         """Scan recent conversations for user preferences, facts, and corrections."""
-        if not hasattr(self.memory, "conn") or not self.memory.conn:
-            return 0
-
-        # Retrieve distinct sessions
-        try:
-            sessions = [
-                row[0] for row in self.memory.conn.execute(
-                    "SELECT DISTINCT session FROM conversation_messages ORDER BY id DESC LIMIT 20"
-                ).fetchall()
-            ]
-        except Exception:
+        if hasattr(self.memory, "list_recent_sessions"):
+            sessions = self.memory.list_recent_sessions(limit=20)
+        elif hasattr(self.memory, "conn") and self.memory.conn:
+            try:
+                sessions = [
+                    row[0] for row in self.memory.conn.execute(
+                        "SELECT DISTINCT session FROM conversation_messages ORDER BY id DESC LIMIT 20"
+                    ).fetchall()
+                ]
+            except Exception:
+                return 0
+        else:
             return 0
 
         total_extracted = 0
@@ -207,12 +208,17 @@ class MemoryRefiner:
 
     def _prune_stale_memories(self) -> int:
         """Remove old, unreferenced notes or transient task results beyond max_memory_age_days."""
+        if hasattr(self.memory, "prune_by_kind_and_age"):
+            try:
+                return self.memory.prune_by_kind_and_age(kinds=("note", "task_result"), days=self.max_memory_age_days)
+            except Exception as exc:
+                logger.warning("prune_stale_memories_failed: %s", exc)
+                return 0
         if not hasattr(self.memory, "conn") or not self.memory.conn:
             return 0
         try:
             with self.memory._lock:
                 cutoff_days = self.max_memory_age_days
-                # Prune transient notes / task_results older than cutoff days, preserving 'knowledge'
                 cursor = self.memory.conn.execute(
                     "DELETE FROM memories WHERE kind IN ('note', 'task_result') "
                     "AND created_at < datetime('now', ?)",
