@@ -13,6 +13,14 @@ from mcps.protocol import StdioMCPServer
 from mcps.filesystem.handlers import FilesystemHandlers
 
 
+def _photo_result(handlers, args):
+    target = handlers.check_path(args.get("path", "."))
+    recursive = args.get("recursive", True)
+    paths = target.rglob("*") if recursive else target.iterdir()
+    counts = handlers.photo_counts([p for p in paths if p.is_file()])
+    return {"path": str(target), "photo_counts": counts, "summary": handlers.photo_summary(counts)}
+
+
 def create_filesystem_server(allowed_dirs: Optional[List[str]] = None) -> StdioMCPServer:
     server = StdioMCPServer("filesystem", "1.0.0")
     handlers = FilesystemHandlers(allowed_dirs)
@@ -30,6 +38,14 @@ def create_filesystem_server(allowed_dirs: Optional[List[str]] = None) -> StdioM
             "additionalProperties": False,
         },
         handler=handlers.list_files,
+        risk_level="safe",
+    )
+
+    server.register_tool(
+        name="filesystem.photo_counts",
+        description="Cuenta fotos de un evento por formato: XML, RAW y JPG. Puede incluir subcarpetas.",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}, "recursive": {"type": "boolean", "default": True}}, "required": ["path"]},
+        handler=lambda args: _photo_result(handlers, args),
         risk_level="safe",
     )
 

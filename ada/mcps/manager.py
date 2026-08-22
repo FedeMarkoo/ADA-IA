@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 import threading
+import urllib.parse
+import urllib.request
 
 def _find_project_root() -> Path:
     p = Path(__file__).resolve().parent
@@ -246,6 +248,16 @@ class MCPManager:
                 parameters={"type": "object", "properties": {"limit": {"type": "integer", "default": 10}}},
                 risk_level="safe",
             )
+            for tool_name, description in {
+                "gmail.search_threads": "Busca conversaciones en Gmail.",
+                "gmail.get_message": "Lee un mensaje de Gmail.",
+                "gmail.get_thread": "Lee una conversación de Gmail.",
+                "gmail.list_labels": "Lista etiquetas de Gmail.",
+            }.items():
+                self._tools[tool_name] = ToolDefinition(
+                    name=tool_name, server=s_name, category="gmail", description=description,
+                    parameters={"type": "object", "additionalProperties": True}, risk_level="safe",
+                )
 
         if "google-drive" in self._servers:
             drive_tools = {
@@ -259,6 +271,29 @@ class MCPManager:
                     name=name,
                     server="google-drive",
                     category="google_drive",
+                    description=description,
+                    parameters={"type": "object", "additionalProperties": True},
+                    risk_level=risk,
+                    requires_confirmation=risk == "confirmation",
+                )
+
+        if "google-calendar" in self._servers:
+            calendar_tools = {
+                "google_calendar.list_events": ("Lista eventos de Google Calendar.", "safe"),
+                "google_calendar.get_event": ("Obtiene el detalle de un evento de Google Calendar.", "safe"),
+                "google_calendar.list_calendars": ("Lista los calendarios disponibles.", "safe"),
+                "google_calendar.suggest_time": ("Sugiere horarios disponibles.", "safe"),
+                "google_calendar.search_events": ("Busca eventos en Google Calendar.", "safe"),
+                "google_calendar.create_event": ("Crea un evento de Google Calendar.", "confirmation"),
+                "google_calendar.update_event": ("Actualiza un evento de Google Calendar.", "confirmation"),
+                "google_calendar.delete_event": ("Elimina un evento de Google Calendar.", "confirmation"),
+                "google_calendar.respond_to_event": ("Responde una invitación de Calendar.", "confirmation"),
+            }
+            for name, (description, risk) in calendar_tools.items():
+                self._tools[name] = ToolDefinition(
+                    name=name,
+                    server="google-calendar",
+                    category="google_calendar",
                     description=description,
                     parameters={"type": "object", "additionalProperties": True},
                     risk_level=risk,
@@ -462,6 +497,23 @@ class MCPManager:
 
             # Direct execution through local server implementation
             try:
+                if name.startswith("google_drive."):
+                    drive_name = {"list_files": "list_recent_files"}.get(name.split(".", 1)[1], name.split(".", 1)[1])
+                    result = self._execute_remote("https://drivemcp.googleapis.com/mcp/v1", drive_name, parameters)
+                    if result.get("ok") or name.split(".", 1)[1] != "list_files":
+                        return result
+                    return self._execute_google_rest("drive", parameters)
+                if name.startswith("google_calendar."):
+                    result = self._execute_remote("https://calendarmcp.googleapis.com/mcp/v1", name.split(".", 1)[1], parameters)
+                    if result.get("ok") or name.split(".", 1)[1] not in {"list_calendars", "list_events"}:
+                        return result
+                    return self._execute_google_rest("calendar", parameters, name.split(".", 1)[1])
+                if name.startswith("gmail.") and name != "gmail.read_inbox":
+                    operation = name.split(".", 1)[1]
+                    result = self._execute_remote("https://gmailmcp.googleapis.com/mcp/v1", operation, parameters)
+                    if result.get("ok") or operation not in {"list_labels", "search_threads", "get_message", "get_thread"}:
+                        return result
+                    return self._execute_google_rest("gmail", parameters, operation)
                 if name.startswith("filesystem."):
                     from mcps.filesystem.server import create_filesystem_server
                     srv = create_filesystem_server()
@@ -511,3 +563,76 @@ class MCPManager:
                 return {"ok": True, "result": f"Ejecución de {name} completada con éxito"}
             except Exception as exc:
                 return {"ok": False, "error": str(exc)}
+
+    @staticmethod
+    def _execute_remote(url: str, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Call a remote Google MCP using the encrypted ADA OAuth token."""
+        from ada.infrastructure.credentials import SecureVault
+
+        vault = SecureVault()
+        token = vault.get("google_oauth_token") or {}
+        access_token = token.get("access_token") if isinstance(token, dict) else None
+        if not access_token:
+            return {"ok": False, "error": "Falta autorizar Google OAuth para ADA."}
+        payload = json.dumps({
+            "jsonrpc": "2.0",
+            "id": int(time.time() * 1000),
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": parameters or {}},
+        }).encode()
+        req = urllib.request.Request(url, data=payload, method="POST", headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "Authorization": f"Bearer {access_token}",
+        })
+        with urllib.request.urlopen(req, timeout=60) as response:
+            body = json.loads(response.read().decode())
+        if body.get("error"):
+            return {"ok": False, "error": body["error"]}
+        result = body.get("result", {})
+        return {"ok": not bool(result.get("isError")), "result": result}
+
+    @staticmethod
+    def _execute_google_rest(service: str, parameters: Dict[str, Any], operation: str = "list_files") -> Dict[str, Any]:
+        """Read-only fallback while Google's remote MCP APIs are in preview."""
+        from ada.infrastructure.credentials import SecureVault
+
+        token = SecureVault().get("google_oauth_token") or {}
+        access_token = token.get("access_token") if isinstance(token, dict) else None
+        if not access_token:
+            return {"ok": False, "error": "Falta autorizar Google OAuth para ADA."}
+        if service == "drive":
+            query = urllib.parse.urlencode({
+                "pageSize": parameters.get("pageSize", 100),
+                # Keep the cloud URL in the structured result so ADA can
+                # provide a direct Drive link without another round-trip.
+                "fields": "files(id,name,mimeType,modifiedTime,webViewLink,parents,size),nextPageToken",
+            })
+            url = "https://www.googleapis.com/drive/v3/files?" + query
+        elif service == "gmail":
+            if operation == "list_labels":
+                url = "https://gmail.googleapis.com/gmail/v1/users/me/labels"
+            elif operation == "search_threads":
+                query = urllib.parse.urlencode({"q": parameters.get("query", ""), "maxResults": parameters.get("pageSize", 100)})
+                url = "https://gmail.googleapis.com/gmail/v1/users/me/messages?" + query
+            elif operation == "get_message":
+                url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + urllib.parse.quote(str(parameters.get("messageId", "")), safe="")
+            else:
+                url = "https://gmail.googleapis.com/gmail/v1/users/me/threads/" + urllib.parse.quote(str(parameters.get("threadId", "")), safe="")
+        elif operation == "list_events":
+            query = urllib.parse.urlencode({"maxResults": parameters.get("pageSize", 100), "singleEvents": "true", "orderBy": "startTime"})
+            url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?" + query
+        else:
+            query = urllib.parse.urlencode({"maxResults": parameters.get("pageSize", 100)})
+            url = "https://www.googleapis.com/calendar/v3/users/me/calendarList?" + query
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {access_token}"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                payload = json.loads(response.read().decode())
+                if service == "drive":
+                    for item in payload.get("files", []):
+                        if item.get("webViewLink"):
+                            item.setdefault("link", item["webViewLink"])
+                return {"ok": True, "result": {"fallback": "google-rest", **payload}}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}

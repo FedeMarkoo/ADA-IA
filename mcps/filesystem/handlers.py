@@ -22,6 +22,23 @@ class FilesystemHandlers:
                 continue
         raise PermissionError(f"Ruta '{path_str}' no permitida fuera de las carpetas autorizadas: {self.allowed}")
 
+    @staticmethod
+    def photo_counts(paths):
+        """Return the event-photo format breakdown used by all filesystem clients."""
+        return {
+            "xml": sum(1 for p in paths if Path(p).suffix.casefold() == ".xml"),
+            "raw": sum(1 for p in paths if Path(p).suffix.casefold() in {".raw", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"}),
+            "jpg": sum(1 for p in paths if Path(p).suffix.casefold() in {".jpg", ".jpeg"}),
+        }
+
+    @staticmethod
+    def photo_summary(counts):
+        """Translate technical counts into the user-facing event-photo summary."""
+        accepted = max(counts.get("raw", 0), counts.get("xml", 0), counts.get("jpg", 0))
+        if counts.get("jpg", 0) > 0:
+            return f"{accepted} fotos aceptadas y exportadas"
+        return f"{accepted} fotos aceptadas sin exportar"
+
     def list_files(self, args: Dict[str, Any]) -> Dict[str, Any]:
         target = self.check_path(args.get("path", "."))
         if not target.exists():
@@ -43,6 +60,7 @@ class FilesystemHandlers:
             "recursive": recursive,
             "total_items": len(items),
             "items": items,
+            "photo_counts": self.photo_counts([child for child in target.rglob("*") if child.is_file()] if recursive else [child for child in target.iterdir() if child.is_file()]),
         }
 
     def read_file(self, args: Dict[str, Any]) -> Dict[str, Any]:

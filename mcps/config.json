@@ -42,7 +42,7 @@
     },
     "google-gmail": {
       "type": "sse",
-      "url": "https://mcp.googleapis.com/v1/gmail",
+      "url": "https://gmailmcp.googleapis.com/mcp/v1",
       "env": {
         "GMAIL_CLIENT_ID": "${GMAIL_CLIENT_ID}"
       },
@@ -53,6 +53,12 @@
       "type": "sse",
       "url": "https://drivemcp.googleapis.com/mcp/v1",
       "description": "Servidor MCP oficial de Google Drive",
+      "status": "active"
+    },
+    "google-calendar": {
+      "type": "sse",
+      "url": "https://calendarmcp.googleapis.com/mcp/v1",
+      "description": "Servidor MCP oficial de Google Calendar",
       "status": "active"
     },
     "sqlite-memory": {
