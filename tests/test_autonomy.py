@@ -1,39 +1,48 @@
-import tempfile
 import unittest
-from pathlib import Path
+from unittest.mock import MagicMock
 
 from ada.application.services.autonomy import AutonomyService
-from ada.infrastructure.persistence.sqlite import Memory
 
 
-class AutonomyTests(unittest.TestCase):
-    def test_event_rule_proposes_by_default_and_filters_extensions(self):
-        with tempfile.TemporaryDirectory() as directory:
-            memory = Memory(str(Path(directory) / "memory.db"))
+class TestAutonomyService(unittest.TestCase):
+    def setUp(self):
+        self.mock_agent = MagicMock()
+        self.mock_agent.skills = {"organize_photos": lambda _: {"ok": True}}
+        self.config = {
+            "event_rules": {
+                "filesystem.file_created": {
+                    "action": "organize_photos",
+                    "path_prefix": "/home/user/Photos",
+                    "extensions": [".jpg", ".png"],
+                    "auto_execute": False,
+                }
+            }
+        }
+        self.service = AutonomyService(self.mock_agent, self.config)
 
-            class FakePlanner:
-                def from_actions(self, actions, explanation=""):
-                    return type("Plan", (), {"plan_id": "plan-1", "high_risk": lambda self: False})()
+    def test_path_prefix_security(self):
+        rule = self.config["event_rules"]["filesystem.file_created"]
+        # Legitimate path under prefix
+        self.assertTrue(self.service._matches(rule, {"path": "/home/user/Photos/2026/event.jpg"}))
+        # Path that shares prefix as string but is a sibling directory (e.g. Photos_evil)
+        self.assertFalse(self.service._matches(rule, {"path": "/home/user/Photos_evil/event.jpg"}))
+        # Non-matching extension
+        self.assertFalse(self.service._matches(rule, {"path": "/home/user/Photos/doc.pdf"}))
 
-            class FakeAgent:
-                cfg = {"event_rules": {"files": {"action": "analyze_photo", "extensions": [".jpg"]}}}
-                skills = {"analyze_photo": object()}
-                planner = FakePlanner()
-                mem = memory
+    def test_geofence_calculation(self):
+        # Center: Obelisco, Buenos Aires (-34.6037, -58.3816)
+        geofence = {"lat": -34.6037, "lon": -58.3816, "radius_m": 500}
+        # Point ~100m away (Plaza de la República)
+        inside_point = {"lat": -34.6033, "lon": -58.3811}
+        self.assertTrue(AutonomyService._inside_geofence(inside_point, geofence))
 
-            service = AutonomyService(FakeAgent())
-            filtered = service.handle("files", {"path": "/tmp/file.txt"})
-            proposed = service.handle("files", {"path": "/tmp/file.jpg"})
-            self.assertEqual(filtered["status"], "filtered")
-            self.assertEqual(proposed["status"], "proposed")
+        # Point ~2000m away (Puerto Madero)
+        outside_point = {"lat": -34.6150, "lon": -58.3650}
+        self.assertFalse(AutonomyService._inside_geofence(outside_point, geofence))
 
-    def test_geofence_and_inventory_filters(self):
-        inside = {"coordinates": {"lat": -34.6037, "lon": -58.3816}, "quantity": 1}
-        rule = {"geofence": {"lat": -34.6037, "lon": -58.3816, "radius_m": 100}, "inventory_max": 2}
-        self.assertTrue(AutonomyService._matches(rule, inside))
-        outside = {"coordinates": {"lat": -34.7, "lon": -58.5}, "quantity": 1}
-        self.assertFalse(AutonomyService._matches(rule, outside))
-        self.assertFalse(AutonomyService._matches(rule, {"coordinates": inside["coordinates"], "quantity": 3}))
+        # Invalid coordinates
+        self.assertFalse(AutonomyService._inside_geofence({"lat": "invalid"}, geofence))
+        self.assertFalse(AutonomyService._inside_geofence(None, geofence))
 
 
 if __name__ == "__main__":
