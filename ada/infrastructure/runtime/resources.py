@@ -62,8 +62,15 @@ def hardware_profile():
     ram_gb = 0.0
     vram_gb = 0.0
     gpu_backend = "cpu"
+    ram_used_gb = 0.0
+    ram_available_gb = 0.0
+    ram_percent = 0.0
     if psutil is not None:
-        ram_gb = round(psutil.virtual_memory().total / (1024**3), 1)
+        vm = psutil.virtual_memory()
+        ram_gb = round(vm.total / (1024**3), 1)
+        ram_used_gb = round(vm.used / (1024**3), 1)
+        ram_available_gb = round(vm.available / (1024**3), 1)
+        ram_percent = round(vm.percent, 1)
     try:
         import torch
 
@@ -88,6 +95,9 @@ def hardware_profile():
         "tier": tier,
         "cpu_cores": cores,
         "ram_gb": ram_gb,
+        "ram_used_gb": ram_used_gb,
+        "ram_available_gb": ram_available_gb,
+        "ram_percent": ram_percent,
         "vram_gb": vram_gb,
         "gpu_backend": gpu_backend,
         "disk_free_gb": disk_free_gb,

@@ -42,7 +42,7 @@ def process_samples(db):
             cmd=" ".join(proc.info.get("cmdline") or [])
             if "ada.interfaces.web.server" in cmd: component="ada"
             elif "telegram/bot.py" in cmd: component="telegram"
-            elif "ollama serve" in cmd: component="ollama"
+            elif "ollama" in cmd or "llama-server" in cmd: component="ollama"
             else: continue
             cpu=proc.cpu_percent(interval=None); rss=(proc.info.get("memory_info").rss or 0)/1024/1024
             rows += [(now, f"{component}_process_cpu_percent", 'component="%s"'%component, cpu), (now, f"{component}_process_rss_mb", 'component="%s"'%component, rss)]

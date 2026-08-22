@@ -584,7 +584,12 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
           ]),
         ]),
         h('dl', { className: 'metrics-list' }, [
-          h('div', { key: 'ram' }, [h('dt', null, 'Memoria RAM'), h('dd', null, ramPercent != null ? `${ramPercent.toFixed(1)}% en uso` : `${hardware.ram_gb || '—'} GB`)]),
+          h('div', { key: 'ram' }, [
+            h('dt', null, 'Memoria RAM'),
+            h('dd', null, (hardware.ram_used_gb != null && hardware.ram_gb)
+              ? `${hardware.ram_used_gb} / ${hardware.ram_gb} GB (${(hardware.ram_percent || ramPercent || 0).toFixed(1)}%)`
+              : (ramPercent != null ? `${ramPercent.toFixed(1)}% en uso` : `${hardware.ram_gb || '—'} GB`))
+          ]),
           h('div', { key: 'cpu' }, [h('dt', null, 'Procesamiento'), h('dd', null, `${hardware.cpu_cores || hardware.cpu_count || '—'} núcleos · ${hardware.gpu_backend === 'cpu' ? 'sin GPU dedicada' : hardware.gpu_backend || '—'}`)]),
           h('div', { key: 'disk' }, [h('dt', null, 'Espacio disponible'), h('dd', null, hardware.disk_free_gb != null ? `${hardware.disk_free_gb} GB` : '—')]),
           h('div', { key: 'models' }, [h('dt', null, 'Modelos instalados'), h('dd', null, String(installedCount))]),
