@@ -158,7 +158,10 @@ class TriggerManager:
             values = self.telegram_log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
         except OSError:
             return []
-        token = self._resolve_token()
+        try:
+            token = self._resolve_token()
+        except Exception:
+            token = ""
         if token:
             values = [line.replace(token, "***") for line in values]
         return values
@@ -177,8 +180,12 @@ class TriggerManager:
         telegram["enabled"] = bool(enabled)
         if not self.config_path:
             return
+        saved = {}
         try:
-            saved = json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.is_file() else {}
+            if self.config_path.is_file():
+                saved = json.loads(self.config_path.read_text(encoding="utf-8"))
+            if not isinstance(saved, dict):
+                saved = {}
             if not isinstance(saved.get("telegram"), dict):
                 saved["telegram"] = {}
             saved["telegram"]["enabled"] = bool(enabled)
