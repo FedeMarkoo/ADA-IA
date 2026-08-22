@@ -96,10 +96,12 @@ class FolderResolver:
             process.kill()
             threading.Thread(target=process.wait, daemon=True).start()
             return False
-        except OSError:
-            if process and process.poll() is None:
-                process.kill()
-            return False
+        except (OSError, FileNotFoundError):
+            # Fallback in environments without 'test' binary
+            try:
+                return Path(path).is_dir()
+            except Exception:
+                return False
 
     def _score(self, path, terms):
         name = self._normalize(path.name)
