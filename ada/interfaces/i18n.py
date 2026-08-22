@@ -24,11 +24,20 @@ MESSAGES = {
 }
 
 
+import logging
+
+logger = logging.getLogger("ada.i18n")
+
+
 def normalize_language(language):
     value = str(language or "es").lower().split("-", 1)[0]
     return value if value in MESSAGES else "es"
 
 
 def tr(key, language="es", **values):
-    message = MESSAGES[normalize_language(language)].get(key, MESSAGES["es"].get(key, key))
+    lang_code = normalize_language(language)
+    message = MESSAGES.get(lang_code, {}).get(key) or MESSAGES.get("es", {}).get(key)
+    if message is None:
+        logger.debug("missing_translation_key key=%s lang=%s", key, language)
+        message = str(key)
     return message.format(**values) if values else message
