@@ -327,10 +327,17 @@ class TelegramListener:
                         with urllib.request.urlopen(req, timeout=4) as resp:
                             data = json.loads(resp.read().decode("utf-8"))
                             act = data.get("activity") or {}
-                            phase_label = act.get("label") or act.get("detail") or "Procesando..."
-                            if phase_label and phase_label != last_status_text and act.get("status") == "working":
-                                last_status_text = phase_label
-                                self.edit_message(chat_id, status_msg_id, f"⚙️ {phase_label}...")
+                            if act.get("status") == "working":
+                                label = act.get("label") or "Procesando"
+                                detail = act.get("detail") or ""
+                                component = act.get("component") or ""
+                                text_parts = [f"⚙️ {label}"]
+                                if detail and detail != label:
+                                    text_parts.append(f"({detail})")
+                                status_display = " ".join(text_parts)
+                                if status_display != last_status_text:
+                                    last_status_text = status_display
+                                    self.edit_message(chat_id, status_msg_id, f"{status_display}...")
                     except Exception:
                         pass
 
