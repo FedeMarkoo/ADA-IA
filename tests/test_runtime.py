@@ -94,7 +94,7 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertEqual(light["chat"]["preferred"], "llama3.2:3b")
         self.assertEqual(light["router"]["preferred"], "llama3.2:3b")
-        self.assertEqual(hybrid["chat"]["preferred"], "qwen2.5:7b")
+        self.assertEqual(hybrid["chat"]["preferred"], "llama3.2:3b")
         self.assertEqual(hybrid["reasoning"]["preferred"], "deepseek-r1:8b")
         self.assertEqual(hybrid["coding"]["preferred"], "qwen2.5:7b")
         self.assertEqual(turbo["reasoning"]["preferred"], "deepseek-r1:14b")
@@ -111,6 +111,14 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(ModelManager.runtime_settings_for_mode("light", profile)["ollama_num_thread"], 4)
         self.assertEqual(ModelManager.runtime_settings_for_mode("hybrid", profile)["ollama_num_thread"], 6)
         self.assertEqual(ModelManager.runtime_settings_for_mode("turbo", profile)["ollama_num_thread"], 8)
+        self.assertGreater(
+            ModelManager.runtime_settings_for_mode("hybrid", profile)["model_role_max_tokens"]["coding"],
+            ModelManager.runtime_settings_for_mode("hybrid", profile)["model_role_max_tokens"]["chat"],
+        )
+        for mode in ("light", "hybrid", "turbo"):
+            settings = ModelManager.runtime_settings_for_mode(mode, profile)
+            self.assertNotIn("model_timeout", settings)
+            self.assertNotIn("chat_timeout_seconds", settings)
 
 
 if __name__ == "__main__":
