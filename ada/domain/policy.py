@@ -21,13 +21,18 @@ class PolicyEngine:
         return Path(os.path.expanduser(str(value))).resolve()
 
     def path_allowed(self, value):
+        if not value:
+            return False
         if not self.allowed_roots:
             return True
-        candidate = self._path(value)
-        return any(candidate == root or root in candidate.parents for root in self.allowed_roots)
+        try:
+            candidate = self._path(value)
+            return any(candidate == root or root in candidate.parents for root in self.allowed_roots)
+        except Exception:
+            return False
 
     def validate_paths(self, values):
-        invalid = [str(value) for value in values if value and not self.path_allowed(value)]
+        invalid = [str(value) for value in values if value is not None and not self.path_allowed(value)]
         if invalid:
             raise PolicyViolation(f"Rutas fuera de la allowlist: {invalid}")
 
