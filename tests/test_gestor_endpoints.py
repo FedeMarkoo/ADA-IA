@@ -1,11 +1,16 @@
-"""Unit tests for the new Gestor Web API endpoints, lifecycle controls and Health Doctor."""
-
 import json
 import tempfile
-from ada.interfaces.web.server import create_app
+import unittest
+
+try:
+    from ada.interfaces.web.server import create_app
+except ImportError:
+    create_app = None
 
 
 def test_gestor_endpoints():
+    if create_app is None:
+        raise unittest.SkipTest("Flask is not installed (optional web extra)")
     trigger_state = tempfile.TemporaryDirectory()
     app = create_app({
         "allowed_roots": ["/tmp"],

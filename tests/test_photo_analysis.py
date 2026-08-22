@@ -3,16 +3,21 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+try:
+    from PIL import Image, ImageDraw
+    from mcps.photography.analyzer import _noise_score, run, technical_analysis
+    from mcps.photography.batch import run as select_photo_batch
+except ImportError:
+    Image = None
 
-from mcps.photography.analyzer import _noise_score, run, technical_analysis
 from ada.agents.coordinator import MultiAgentCoordinator
 from ada.agents.photo_agents import PhotoReviewAgent
-from mcps.photography.batch import run as select_photo_batch
 
 
 class PhotoAnalysisTests(unittest.TestCase):
     def setUp(self):
+        if Image is None:
+            raise unittest.SkipTest("Photo analysis extra (numpy/PIL) not installed")
         self.tempdir = tempfile.TemporaryDirectory()
         self.path = Path(self.tempdir.name) / "concert.jpg"
         image = Image.new("RGB", (320, 200), (20, 20, 24))
