@@ -1,0 +1,26 @@
+{
+  "run_id": "20260822-004252",
+  "commit_id": "efc0a1f826bf5a30e17fdded0b72f3c568a025e9",
+  "created_at": "2026-08-22T00:42:52-0300",
+  "metrics": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "pass_rate": 0.0,
+    "avg_latency_seconds": 0.023,
+    "max_latency_seconds": 0.023
+  },
+  "cases": [
+    {
+      "id": "complex_reasoning",
+      "passed": false,
+      "score": 0,
+      "missing": [
+        "patrón: recomendaci[oó]n"
+      ],
+      "reply_chars": 86,
+      "elapsed_seconds": 0.023,
+      "error": null
+    }
+  ]
+}
