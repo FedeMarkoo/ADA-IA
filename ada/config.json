@@ -187,8 +187,8 @@
       "complexity": 4
     }
   },
-  "ollama_num_thread": 6,
-  "ollama_num_ctx": 90000,
+  "ollama_num_thread": 4,
+  "ollama_num_ctx": 70000,
   "ollama_keep_alive": "10m",
   "cpu_limit_percent": 75,
   "ollama_temperature": 0.2,

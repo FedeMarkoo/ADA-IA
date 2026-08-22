@@ -279,7 +279,8 @@ class TelegramListener:
             return
 
         typing_stop = threading.Event()
-        typing_thread = self._start_typing(chat_id, typing_stop)
+        status_msg_id = self.send_initial_status(chat_id, "⏳ *Procesando tu solicitud...*")
+        typing_thread = self._start_typing_and_status(chat_id, typing_stop, status_msg_id)
         try:
             try:
                 reply = self._invoke_internal_chat(text, chat_id=chat_id, sender=sender)
@@ -290,25 +291,75 @@ class TelegramListener:
             if typing_thread:
                 typing_thread.join(timeout=1.0)
         logger.info("chat_id=%s respuesta=%r", chat_id, str(reply)[:500])
-        self.send_message(chat_id, reply)
+        if status_msg_id:
+            edited = self.edit_message(chat_id, status_msg_id, reply)
+            if not edited:
+                self.send_message(chat_id, reply)
+        else:
+            self.send_message(chat_id, reply)
 
-    def _start_typing(self, chat_id: str, stop_event: threading.Event) -> Optional[threading.Thread]:
-        """Keep Telegram's transient typing indicator alive during long tasks."""
+    def _start_typing_and_status(self, chat_id: str, stop_event: threading.Event, status_msg_id: Optional[int] = None) -> Optional[threading.Thread]:
+        """Keep Telegram typing alive and update the status message with real-time phase description."""
         if not self.typing_enabled or not chat_id:
             return None
 
+        # Enviar acción de typing inmediata
+        try:
+            self._api("sendChatAction", {"chat_id": chat_id, "action": "typing"})
+        except Exception as exc:
+            logger.warning("telegram_typing_initial_failed chat_id=%s error=%s", chat_id, exc)
+
         def loop() -> None:
+            last_status_text = ""
             while not stop_event.is_set() and not self.stop_event.is_set():
+                stop_event.wait(self.typing_interval)
+                if stop_event.is_set() or self.stop_event.is_set():
+                    break
                 try:
                     self._api("sendChatAction", {"chat_id": chat_id, "action": "typing"})
                 except Exception as exc:
-                    # The indicator is best-effort and must never cancel a task.
-                    logger.debug("telegram_typing_indicator_failed chat_id=%s error=%s", chat_id, exc)
-                stop_event.wait(self.typing_interval)
+                    logger.warning("telegram_typing_indicator_failed chat_id=%s error=%s", chat_id, exc)
+
+                # Si tenemos un mensaje de estado, consultar la fase actual del núcleo y actualizar el mensaje
+                if status_msg_id:
+                    try:
+                        req = urllib.request.Request(f"{self.base_url}/api/core/state", method="GET")
+                        with urllib.request.urlopen(req, timeout=4) as resp:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            act = data.get("activity") or {}
+                            phase_label = act.get("label") or act.get("detail") or "Procesando..."
+                            if phase_label and phase_label != last_status_text and act.get("status") == "working":
+                                last_status_text = phase_label
+                                self.edit_message(chat_id, status_msg_id, f"⚙️ {phase_label}...")
+                    except Exception:
+                        pass
 
         thread = threading.Thread(target=loop, name=f"ada-telegram-typing-{chat_id}", daemon=True)
         thread.start()
         return thread
+
+    def send_initial_status(self, chat_id: str, text: str) -> Optional[int]:
+        """Send an initial placeholder message that will be edited as processing continues."""
+        try:
+            res = self._api("sendMessage", {"chat_id": chat_id, "text": text})
+            if res and isinstance(res, dict):
+                return res.get("message_id")
+        except Exception as exc:
+            logger.warning("telegram_initial_status_send_failed chat_id=%s error=%s", chat_id, exc)
+        return None
+
+    def edit_message(self, chat_id: str, message_id: int, text: str) -> bool:
+        """Edit an existing message with updated text or final response."""
+        text = re.sub(r"\*\*(.*?)\*\*", r"\1", str(text), flags=re.DOTALL)
+        text = re.sub(r"`([^`]*)`", r"\1", text)
+        if len(text) > 4000:
+            text = text[:3990] + "..."
+        try:
+            self._api("editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": text})
+            return True
+        except Exception as exc:
+            logger.warning("telegram_edit_message_failed chat_id=%s message_id=%s error=%s", chat_id, message_id, exc)
+            return False
 
     def _status_summary(self) -> str:
         def call():
