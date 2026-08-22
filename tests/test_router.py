@@ -99,7 +99,16 @@ class IntentRouterTests(unittest.TestCase):
             result = agent.parse_prompt(
                 "Analizá con calma las ventajas y riesgos de organizar archivos personales y compará enfoques."
             )
-        self.assertEqual(result["action"], "ask")
+            self.assertEqual(result["action"], "ask")
+
+    def test_calendar_queries_are_not_confused_with_filesystem_tasks(self):
+        from ada.application.agent import Agent
+
+        with tempfile.TemporaryDirectory() as directory:
+            agent = Agent({"engine_provider": "unknown", "db_path": str(Path(directory) / "test.db")})
+            result = agent.parse_prompt("Cual es mi próximo evento en calendar?")
+            # Consultas de calendario no deben mutar archivos ni exigir rutas locales de disco
+            self.assertIn(result.get("action"), {None, "ask", "suggest", "google_calendar.list_events", "google_calendar.search_events"})
 
 
 if __name__ == "__main__":

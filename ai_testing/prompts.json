@@ -34,5 +34,8 @@
   ,{"id":"calendar_search_event","prompt":"Buscá en Google Calendar eventos relacionados con 'fotografía' y resumí los resultados. Solo lectura.","category":"mcp_google_calendar","must_match":["(fotograf[ií]a|evento|no encontr)"],"max_seconds":120}
   ,{"id":"gmail_list_labels","prompt":"Listá las etiquetas disponibles de mi Gmail. No leas ni cambies mensajes.","category":"mcp_gmail","must_match":["(etiqueta|label)"],"max_seconds":120}
   ,{"id":"gmail_search_threads","prompt":"Buscá en Gmail conversaciones relacionadas con 'fotos Sofia' y devolvé asunto y fecha. Solo lectura.","category":"mcp_gmail","must_match":["(Sofia|fotos|conversaci[oó]n|asunto)","(fecha|mensaje|correo)"],"max_seconds":180}
-  ,{"id":"gmail_recent_readonly","prompt":"¿Hay correos recientes sin leer sobre eventos? Indicá solo cantidad y asuntos, sin responder ni enviar nada.","category":"mcp_gmail","must_match":["(correo|mensaje|asunto|no le[ií]d)","\\d+|ninguno|no hay"],"max_seconds":180}
+  ,{"id":"gmail_recent_readonly","prompt":"¿Hay correos recientes sin leer sobre eventos? Indicá solo cantidad y asuntos, sin responder ni enviar nada.","category":"mcp_gmail","must_match":["(correo|mensaje|asunto|no le[ií]d)","\\d+|ninguno|no hay"],"max_seconds":180},
+  {"id":"calendar_next_event","prompt":"Cual es mi próximo evento en calendar?","category":"mcp_google_calendar","must_match":["(evento|calendario|pr[oó]ximo|no ten[eé]s|encontr[eé])"],"max_seconds":180},
+  {"id":"calendar_month_search","prompt":"Busca eventos en octubre en mi calendar","category":"mcp_google_calendar","must_match":["(evento|octubre|calendario|encontr)"],"max_seconds":180},
+  {"id":"calendar_range_confirm","prompt":"Quiero saber cuál es el próximo evento en mi calendario de Google Calendar","category":"mcp_google_calendar","must_match":["(evento|calendario|pr[oó]ximo)"],"max_seconds":180}
 ]

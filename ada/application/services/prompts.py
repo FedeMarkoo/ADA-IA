@@ -27,10 +27,10 @@ class PromptBuilder:
         # This rule is appended even when the system template comes from an
         # existing database, so upgraded installations gain the behavior too.
         prompt += (
-            "\nRegla de respuesta: si el pedido es un análisis, explicación o comparación autocontenida, "
-            "respondelo completo ahora usando supuestos razonables. No pidas rutas, sistema operativo, "
-            "versión de Python ni otros datos técnicos que no sean indispensables. Si el usuario pide una "
-            "cantidad de enfoques, cubrilos y terminá con una recomendación concreta."
+            "\nReglas de ejecución y respuesta:"
+            "\n1. Si el pedido es una consulta sobre Google Calendar, Google Drive o Gmail (por ejemplo 'cuál es mi próximo evento', 'busca en octubre'), no pidas rutas de archivos locales ni confirmaciones repetitivas si la herramienta o contexto permite consultar directamente."
+            "\n2. Si el usuario confirma o pide buscar en un rango de fechas ('sí', 'busca en ese rango', 'busca en octubre'), procede de inmediato sin volver a preguntar lo mismo."
+            "\n3. Si el pedido es un análisis, explicación o comparación autocontenida, respondelo completo ahora usando supuestos razonables. No pidas rutas, sistema operativo ni datos técnicos innecesarios."
         )
         query = task.get("prompt", "")
         knowledge = self.memory.knowledge(query, limit=2)
