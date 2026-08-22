@@ -303,7 +303,12 @@ class WebChatService:
 
         # Telegram's version command must never go through the LLM router.
         if re.fullmatch(r"/(?:v|version|versi[oó]n)", text, re.I):
-            reply = "ADA versión 0.1.0"
+            try:
+                import importlib.metadata
+                pkg_ver = importlib.metadata.version("ada-local")
+            except Exception:
+                pkg_ver = "0.1.0"
+            reply = f"ADA versión {pkg_ver}"
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · sistema"}, 200
         if re.fullmatch(r"/i", text, re.I):
