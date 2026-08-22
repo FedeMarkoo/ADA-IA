@@ -10,26 +10,33 @@ def _path(value, base):
         return value
     val_str = str(value)
     if val_str.startswith("~"):
-        return str(Path(os.path.expanduser(val_str)).resolve())
-    path = Path(val_str)
-    return str(path if path.is_absolute() else (base / path).resolve())
+logger = logging.getLogger("ada.config")
 
 
-def load_config(path=None, project_root=None):
-    root = Path(project_root or Path(__file__).resolve().parents[1])
-    if path:
-        config_path = Path(path).expanduser()
-    elif os.environ.get("ADA_CONFIG"):
-        config_path = Path(os.environ["ADA_CONFIG"]).expanduser()
-    elif (root / "ada" / "config.json").exists():
-        config_path = root / "ada" / "config.json"
-    else:
+def _path(value, root: Path) -> str:
+    path = Path(os.path.expanduser(str(value)))
+    if not path.is_absolute():
+        path = (root / path).resolve()
+    return str(path)
+
+
+def load_config(path: Path | str | None = None, project_root: Path | str | None = None) -> dict:
+    root = Path(project_root or Path(__file__).resolve().parent.parent).resolve()
+    config_path = Path(path).resolve() if path else root / "ada" / "config.json"
+    if not config_path.is_file():
         config_path = root / "config.json"
-
     default_data_dir = Path.home() / "Desktop" / "ADA_Data"
-    default_db = str(default_data_dir / "memory.db")
-    if not config_path.exists():
-        return {"db_path": default_db, "allowed_roots": [str(default_data_dir), str(Path.home() / "Desktop")]}
+    if not config_path.is_file():
+        return {
+            "name": "ADA",
+            "max_threads": 4,
+            "use_mps": False,
+            "data_dir": str(default_data_dir),
+            "db_path": str(default_data_dir / "memory.db"),
+            "allowed_roots": [str(default_data_dir), str(Path.home() / "Desktop")],
+            "confirm_risky": True,
+            "memory_encryption": False,
+        }
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -43,8 +50,8 @@ def load_config(path=None, project_root=None):
     if config["db_path"] != ":memory:":
         try:
             Path(config["db_path"]).parent.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("db_dir_create_failed path=%s error=%s", config["db_path"], exc)
     for key in (
         "photo_root",
         "inbox",
@@ -156,6 +163,11 @@ def validate_config(config):
         if not isinstance(item, dict) or not item.get("name"):
             raise ValueError("Cada modelo del catálogo necesita name.")
         for key in ("min_ram_gb", "min_vram_gb", "min_disk_free_gb"):
-            if key in item and float(item[key]) < 0:
-                raise ValueError(f"{key} no puede ser negativo.")
+            if key in item:
+                try:
+                    num_val = float(item[key])
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"{key} en modelo {item.get('name')} debe ser numérico.") from exc
+                if num_val < 0:
+                    raise ValueError(f"{key} no puede ser negativo.")
     return config
