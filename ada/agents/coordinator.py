@@ -53,13 +53,17 @@ class MultiAgentCoordinator:
                 except Exception as exc:
                     failures[name] = str(exc)
                     results[name] = {"available": False, "error": str(exc)}
-        review = self.registry.get("photo_reviewer").run(
-            {
-                "technical": results.get("technical_photo"),
-                "semantic": results.get("context_photo"),
-            }
-        )
-        results["photo_reviewer"] = review.data
+        try:
+            review = self.registry.get("photo_reviewer").run(
+                {
+                    "technical": results.get("technical_photo"),
+                    "semantic": results.get("context_photo"),
+                }
+            )
+            results["photo_reviewer"] = review.data
+        except Exception as exc:
+            failures["photo_reviewer"] = str(exc)
+            results["photo_reviewer"] = {"available": False, "error": str(exc), "recommendation": "evaluación manual requerida"}
         technical = results.get("technical_photo", {})
         semantic = results.get("context_photo", {})
         context = semantic.get("context") or {
