@@ -8,6 +8,7 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 import time
 import threading
@@ -58,41 +59,40 @@ class ModelManager:
     }
 
     def __init__(self, config=None):
-        self.config = config or {}
-        self.ollama_url = os.environ.get(
-            "ADA_OLLAMA_URL", self.config.get("ollama_url", "http://127.0.0.1:11434")
-        ).rstrip("/")
-        self.openai_key = os.environ.get("OPENAI_API_KEY")
-        self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-        self.local_runtime = LocalModelRuntime(self.config)
-        self.provider = self.config.get(
-            "engine_provider",
-            self.config.get("local_runtime", {}).get("provider", "ollama"),
-        )
-        self.models = self.config.get("models", {})
         self._gpt4all = None
         self.metrics = Metrics("models")
         self._model_stats = {}
         self._model_stats_lock = threading.RLock()
         self._installed_cache = (0.0, [])
+        self._apply_config(config or {})
+        self.local_runtime = LocalModelRuntime(self.config)
 
-    def reload(self, config=None):
-        """Reload model policy at runtime without recreating the agent."""
-        if config is not None:
-            self.config = dict(config)
+    def _apply_config(self, config):
+        self.config = dict(config)
         self.ollama_url = os.environ.get(
             "ADA_OLLAMA_URL", self.config.get("ollama_url", "http://127.0.0.1:11434")
         ).rstrip("/")
         self.openai_key = os.environ.get("OPENAI_API_KEY")
         self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        self.gemini_key = os.environ.get("GEMINI_API_KEY")
+        self.groq_key = os.environ.get("GROQ_API_KEY")
+        self._load_remote_keys()
         self.provider = self.config.get(
             "engine_provider",
             self.config.get("local_runtime", {}).get("provider", "ollama"),
         )
         self.models = self.config.get("models", {})
+
+    def reload(self, config=None):
+        """Reload model policy at runtime without recreating the agent."""
+        if config is not None:
+            self._apply_config(config)
+        else:
+            self._apply_config(self.config)
         self.local_runtime.reload(self.config)
-        self._gpt4all = None
-        self._installed_cache = (0.0, [])
+        with self._model_stats_lock:
+            self._gpt4all = None
+            self._installed_cache = (0.0, [])
 
     def available(self):
         local_available = self._ollama_available() if self.provider == "ollama" else False
@@ -103,8 +103,21 @@ class ModelManager:
             "ollama": local_available,
             "openai": bool(OpenAI and self.openai_key),
             "anthropic": bool(Anthropic and self.anthropic_key),
+            "gemini": bool(self.gemini_key),
+            "groq": bool(self.groq_key),
             "gpt4all": self._gpt4all_available(),
         }
+
+    def _load_remote_keys(self):
+        """Load optional provider keys from the encrypted vault, never config."""
+        try:
+            from ada.infrastructure.credentials import SecureVault
+            vault = SecureVault()
+            self.openai_key = self.openai_key or vault.get("openai_api_key")
+            self.gemini_key = self.gemini_key or vault.get("gemini_api_key")
+            self.groq_key = self.groq_key or vault.get("groq_api_key")
+        except Exception:
+            pass
 
     def _model(self, role, legacy_key, default):
         policy = self.effective_policy()
@@ -484,19 +497,21 @@ class ModelManager:
             requested = "openai"
         elif requested == "claude":
             requested = "anthropic"
+        elif requested in {"grok", "groq"}:
+            requested = "groq"
         if requested in available and available[requested]:
             return requested
 
         complexity = max(1, min(10, int(task.get("complexity", 3))))
         privacy = task.get("privacy", self.config.get("privacy_default", "normal"))
-        if self.provider in available and available[self.provider]:
-            return self.provider
         if privacy == "high" and available.get(self.provider):
             return self.provider
         if complexity <= int(self.config.get("local_max_complexity", 5)) and available.get(self.provider):
             return self.provider
+        if self.provider in available and available[self.provider]:
+            return self.provider
         priority = [
-            {"local": "ollama", "chatgpt": "openai", "claude": "anthropic"}.get(item, item)
+            {"local": "ollama", "chatgpt": "openai", "claude": "anthropic", "grok": "groq"}.get(item, item)
             for item in self.config.get("engine_priority", ["openai", "anthropic", "ollama"])
         ]
         if complexity >= 7:
@@ -519,6 +534,10 @@ class ModelManager:
                 return self._call_ollama(prompt, **kwargs)
             if provider == "openai":
                 return self._call_openai(prompt, **kwargs)
+            if provider == "gemini":
+                return self._call_gemini(prompt, **kwargs)
+            if provider == "groq":
+                return self._call_groq(prompt, **kwargs)
             if provider == "anthropic":
                 return self._call_anthropic(prompt, **kwargs)
             if provider == "gpt4all":
@@ -534,6 +553,8 @@ class ModelManager:
             self.metrics.observe("provider.duration", duration, tags)
 
     def call_vision(self, provider, prompt, image_base64, **kwargs):
+        if provider == "gemini":
+            return self._call_gemini(prompt, image_base64=image_base64, **kwargs)
         if provider != "ollama":
             raise RuntimeError("El proveedor configurado no ofrece análisis visual compatible")
         return self._call_ollama_vision(prompt, image_base64, **kwargs)
@@ -619,6 +640,50 @@ class ModelManager:
         )
         return response.choices[0].message.content or ""
 
+    def _call_gemini(self, prompt, image_base64=None, **kwargs):
+        """Call Gemini generateContent without adding an SDK dependency."""
+        model = kwargs.get("gemini_model", self.config.get("gemini_model", "gemini-3.6-flash"))
+        parts = [{"text": prompt}]
+        if image_base64:
+            parts.append({"inline_data": {"mime_type": kwargs.get("image_mime_type", "image/jpeg"), "data": image_base64}})
+        payload = json.dumps({"contents": [{"role": "user", "parts": parts}], "generationConfig": {
+            "temperature": kwargs.get("temperature", 0.2), "maxOutputTokens": kwargs.get("max_tokens", 1024),
+        }}).encode("utf-8")
+        url = "https://generativelanguage.googleapis.com/v1beta/models/" + urllib.parse.quote(model, safe="") + ":generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.gemini_key or "",
+        }
+        request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError("Gemini devolvió un error HTTP %s: %s" % (exc.code, detail)) from exc
+        try:
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("Gemini no devolvió una respuesta de texto: %s" % data) from exc
+
+    def _call_groq(self, prompt, **kwargs):
+        """Call Groq's OpenAI-compatible chat completions endpoint."""
+        model = kwargs.get("groq_model", self.config.get("groq_model", "llama-3.3-70b-versatile"))
+        payload = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
+                              "temperature": kwargs.get("temperature", 0.2), "max_tokens": kwargs.get("max_tokens", 1024)}).encode("utf-8")
+        request = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions", data=payload,
+                                          headers={"Content-Type": "application/json", "Authorization": "Bearer " + (self.groq_key or "")}, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError("Groq devolvió un error HTTP %s: %s" % (exc.code, detail)) from exc
+        try:
+            return data["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("Groq no devolvió una respuesta válida: %s" % data) from exc
+
     def _call_anthropic(self, prompt, **kwargs):
         client = Anthropic(api_key=self.anthropic_key)
         response = client.messages.create(
@@ -632,15 +697,17 @@ class ModelManager:
         if GPT4All is None:
             raise RuntimeError("El proveedor configurado no está instalado")
         settings = self.config.get("gpt4all", {})
-        if self._gpt4all is None:
-            self._gpt4all = GPT4All(
-                settings["model_name"],
-                model_path=settings["model_path"],
-                allow_download=False,
-                device=settings.get("device", "cpu"),
-            )
-        with self._gpt4all.chat_session():
-            return self._gpt4all.generate(
+        with self._model_stats_lock:
+            if self._gpt4all is None:
+                self._gpt4all = GPT4All(
+                    settings["model_name"],
+                    model_path=settings["model_path"],
+                    allow_download=False,
+                    device=settings.get("device", "cpu"),
+                )
+            instance = self._gpt4all
+        with instance.chat_session():
+            return instance.generate(
                 prompt,
                 max_tokens=kwargs.get("max_tokens", 1024),
                 temp=kwargs.get("temperature", 0.2),
