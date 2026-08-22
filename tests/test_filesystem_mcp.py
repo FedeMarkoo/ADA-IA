@@ -42,6 +42,16 @@ class FilesystemMCPTests(unittest.TestCase):
         self.assertFalse(schema["properties"]["recursive"]["default"])
         self.assertEqual(schema["required"], ["path"])
 
+    def test_photo_summary_hides_technical_extensions(self):
+        self.assertEqual(
+            FilesystemHandlers.photo_summary({"xml": 300, "raw": 300, "jpg": 300}),
+            "300 fotos aceptadas y exportadas",
+        )
+        self.assertEqual(
+            FilesystemHandlers.photo_summary({"xml": 300, "raw": 300, "jpg": 0}),
+            "300 fotos aceptadas sin exportar",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
