@@ -40,7 +40,7 @@ class LocalModelRuntime:
     def __init__(self, config=None):
         self.config = config or {}
         self._process = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self.reload(self.config)
 
     def reload(self, config=None):
