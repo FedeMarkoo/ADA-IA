@@ -13,6 +13,7 @@ from ada.config import load_config as load_validated_config
 from ada.application.services.doctor import diagnose, pull_models, prepare_instagram_profile
 from ada.infrastructure.integrations.gmail import authenticate
 from ada.application.fine_tuning import prepare_dataset, train_lora, validate_dataset
+from ada.application.services.responses import text_from_result
 
 def _find_project_root() -> Path:
     p = Path(__file__).resolve().parent
@@ -32,6 +33,13 @@ def load_config():
     except (OSError, ValueError) as exc:
         logging.getLogger("ada.cli").warning("config_load_failed path=%s error=%s", cfg_path, exc)
         return {"name": "ADA", "max_threads": 4, "use_mps": False, "db_path": default_db}
+
+
+def _extract_path_from_args(parts):
+    for p in parts:
+        if p.startswith("/") or p.startswith("~") or p.startswith("."):
+            return os.path.expanduser(p)
+    return None
 
 
 def main():
@@ -136,28 +144,15 @@ def main():
         # simple heuristics: detect index or suggest commands in natural language
         lowered = text.lower()
         if lowered.startswith("index") or "index" in lowered or "scan" in lowered:
-            # try to extract a path
-            parts = text.split()
-            path = None
-            for p in parts:
-                if p.startswith("/") or p.startswith("~") or p.startswith("."):
-                    path = os.path.expanduser(p)
-                    break
+            path = _extract_path_from_args(text.split())
             if path:
                 print("Heuristic: calling index on", path)
-                mem = Memory(cfg.get("db_path", default_db))
                 index_folder(path, mem)
                 return
         if "suggest" in lowered or "organize" in lowered or "orden" in lowered:
-            parts = text.split()
-            path = None
-            for p in parts:
-                if p.startswith("/") or p.startswith("~") or p.startswith("."):
-                    path = os.path.expanduser(p)
-                    break
+            path = _extract_path_from_args(text.split())
             if path:
                 print("Heuristic: calling suggest on", path)
-                mem = Memory(cfg.get("db_path", default_db))
                 suggest_organization(path, mem)
                 return
         # Otherwise, use the agent parser to interpret the prompt.
@@ -222,7 +217,8 @@ def main():
         # fallback: send as general prompt to agent
         task = {"type": None, "prompt": text, "complexity": parsed.get("complexity", 5)}
         res = agent.decide_and_run(task)
-        print(res)
+        output = res.get("result", res) if isinstance(res, dict) else res
+        print(text_from_result(output))
     elif args.cmd == "backup":
         print(mem.backup_to(args.path))
     else:
