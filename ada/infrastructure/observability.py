@@ -1,6 +1,4 @@
-"""Small in-process metrics collector with no external service dependency."""
-
-from collections import defaultdict
+from collections import defaultdict, deque
 import threading
 import time
 
@@ -9,7 +7,7 @@ class Metrics:
     def __init__(self, namespace="ada"):
         self.namespace = namespace
         self._counters = defaultdict(float)
-        self._timings = defaultdict(list)
+        self._timings = defaultdict(lambda: deque(maxlen=1000))
         self._lock = threading.RLock()
 
     @staticmethod
@@ -23,9 +21,7 @@ class Metrics:
 
     def observe(self, name, seconds, tags=None):
         with self._lock:
-            values = self._timings[self._key(name, tags)]
-            values.append(round(float(seconds), 6))
-            del values[:-1000]
+            self._timings[self._key(name, tags)].append(round(float(seconds), 6))
 
     def timer(self, name, tags=None):
         metrics = self
