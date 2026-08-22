@@ -1,19 +1,21 @@
-"""Photo-specialist agents.
-
-They deliberately reuse the existing photo analysis primitives instead of
-duplicating RAW decoding, model access, or scoring logic.
-"""
-
 from pathlib import Path
+import logging
 
-from mcps.photography.analyzer import (
-    _folder_context,
-    technical_analysis,
-)
-from mcps.photography.vision import VisionAnalyzer
+try:
+    from mcps.photography.analyzer import (
+        _folder_context,
+        technical_analysis,
+    )
+    from mcps.photography.vision import VisionAnalyzer
+except ImportError:
+    _folder_context = None
+    technical_analysis = None
+    VisionAnalyzer = None
+
 from ada.domain.photography.selection import evaluate_selection
-
 from .base import AgentResult, SpecialistAgent
+
+logger = logging.getLogger("ada.photo_agents")
 
 
 class TechnicalPhotoAgent(SpecialistAgent):
@@ -21,6 +23,8 @@ class TechnicalPhotoAgent(SpecialistAgent):
 
     def run(self, task):
         path = Path(task["path"])
+        if technical_analysis is None:
+            return AgentResult(self.name, False, {"available": False, "error": "numpy_or_photo_deps_missing"})
         return AgentResult(self.name, True, technical_analysis(path))
 
 
@@ -29,6 +33,8 @@ class ContextPhotoAgent(SpecialistAgent):
 
     def run(self, task):
         path = Path(task["path"])
+        if _folder_context is None or VisionAnalyzer is None:
+            return AgentResult(self.name, False, {"available": False, "error": "numpy_or_photo_deps_missing"})
         context = _folder_context(path, task.get("folder"))
         if not task.get("vision", True):
             return AgentResult(self.name, True, {"available": False, "reason": "vision_disabled", "context": context})
