@@ -43,13 +43,15 @@ def is_capability_discussion(text):
     """
     value = str(text or "").lower()
     capability_terms = re.search(
-        r"\b(archivos?|carpetas?|directorios?|fotos?|im[aá]genes?|lightroom|agente\s+local)\b",
+        r"\b(archivos?|carpetas?|directorios?|fotos?|im[aá]genes?|lightroom|agente\s+local|"
+        r"permisos?|acceso|timeout|modo|mcp|m[eé]tricas?|calendar|calendario|gmail|telegram)\b",
         value,
     )
     discussion_markers = re.search(
         r"\b(ventajas?|desventajas?|riesgos?|pros?|contras?|enfoques?|alternativas?|"
         r"compar(?:á|a|ar|ame|emos)|explic(?:á|a|ar|ame)|qu[eé]\s+conviene|"
-        r"recomendaci[oó]n|concepto|teor[ií]a)\b",
+        r"recomendaci[oó]n|concepto|teor[ií]a|significa|funciona|general|"
+        r"sin\s+(?:acceder|cambiar|ejecutar)|diferencia)\b",
         value,
     )
     return bool(capability_terms and discussion_markers)

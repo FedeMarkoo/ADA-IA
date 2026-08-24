@@ -19,6 +19,34 @@ class ChatPathRegressionTests(unittest.TestCase):
         text = "Necesito una explicación general de cómo funcionan los permisos de una carpeta, sin acceder ni cambiar ningún archivo."
         self.assertIsNone(WebChatService._filesystem_intent(text))
 
+    def test_general_permission_explanation_reaches_chat_router(self):
+        class FakeAgent:
+            lang = "es"
+
+            def parse_prompt(self, text, history=None):
+                return {"action": "ask", "complexity": 3}
+
+            def decide_and_run(self, task):
+                return {"result": "Los permisos controlan leer, escribir y ejecutar.", "model": "test"}
+
+        state = SimpleNamespace(conversation=[], pending_action=None, pending_path_action=None, current_path=None)
+        response, status = WebChatService(FakeAgent(), {}).handle(
+            "Necesito una explicación general de cómo funcionan los permisos de una carpeta, sin acceder ni cambiar ningún archivo.",
+            state,
+            "es",
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("permisos", response["reply"])
+
+    def test_version_question_is_deterministic(self):
+        class FakeAgent:
+            lang = "es"
+
+        state = SimpleNamespace(conversation=[], pending_action=None)
+        response, status = WebChatService(FakeAgent(), {}).handle("¿Qué versión de ADA está ejecutándose?", state, "es")
+        self.assertEqual(status, 200)
+        self.assertRegex(response["reply"], r"ADA versión \d+\.\d+\.\d+")
+
     def test_conceptual_photo_comparison_does_not_resolve_pictures_alias(self):
         calls = []
 

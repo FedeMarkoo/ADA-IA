@@ -327,12 +327,24 @@ class WebChatService:
             reply = self._system_info()
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · sistema"}, 200
-        if len(text.split()) <= 3 and re.fullmatch(
-            r"(?:hola|hi|hello|buenas|buenos días|buenos dias|hey)", text, re.I
+        if len(text.split()) <= 4 and re.fullmatch(
+            r"(?:hola|hi|hello|buenas|buenos días|buenos dias|buen día|buen dia|hey)(?:\s+ada)?", text, re.I
         ):
             reply = tr("greeting", lang)
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · respuesta rápida"}, 200
+
+        if re.search(r"\b(?:qu[eé]\s+versi[oó]n|versi[oó]n)\b", text, re.I) and re.search(
+            r"\b(?:ada|ejecut[aá]ndose|corriendo|actual)\b", text, re.I
+        ):
+            try:
+                import importlib.metadata
+                pkg_ver = importlib.metadata.version("ada-local")
+            except Exception:
+                pkg_ver = "0.1.0"
+            reply = f"ADA versión {pkg_ver}"
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · sistema"}, 200
 
         if re.search(r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes|herramientas tenes|MCPs? tenes|capacidades tenes)\b", text, re.I) or \
            re.search(r"\b(en que|en qué)\s+(me podes|me puedes|ayudas|me ayudas)\b", text, re.I) or \
