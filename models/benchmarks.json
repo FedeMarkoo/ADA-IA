@@ -400,6 +400,30 @@
       "duration_seconds": 0.001,
       "cpu_percent": 50.0,
       "ram_used_gb": 14.04
+    },
+    {
+      "model": "qwen2.5:7b",
+      "prompt_key": "quick",
+      "prompt_title": "Prompt Personalizado",
+      "timestamp": "2026-08-24T20:06:27Z",
+      "tokens_per_second": 40.0,
+      "ttft_ms": null,
+      "total_tokens": 20,
+      "duration_seconds": 0.0,
+      "cpu_percent": 0.0,
+      "ram_used_gb": 13.09
+    },
+    {
+      "model": "llama3:8b",
+      "prompt_key": "quick",
+      "prompt_title": "Respuesta Rápida",
+      "timestamp": "2026-08-24T20:06:27Z",
+      "tokens_per_second": 37.5,
+      "ttft_ms": 150.0,
+      "total_tokens": 45,
+      "duration_seconds": 0.0,
+      "cpu_percent": 0.0,
+      "ram_used_gb": 13.06
     }
   ]
 }
