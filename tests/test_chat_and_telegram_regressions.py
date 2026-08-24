@@ -109,6 +109,20 @@ class ChatPathRegressionTests(unittest.TestCase):
         self.assertIn("autorizar Google OAuth", response["reply"])
         self.assertNotIn("Personal", response["reply"])
 
+    def test_google_calendar_rest_payload_lists_real_calendar_names(self):
+        from ada.application.services.responses import text_from_result
+
+        reply = text_from_result({
+            "ok": True,
+            "result": {
+                "fallback": "google-rest",
+                "kind": "calendar#calendarList",
+                "items": [{"summary": "Eventos"}, {"summary": "Compartido"}],
+            },
+        })
+        self.assertIn("Eventos", reply)
+        self.assertIn("Compartido", reply)
+
     def test_mcp_router_failure_returns_without_starting_chat_model(self):
         class FakeAgent:
             lang = "es"

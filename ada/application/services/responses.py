@@ -71,6 +71,16 @@ def text_from_result(result):
             return _filesystem_summary(result, "dirs", "carpetas")
         if result.get("fallback") == "google-rest" and "files" in result:
             return _drive_summary(result)
+        if result.get("fallback") == "google-rest" and result.get("kind") == "calendar#calendarList":
+            calendars = result.get("items") or []
+            if not calendars:
+                return "No encontré calendarios en Google Calendar."
+            names = [
+                str(item.get("summary") or item.get("id") or item)
+                if isinstance(item, dict) else str(item)
+                for item in calendars
+            ]
+            return "Calendarios encontrados:\n" + "\n".join(f"• {name}" for name in names)
         if result.get("action") in {"list_files", "search"} and "files" in result:
             label = "archivos"
             if result.get("action") == "search":

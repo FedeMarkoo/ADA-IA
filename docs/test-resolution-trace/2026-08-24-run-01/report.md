@@ -1446,3 +1446,11 @@ Correcciones aplicadas:
 - [x] Corte del caso ante timeout del router para continuar la corrida.
 - [x] Trazabilidad sin duplicar servidor/herramienta.
 - [x] Normalización de calendarios y eventos devueltos por MCP.
+
+## Verificación con token actualizado
+
+Run: `healthcheck_1787605579_e00bd702` — 2026-08-24 21:06:19
+Estado: `passed` — score del juez: `1.0`.
+Respuesta: `Eventos`, `Compartido`, `Eventos - Fotografia` y `Santander`.
+MCP: `google-calendar / google_calendar.list_calendars`, ejecutado correctamente.
+Conclusión: el token actualizado funciona y el caso quedó corregido de punta a punta.

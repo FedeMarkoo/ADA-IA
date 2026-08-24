@@ -1045,7 +1045,13 @@ def _execute_healthcheck_batch(runtime, prompts, run_id):
             cfg = runtime.get("cfg") or {}
             policy = cfg.get("model_policy", {}).get("reasoning", {})
             judge_model = cfg.get("healthcheck_judge_model") or policy.get("preferred") or cfg.get("models", {}).get("chat", "llama3.2:3b")
-            judge = llm_judge(item, reply, cfg.get("ollama_url", "http://127.0.0.1:11434"), judge_model)
+            judge = llm_judge(
+                item,
+                reply,
+                cfg.get("ollama_url", "http://127.0.0.1:11434"),
+                judge_model,
+                mcp_evidence=[mcp for mcp in executed_mcps if mcp.get("ok") is True],
+            )
             evaluation["judge"] = judge
             evaluation["passed"] = bool(judge.get("passed"))
             evaluation["score"] = judge.get("score", 0.0)
@@ -1060,6 +1066,11 @@ def _execute_healthcheck_batch(runtime, prompts, run_id):
             if key not in seen_mcps:
                 seen_mcps.add(key)
                 unique_mcps.append(mcp)
+            else:
+                existing = next(item for item in unique_mcps if (item.get("server"), item.get("tool")) == key)
+                for field, value in mcp.items():
+                    if value is not None:
+                        existing[field] = value
         current_batch = store.batch(run_id)
         if not current_batch or current_batch["status"] != "running":
             return
