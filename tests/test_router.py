@@ -92,6 +92,20 @@ class IntentRouterTests(unittest.TestCase):
         self.assertEqual(result["action"], "mcp_call")
         self.assertEqual(result["tool"], "google_calendar.list_calendars")
 
+    def test_external_router_timeout_does_not_fall_through_to_chat_model(self):
+        class TimeoutModel(FakeModelManager):
+            def __init__(self):
+                super().__init__(response="unused")
+
+            def call(self, provider, prompt, **kwargs):
+                raise TimeoutError("router timeout")
+
+        result = IntentRouter(
+            TimeoutModel(), memory=self.memory, mcp_manager=FakeMCPManager()
+        ).route("¿Cuál es mi próximo evento de Google Calendar?")
+        self.assertEqual(result["action"], "ask")
+        self.assertEqual(result["routing_error"], "mcp_router_failed")
+
     def test_photo_path_can_be_followed_by_more_text(self):
         from ada.application.agent import Agent
 

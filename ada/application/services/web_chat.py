@@ -459,6 +459,12 @@ class WebChatService:
                 parsed = self.agent.parse_prompt(text)
             self._emit(progress, "router_model_finished", action=parsed.get("action"), confidence=parsed.get("confidence"))
 
+        if parsed.get("routing_error") == "mcp_router_failed":
+            reply = "No pude seleccionar una herramienta MCP para esta consulta, así que no consulté datos externos."
+            self._emit(progress, "router_failed", error="mcp_router_failed")
+            self._remember(state, text, reply)
+            return {"reply": reply, "error": "mcp_router_failed", "model": "ADA · router"}, 503
+
         if folder["status"] == "ambiguous" and re.search(r"\b(fotos?|archivos?|carpetas?|documentos?|ruta)\b", lowered):
             choices = "\n".join(f"{i + 1}. {path}" for i, path in enumerate(folder["candidates"]))
             reply = f"Encontré varias carpetas posibles:\n{choices}\nDecime cuál querés usar."

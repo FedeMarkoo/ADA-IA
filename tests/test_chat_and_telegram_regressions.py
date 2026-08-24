@@ -109,6 +109,23 @@ class ChatPathRegressionTests(unittest.TestCase):
         self.assertIn("autorizar Google OAuth", response["reply"])
         self.assertNotIn("Personal", response["reply"])
 
+    def test_mcp_router_failure_returns_without_starting_chat_model(self):
+        class FakeAgent:
+            lang = "es"
+
+            def parse_prompt(self, text, history=None):
+                return {"action": "ask", "routing_error": "mcp_router_failed"}
+
+            def decide_and_run(self, task):
+                raise AssertionError("no debe iniciar una segunda inferencia")
+
+        state = SimpleNamespace(conversation=[], pending_action=None)
+        response, status = WebChatService(FakeAgent(), {}).handle(
+            "¿Cuál es mi próximo evento de Google Calendar?", state, "es"
+        )
+        self.assertEqual(status, 503)
+        self.assertIn("no consulté datos externos", response["reply"])
+
     def test_conceptual_photo_comparison_does_not_resolve_pictures_alias(self):
         calls = []
 

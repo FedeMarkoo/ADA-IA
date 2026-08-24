@@ -173,6 +173,13 @@ class IntentRouter:
             return normalized
         except Exception as exc:
             logger.warning("router failed: %s", exc)
+            if external_hint and self.mcp_manager:
+                return {
+                    "action": "ask",
+                    "routing_error": "mcp_router_failed",
+                    "complexity": 4,
+                    "confidence": 0.0,
+                }
             return fallback
 
     def _verify_food_mutation(self, provider, text, intent):
