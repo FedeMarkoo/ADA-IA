@@ -33,6 +33,10 @@ El servidor web de ADA (`ada/interfaces/web/server.py`) expone una API REST y st
 - `GET /api/models/catalog`: Catálogo de modelos disponibles y recomendados.
 - `GET /api/models/policy`: Mapeo actual de roles (`general`, `coding`, `vision`, `router`).
 - `POST /api/models/benchmark`: Ejecuta un benchmark de tokens por segundo sobre un modelo.
+- `GET /api/healthcheck/prompts`: Devuelve el checklist funcional de capacidades de ADA desde SQLite.
+- `POST /api/healthcheck/prompts`: Agrega un caso de solo lectura a una categoría existente o nueva, sin editar código.
+- `POST /api/healthcheck/run`: Ejecuta los prompts seleccionados pasando por ADA y sus herramientas en modo lectura, evalúa cada respuesta con una IA juez y guarda el resultado en SQLite.
+- `GET /api/healthcheck/history`: Consulta las ejecuciones anteriores del checklist, incluyendo respuesta, estado, tiempo, modelo, MCPs ejecutados y trace de fases.
 
 ### Telegram Bot
 - `GET /api/telegram/status`: Estado del servicio (online, offline, token enmascarado, inbox).

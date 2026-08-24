@@ -67,6 +67,21 @@ rutas locales; `config.json` no se versiona.
 
 La interfaz queda disponible en `http://127.0.0.1:5005/`.
 
+Para abrir ADA como una aplicación independiente, sin iniciar Chrome:
+
+```bash
+ada desktop
+```
+
+En Linux, la ventana usa el WebKitGTK del sistema y levanta la misma interfaz
+web/API local. Si faltan los componentes gráficos, instalalos con:
+
+```bash
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1
+```
+
+La web sigue disponible en `http://127.0.0.1:5005/` cuando usás `ada serve`.
+
 Para usar el servidor ASGI desde el CLI: `ada serve --asgi`.
 También podés definir `web_framework: "asgi"` en la configuración; Flask queda
 disponible como fallback con `ADA_WEB_FRAMEWORK=flask`.

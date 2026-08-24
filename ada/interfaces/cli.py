@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import os
 import json
+import sys
 
 from ada.infrastructure.persistence.sqlite import Memory
 from ada.application.indexer import index_folder, suggest_organization
@@ -53,6 +54,7 @@ def main():
     p_serve = sub.add_parser("serve", help="Start the web UI and ADA agent in one process")
     p_serve.add_argument("-debug", "--debug", action="store_true", help="Enable detailed router and model logs")
     p_serve.add_argument("--asgi", action="store_true", help="Use the FastAPI/ASGI interface")
+    sub.add_parser("desktop", help="Start ADA in a native window using WebKitGTK")
     p_prompt = sub.add_parser("prompt")
     p_prompt.add_argument("text", help="Natural language prompt for ADA")
     p_backup = sub.add_parser("backup", help="Create a consistent backup of ADA memory")
@@ -128,6 +130,18 @@ def main():
             from ada.interfaces.web.server import main as serve_web
 
             serve_web()
+        return
+    if args.cmd == "desktop":
+        logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(name)s: %(message)s")
+        desktop_runner = PROJECT_ROOT / "tools" / "start_ada_desktop.sh"
+        # Debian/Ubuntu expose GTK/WebKitGTK to the system Python, while ADA's
+        # dependencies are installed in the virtualenv. Reuse the desktop
+        # bridge when running the CLI from that virtualenv.
+        if desktop_runner.exists() and sys.prefix != "/usr":
+            os.execv(str(desktop_runner), [str(desktop_runner)])
+        from ada.interfaces.desktop import run as run_desktop
+
+        run_desktop()
         return
     default_db = str(Path.home() / "Desktop" / "ADA_Data" / "memory.db")
     mem = Memory(cfg.get("db_path", default_db))

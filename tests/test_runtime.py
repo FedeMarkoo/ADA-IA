@@ -42,6 +42,20 @@ class RuntimeTests(unittest.TestCase):
         runtime.reload({"ollama_url": "http://127.0.0.1:2", "local_runtime": {"auto_start": False}})
         self.assertEqual(runtime.endpoint, "http://127.0.0.1:2")
 
+    def test_runtime_starts_ollama_without_privileged_systemctl(self):
+        runtime = LocalModelRuntime({"ollama_url": "http://127.0.0.1:1"})
+        runtime.binary = "/usr/bin/ollama"
+        process = type("Process", (), {"poll": lambda self: None})()
+        with patch.object(runtime, "_healthy", side_effect=[False, True]), patch(
+            "ada.infrastructure.runtime.ollama.subprocess.Popen", return_value=process
+        ) as popen, patch("ada.infrastructure.runtime.ollama.subprocess.run") as systemctl:
+            status = runtime.start()
+
+        self.assertTrue(status.available)
+        self.assertEqual(status.reason, "started_by_ada")
+        popen.assert_called_once()
+        systemctl.assert_not_called()
+
     def test_model_manager_exposes_local_capability_and_runtime(self):
         manager = ModelManager(
             {

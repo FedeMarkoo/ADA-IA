@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 from dataclasses import dataclass, field
 from ada.infrastructure.runtime.duplicates import detect_duplicates
+from ada.infrastructure.observability_timeseries import metrics_scraper_status
 
 logger = logging.getLogger("ada.doctor")
 
@@ -74,6 +75,10 @@ class HealthDoctor:
         # or port conflicts.
         items.append(self._check_duplicates())
 
+        # 9. External telemetry must be fresh; historical rows do not mean
+        # the scraper is currently operating.
+        items.append(self._check_metrics_scraper())
+
         # Calculate Overall Health Score
         total = len(items)
         ok_count = sum(1 for i in items if i.status == "ok")
@@ -115,6 +120,41 @@ class HealthDoctor:
             id="duplicate_runtimes", name="Instancias duplicadas", category="runtime",
             status="error", message=f"Hay más de una instancia activa ({labels})",
             details=report, can_auto_fix=False,
+        )
+
+    def _check_metrics_scraper(self) -> HealthCheckItem:
+        scraper = metrics_scraper_status()
+        if scraper.get("ok"):
+            return HealthCheckItem(
+                id="metrics_scraper",
+                name="Scraper de métricas",
+                category="observability",
+                status="ok",
+                message=f"Telemetría externa actualizada hace {scraper.get('age_seconds', 0)} s",
+                details=scraper,
+            )
+        if scraper.get("status") == "error":
+            return HealthCheckItem(
+                id="metrics_scraper",
+                name="Scraper de métricas",
+                category="observability",
+                status="error",
+                message=scraper.get("message", "No se pudo validar la telemetría"),
+                details=scraper,
+                can_auto_fix=True,
+                fix_action_id="start_metrics_scraper",
+                fix_label="Iniciar Scraper de Métricas",
+            )
+        return HealthCheckItem(
+            id="metrics_scraper",
+            name="Scraper de métricas",
+            category="observability",
+            status="warning",
+            message=scraper.get("message", "No hay muestras recientes del scraper"),
+            details=scraper,
+            can_auto_fix=True,
+            fix_action_id="start_metrics_scraper",
+            fix_label="Iniciar Scraper de Métricas",
         )
 
     def _check_ollama(self) -> HealthCheckItem:
@@ -162,10 +202,24 @@ class HealthDoctor:
                 name="Modelos LLM Instalados",
                 category="models",
                 status="warning",
-                message="No se puede verificar modelos sin Ollama activo",
-                can_auto_fix=True,
-                fix_action_id="pull_default_model",
-                fix_label="Descargar Llama 3.2",
+                message="No se puede verificar modelos: cliente no inicializado",
+                can_auto_fix=False,
+                fix_action_id=None,
+                fix_label=None,
+            )
+        health = client.health()
+        is_online = health.get("online") or health.get("status") == "healthy" or health.get("available") or health.get("status_code") == 200
+        if not is_online:
+            return HealthCheckItem(
+                id="models_installed",
+                name="Modelos LLM Instalados",
+                category="models",
+                status="ok",
+                message="Verificación en espera (el motor Ollama se encuentra detenido)",
+                can_auto_fix=False,
+                fix_action_id=None,
+                fix_label=None,
+                details={"ollama_online": False},
             )
         models = client.list_models()
         if len(models) == 0:
@@ -399,6 +453,10 @@ class HealthDoctor:
         elif action_id == "restart_telegram":
             from ada.interfaces.web.server import restart_telegram_service
             return restart_telegram_service()
+
+        elif action_id in {"start_metrics_scraper", "restart_metrics_scraper"}:
+            from ada.interfaces.web.server import start_metrics_scraper_service
+            return start_metrics_scraper_service()
 
         return {"ok": False, "error": f"Acción desconocida: {action_id}"}
 
