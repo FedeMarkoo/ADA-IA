@@ -50,7 +50,7 @@ def text_from_result(result):
         # MCP transports wrap the actual payload in {ok, result}.  Unwrap
         # that envelope before formatting so chat never exposes a transport
         # object instead of the data returned by the selected tool.
-        if "result" in result and set(result).issubset({"ok", "result"}):
+        if "ok" in result and "result" in result and set(result).issubset({"ok", "result"}):
             if result.get("ok") is False:
                 return text_from_result({"error": result.get("error", "La herramienta MCP falló")})
             return text_from_result(result.get("result"))
