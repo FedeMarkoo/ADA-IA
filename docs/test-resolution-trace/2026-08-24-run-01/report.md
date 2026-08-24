@@ -1467,6 +1467,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 | 2026-08-24 | `calendar_search_event` | `passed` | Preservación del término entre comillas, fallback REST para búsqueda y respuesta específica sin coincidencias. |
 | 2026-08-24 | `calendar_month_search` | `passed` | Conversión de `date` a rango mensual; dejó de devolver eventos históricos fuera de octubre 2026. |
 | 2026-08-24 | `calendar_range_confirm` | `passed` | El router dejó de elegir `get_event` sin ID y seleccionó `list_events` para una consulta del próximo evento. |
+| 2026-08-24 | `mail_report` | `passed` | `healthcheck_1787609020_e49c0c0b`: el router seleccionó `gmail.read_inbox`; se reemplazó el adaptador simulado por Gmail API OAuth real, leyendo IDs y metadatos de mensajes. La respuesta informó 10 asuntos, remitentes y fechas reales. |
 
 ### Checklist de iteración
 
@@ -1477,9 +1478,18 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - [x] Rerun `calendar_search_event`.
 - [x] Rerun `calendar_month_search`.
 - [x] Rerun `calendar_range_confirm`.
+- [x] Rerun `mail_report` y validar contenido real, no solo ejecución MCP.
+- [x] Corregir `gmail.read_inbox` para eliminar la respuesta simulada.
 - [ ] Rerun `calendar_upcoming_events`.
 - [ ] Rerun `calendar_search_event`.
 - [ ] Rerun `calendar_month_search`.
 - [ ] Rerun `calendar_range_confirm`.
 - [ ] Rerun el resto de los casos fallidos de la corrida de 52.
 - [ ] Dejar bloqueos externos o correcciones de alta complejidad documentados, sin detener la iteración.
+
+### Changelog adicional — Gmail
+
+- El primer rerun (`healthcheck_1787608569_621d95e9`) falló porque `mails` no activaba la detección de pedidos externos y el fallback local terminó en `analyze_photo`, sin MCP.
+- El segundo rerun (`healthcheck_1787608691_648b3b48`) ya ejecutó `gmail.read_inbox`, pero el adaptador todavía devolvía una respuesta simulada/insuficiente.
+- Se amplió la detección a `mail`/`mails`, se mantuvo el enrutamiento IA hacia el catálogo MCP y se implementó `gmail.read_inbox` con Gmail API autenticada, listado acotado y metadatos reales.
+- El tercer rerun (`healthcheck_1787609020_e49c0c0b`) pasó con score `1.0`. No se inventaron correos; el resultado contiene los mensajes devueltos por Gmail.

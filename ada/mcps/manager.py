@@ -605,10 +605,28 @@ class MCPManager:
                         return {"ok": not (isinstance(res, dict) and not res.get("ok", True)), "result": res}
 
                 elif name == "gmail.read_inbox":
-                    if agent:
-                        res = agent.run_skill("gmail", parameters)
-                        return {"ok": not bool(res.get("error")), "result": res}
-                    return {"ok": True, "result": {"inbox": [], "note": "Google Gmail MCP endpoint simulado (SSE)"}}
+                    # Keep inbox reads grounded in the same OAuth-backed Gmail
+                    # API used by the other read-only Gmail MCP tools.  The
+                    # legacy local skill returned a simulated empty inbox.
+                    parameters.setdefault("pageSize", 10)
+                    parameters["pageSize"] = min(int(parameters.get("pageSize") or 10), 20)
+                    listed = self._execute_google_rest("gmail", parameters, "search_threads")
+                    if not listed.get("ok"):
+                        return listed
+                    messages = []
+                    for item in (listed.get("result") or {}).get("messages") or []:
+                        message_id = item.get("id") if isinstance(item, dict) else item
+                        if not message_id:
+                            continue
+                        detail = self._execute_google_rest(
+                            "gmail", {"messageId": message_id}, "get_message"
+                        )
+                        if detail.get("ok"):
+                            messages.append(detail.get("result") or {})
+                    result = listed.get("result") or {}
+                    result["inbox"] = messages
+                    result["count"] = len(messages)
+                    return {"ok": True, "result": result}
 
                 return {"ok": True, "result": f"Ejecución de {name} completada con éxito"}
             except Exception as exc:
@@ -699,7 +717,7 @@ class MCPManager:
                 fresh_token = MCPManager._google_access_token(force_refresh=True)
                 if fresh_token and fresh_token != access_token:
                     return MCPManager._execute_google_rest(service, parameters, operation)
-            return {"ok": False, "error": f"Google Calendar API HTTP {exc.code}"}
+            return {"ok": False, "error": f"Google {service.title()} API HTTP {exc.code}"}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 

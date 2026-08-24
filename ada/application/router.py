@@ -133,7 +133,7 @@ class IntentRouter:
             text.lower(),
         ))
         external_hint = bool(self.mcp_manager and re.search(
-            r"\b(calendar|calendario|evento|gmail|correo|mail|drive|internet|fuente|d[oó]lar)\b", text.lower()
+            r"\b(calendar|calendario|evento|gmail|correo|mails?|drive|internet|fuente|d[oó]lar)\b", text.lower()
         ))
         if fallback.get("action") == "ask" and fallback.get("confidence") == 0.0 and not contextual_reference and not external_hint:
             return fallback
@@ -144,6 +144,13 @@ class IntentRouter:
             }
         )
         if not provider:
+            if external_hint and self.mcp_manager:
+                return {
+                    "action": "ask",
+                    "routing_error": "mcp_router_unavailable",
+                    "complexity": 4,
+                    "confidence": 0.0,
+                }
             return fallback
         prompt = self._mcp_prompt(text) if external_hint else self._prompt(text, history)
         logger.debug("router request=%r history_chars=%d", text, len(history))
@@ -159,6 +166,13 @@ class IntentRouter:
             )
             logger.info("router raw=%s", str(raw)[:1000])
             normalized = self._normalize(self._decode(raw), fallback)
+            if external_hint and normalized.get("action") != "mcp_call":
+                return {
+                    "action": "ask",
+                    "routing_error": "external_request_not_grounded",
+                    "complexity": 4,
+                    "confidence": 0.0,
+                }
             if normalized.get("action") == "food" and normalized.get("food_action") in FOOD_MUTATIONS:
                 verified = self._verify_food_mutation(provider, text, normalized)
                 if not verified:

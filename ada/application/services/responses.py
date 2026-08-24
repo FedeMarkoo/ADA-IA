@@ -99,6 +99,23 @@ def text_from_result(result):
                     start = start.get("dateTime") or start.get("date")
                 lines.append(f"• {title} — {start or 'fecha no informada'}")
             return "\n".join(lines)
+        if isinstance(result.get("inbox"), list):
+            messages = result["inbox"]
+            if not messages:
+                return "No encontré correos recientes en Gmail."
+            lines = [f"Encontré {len(messages)} correos recientes en Gmail:", ""]
+            for message in messages[:20]:
+                headers = {
+                    str(item.get("name", "")).lower(): item.get("value", "")
+                    for item in (message.get("payload", {}).get("headers", []) if isinstance(message, dict) else [])
+                }
+                subject = headers.get("subject") or "(sin asunto)"
+                sender = headers.get("from") or "remitente no informado"
+                date = headers.get("date") or message.get("internalDate") or "fecha no informada"
+                lines.append(f"• {subject} — {sender} — {date}")
+            if len(messages) > 20:
+                lines.append(f"\nHay {len(messages) - 20} más.")
+            return "\n".join(lines)
         if result.get("action") in {"list_files", "search"} and "files" in result:
             label = "archivos"
             if result.get("action") == "search":
