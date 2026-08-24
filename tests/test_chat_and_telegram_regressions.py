@@ -51,20 +51,63 @@ class ChatPathRegressionTests(unittest.TestCase):
         calls = []
 
         class FakeMCP:
+            def list_tools(self):
+                return [
+                    {
+                        "name": "google_calendar.list_calendars",
+                        "server": "google-calendar",
+                        "enabled": True,
+                        "requires_confirmation": False,
+                    }
+                ]
+
             def execute_tool(self, name, parameters, agent):
                 calls.append((name, parameters))
                 return {"ok": True, "result": {"calendars": [{"summary": "Personal"}]}}
 
+        fake_mcp = FakeMCP()
+
         class FakeAgent:
             lang = "es"
+
+            def parse_prompt(self, text, history=None):
+                return {"action": "mcp_call", "tool": "google_calendar.list_calendars", "parameters": {}}
+
+            def decide_and_run(self, task):
+                payload = task.get("payload", {})
+                return {"model": "mcp", "result": fake_mcp.execute_tool(
+                    payload["tool"], payload.get("parameters", {}), self
+                )}
+
+        state = SimpleNamespace(conversation=[], pending_action=None)
+        response, status = WebChatService(FakeAgent(), {}, mcp_manager=fake_mcp).handle(
+            "Listá mis calendarios de Google Calendar", state, "es"
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(calls[0][0], "google_calendar.list_calendars")
+        self.assertIn("Personal", response["reply"])
+
+    def test_mcp_transport_error_is_reported_without_inventing_data(self):
+        class FakeMCP:
+            def list_tools(self):
+                return [{"name": "google_calendar.list_calendars", "server": "google-calendar", "enabled": True}]
+
+        class FakeAgent:
+            lang = "es"
+
+            def parse_prompt(self, text, history=None):
+                return {"action": "mcp_call", "tool": "google_calendar.list_calendars", "parameters": {}}
+
+            def decide_and_run(self, task):
+                return {"model": "mcp", "result": {"ok": False, "error": "Falta autorizar Google OAuth para ADA."}}
 
         state = SimpleNamespace(conversation=[], pending_action=None)
         response, status = WebChatService(FakeAgent(), {}, mcp_manager=FakeMCP()).handle(
             "Listá mis calendarios de Google Calendar", state, "es"
         )
         self.assertEqual(status, 200)
-        self.assertEqual(calls[0][0], "google_calendar.list_calendars")
-        self.assertIn("Personal", response["reply"])
+        self.assertIn("autorizar Google OAuth", response["reply"])
+        self.assertNotIn("Personal", response["reply"])
 
     def test_conceptual_photo_comparison_does_not_resolve_pictures_alias(self):
         calls = []

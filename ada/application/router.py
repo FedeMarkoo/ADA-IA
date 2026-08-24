@@ -58,24 +58,52 @@ def is_capability_discussion(text):
 
 
 class IntentRouter:
-    def __init__(self, model_manager, config=None, memory=None):
+    def __init__(self, model_manager, config=None, memory=None, mcp_manager=None):
         self.model_manager = model_manager
         self.config = config or {}
         if memory is None:
             raise ValueError("IntentRouter requiere una instancia de memoria inyectada.")
         self.memory = memory
+        self.mcp_manager = mcp_manager
 
     def _allowed_actions(self):
         return {row["action"] for row in self.memory.router_actions()}
 
     def _actions_text(self):
-        return ", ".join(f"{row['action']} ({row['description']})" for row in self.memory.router_actions())
+        actions = [f"{row['action']} ({row['description']})" for row in self.memory.router_actions()]
+        if self.mcp_manager:
+            actions.append("mcp_call (ejecutar una herramienta MCP de solo lectura seleccionada del inventario)")
+        return ", ".join(actions)
+
+    def _tools_text(self):
+        if not self.mcp_manager:
+            return "(sin MCPs disponibles)"
+        try:
+            tools = [tool for tool in self.mcp_manager.list_tools() if tool.get("enabled")]
+            return "\n".join(
+                f"- {tool.get('name')}: {tool.get('description', '')}; "
+                f"riesgo={tool.get('risk_level')}; requiere_confirmación={bool(tool.get('requires_confirmation'))}"
+                for tool in tools
+            ) or "(sin herramientas MCP activas)"
+        except Exception:
+            return "(inventario MCP no disponible)"
 
     def _template(self, name, fallback):
         return self.memory.prompt_template(name, fallback)
 
     def _schema(self, name):
-        return self.memory.json_schema(name)
+        schema = self.memory.json_schema(name)
+        if name == "router" and isinstance(schema, dict):
+            schema = json.loads(json.dumps(schema))
+            action = schema.setdefault("properties", {}).setdefault("action", {})
+            values = action.setdefault("enum", [])
+            if self.mcp_manager and "mcp_call" not in values:
+                values.append("mcp_call")
+            schema["properties"].update({
+                "tool": {"type": "string"},
+                "parameters": {"type": "object", "additionalProperties": True},
+            })
+        return schema
 
     def route(self, text, history=""):
         if is_capability_discussion(text):
@@ -88,7 +116,10 @@ class IntentRouter:
             r"\b(eso|esto|esa|ese|ah[ií]|adentro|anterior|antes|lo\s+que|me\s+refiero|resumen|listar)\b|^(?:y|tamb[ié]n)\b",
             text.lower(),
         ))
-        if fallback.get("action") == "ask" and fallback.get("confidence") == 0.0 and not contextual_reference:
+        external_hint = bool(self.mcp_manager and re.search(
+            r"\b(calendar|calendario|evento|gmail|correo|mail|drive|internet|fuente|d[oó]lar)\b", text.lower()
+        ))
+        if fallback.get("action") == "ask" and fallback.get("confidence") == 0.0 and not contextual_reference and not external_hint:
             return fallback
         provider = self.model_manager.choose(
             {
@@ -258,6 +289,8 @@ class IntentRouter:
             .replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))
             .replace("{history}", history[-2500:])
             .replace("{text}", text)
+            + "\nHerramientas MCP activas:\n" + self._tools_text()
+            + "\nSi corresponde a una consulta externa, elegí mcp_call con tool y parameters exactos. No inventes resultados."
         )
 
     @staticmethod
@@ -286,6 +319,17 @@ class IntentRouter:
             candidate.pop("needs_clarification", None)
             candidate.pop("clarifying_question", None)
             action = "food"
+        if action == "mcp_call":
+            tool = str(candidate.get("tool") or "")
+            if not tool or not self.mcp_manager:
+                return fallback
+            known = {item.get("name"): item for item in self.mcp_manager.list_tools()}
+            definition = known.get(tool)
+            if not definition or not definition.get("enabled") or definition.get("requires_confirmation"):
+                return fallback
+            result = dict(fallback)
+            result.update({"action": "mcp_call", "tool": tool, "parameters": candidate.get("parameters") or {}, "confidence": self._confidence(candidate.get("confidence"))})
+            return result
         if action not in self._allowed_actions():
             return fallback
         result = dict(fallback)

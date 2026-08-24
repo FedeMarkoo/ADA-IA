@@ -22,6 +22,11 @@ class FakeModelManager:
         return "router-model"
 
 
+class FakeMCPManager:
+    def list_tools(self):
+        return [{"name": "google_calendar.list_calendars", "enabled": True, "requires_confirmation": False}]
+
+
 class IntentRouterTests(unittest.TestCase):
     def setUp(self):
         self.memory = Memory(":memory:")
@@ -79,6 +84,13 @@ class IntentRouterTests(unittest.TestCase):
     def test_invalid_model_action_uses_fallback(self):
         result = self.router(FakeModelManager('{"action":"delete_everything"}')).route("quiero ordenar los archivos")
         self.assertEqual(result["action"], "organize")
+
+    def test_model_selects_a_valid_readonly_mcp_tool(self):
+        manager = FakeModelManager('{"action":"mcp_call","tool":"google_calendar.list_calendars","parameters":{}}')
+        router = IntentRouter(manager, memory=self.memory, mcp_manager=FakeMCPManager())
+        result = router.route("Listá mis calendarios de Google Calendar")
+        self.assertEqual(result["action"], "mcp_call")
+        self.assertEqual(result["tool"], "google_calendar.list_calendars")
 
     def test_photo_path_can_be_followed_by_more_text(self):
         from ada.application.agent import Agent

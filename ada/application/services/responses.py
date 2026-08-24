@@ -47,6 +47,13 @@ def _drive_summary(result):
 
 def text_from_result(result):
     if isinstance(result, dict):
+        # MCP transports wrap the actual payload in {ok, result}.  Unwrap
+        # that envelope before formatting so chat never exposes a transport
+        # object instead of the data returned by the selected tool.
+        if "result" in result and set(result).issubset({"ok", "result"}):
+            if result.get("ok") is False:
+                return text_from_result({"error": result.get("error", "La herramienta MCP falló")})
+            return text_from_result(result.get("result"))
         if result.get("error"):
             error = str(result.get("error"))
             if "allowlist" in error.lower() or "fuera de" in error.lower():
@@ -73,6 +80,31 @@ def text_from_result(result):
             return _filesystem_summary(result, "files", label)
         if result.get("action") in {"move_files", "copy_files", "undo"} and "count" in result:
             return f"Operación completada: {result['count']} archivos procesados."
+        if isinstance(result.get("calendars"), list):
+            calendars = result["calendars"]
+            if not calendars:
+                return "No encontré calendarios en Google Calendar."
+            names = [
+                str(item.get("summary") or item.get("name") or item.get("id") or item)
+                if isinstance(item, dict) else str(item)
+                for item in calendars
+            ]
+            return "Calendarios encontrados:\n" + "\n".join(f"• {name}" for name in names)
+        if isinstance(result.get("events"), list):
+            events = result["events"]
+            if not events:
+                return "No encontré eventos en el rango consultado."
+            lines = ["Eventos encontrados:"]
+            for event in events[:20]:
+                if isinstance(event, dict):
+                    title = event.get("summary") or event.get("title") or "(sin título)"
+                    start = event.get("start")
+                    if isinstance(start, dict):
+                        start = start.get("dateTime") or start.get("date")
+                    lines.append(f"• {title} — {start or 'fecha no informada'}")
+                else:
+                    lines.append(f"• {event}")
+            return "\n".join(lines)
         if result.get("action") == "list" and result.get("domain") in {"shopping", "inventory", "recipes"}:
             domain = result.get("domain")
             items = result.get("items") if domain != "recipes" else result.get("recipes")

@@ -37,7 +37,7 @@ class Agent:
         )
         self.skills = load_capabilities()
         self.coordinator = MultiAgentCoordinator(self.cfg)
-        self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem)
+        self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem, mcp_manager=mcp_manager)
         self.policy = PolicyEngine(self.cfg)
         self.planner = Planner(self.skills, self.policy)
         self.knowledge_loader = KnowledgeLoader(self.mem)
@@ -81,6 +81,15 @@ class Agent:
         self.history.append({"task": task, "chosen_model": provider})
 
         skill_name = task.get("type")
+        if skill_name == "mcp_call":
+            if not self.mcp_manager:
+                result = {"error": "No hay un administrador MCP disponible."}
+            else:
+                tool = str((task.get("payload") or {}).get("tool") or "")
+                parameters = dict((task.get("payload") or {}).get("parameters") or {})
+                result = self.mcp_manager.execute_tool(tool, parameters, self)
+            self.mem.record_task(task, result, provider="mcp", success=not bool(result.get("error")))
+            return {"model": "mcp", "result": result}
         if skill_name == "food":
             payload = dict(task.get("payload", {}))
             payload.setdefault("config", self.cfg)
