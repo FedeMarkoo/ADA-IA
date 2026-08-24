@@ -10,6 +10,7 @@ import os
 import re
 import platform
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -94,6 +95,62 @@ class WebChatService:
         if not grouped:
             lines.append("\nNo hay herramientas MCP activas.")
         return "\n".join(lines)
+
+    def _calendar_readonly_request(self, text, progress=None):
+        """Execute unambiguous Calendar reads through the registered MCP."""
+        lowered = text.casefold()
+        if not re.search(r"\b(calendar|calendario|calendarios|evento|eventos)\b", lowered):
+            return None
+        if not re.search(r"\b(list[aá]|mostr[aá]|cu[aá]l|qu[eé]|busc[aá]|dame|decime|pr[oó]xim)", lowered):
+            return None
+        if not self.mcp_manager:
+            reply = "No hay un MCP de Google Calendar disponible para consultar ese dato."
+            return {"reply": reply, "model": "ADA · MCP", "result": {"error": "calendar_mcp_unavailable"}}, 503
+
+        now = datetime.now(timezone.utc)
+        params = {"timeMin": now.isoformat(), "singleEvents": True, "orderBy": "startTime", "maxResults": 20}
+        if "octubre" in lowered:
+            year = now.year + (1 if now.month > 10 else 0)
+            params.update({"timeMin": f"{year}-10-01T00:00:00Z", "timeMax": f"{year}-11-01T00:00:00Z"})
+            tool = "google_calendar.search_events"
+        elif re.search(r"\b(list[aá]|mostr[aá])\b.*\bcalendarios?\b", lowered):
+            tool, params = "google_calendar.list_calendars", {}
+        elif re.search(r"\b(buscar?|busc[aá])\b", lowered):
+            tool = "google_calendar.search_events"
+            params["query"] = re.sub(r".*?(?:relacionad[oa]s?\s+con|sobre)\s+", "", text, flags=re.I).strip(" .!?'")
+        else:
+            tool = "google_calendar.list_events"
+            params["timeMax"] = (now + timedelta(days=7)).isoformat()
+
+        server = "google-calendar"
+        self._emit(progress, "capability_started", capability=tool, server=server, tool=tool, payload=params)
+        started = datetime.now(timezone.utc)
+        result = self.mcp_manager.execute_tool(tool, params, self.agent)
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        ok = bool(result.get("ok")) if isinstance(result, dict) else True
+        self._emit(progress, "capability_finished", capability=tool, server=server, tool=tool, ok=ok, elapsed_seconds=elapsed)
+        raw = result.get("result", result) if isinstance(result, dict) else result
+        if isinstance(raw, dict) and raw.get("error"):
+            reply = text_from_result(raw)
+        elif tool.endswith("list_calendars"):
+            calendars = raw.get("calendars") or raw.get("items") or [] if isinstance(raw, dict) else []
+            names = [str(item.get("summary") or item.get("name") or item) if isinstance(item, dict) else str(item) for item in calendars]
+            reply = "Calendarios encontrados:\n" + "\n".join(f"• {name}" for name in names) if names else "No encontré calendarios en Google Calendar."
+        else:
+            events = raw.get("events") or raw.get("items") or [] if isinstance(raw, dict) else []
+            if not events:
+                reply = "No encontré eventos en el rango consultado."
+            else:
+                lines = ["Eventos encontrados:"]
+                for event in events[:20]:
+                    if isinstance(event, dict):
+                        title = event.get("summary") or event.get("title") or "(sin título)"
+                        start = event.get("start", {}).get("dateTime") or event.get("start", {}).get("date") if isinstance(event.get("start"), dict) else event.get("start")
+                        lines.append(f"• {title} — {start or 'fecha no informada'}")
+                    else:
+                        lines.append(f"• {event}")
+                reply = "\n".join(lines)
+        return {"reply": reply, "model": "google-calendar MCP", "result": result}, 200
 
     @staticmethod
     def _emit(progress, phase, **details):
@@ -352,6 +409,12 @@ class WebChatService:
             reply = self._capability_summary()
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · asistente"}, 200
+
+        calendar_result = self._calendar_readonly_request(text, progress=progress)
+        if calendar_result:
+            payload, status = calendar_result
+            self._remember(state, text, payload.get("reply") or payload.get("message") or "")
+            return payload, status
 
         if state.pending_action and text.lower() in {"no", "n", "cancelar", "cancela", "cancel"}:
             state.pending_action = None

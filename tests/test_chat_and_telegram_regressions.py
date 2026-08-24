@@ -47,6 +47,25 @@ class ChatPathRegressionTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertRegex(response["reply"], r"ADA versión \d+\.\d+\.\d+")
 
+    def test_calendar_readonly_query_executes_calendar_mcp(self):
+        calls = []
+
+        class FakeMCP:
+            def execute_tool(self, name, parameters, agent):
+                calls.append((name, parameters))
+                return {"ok": True, "result": {"calendars": [{"summary": "Personal"}]}}
+
+        class FakeAgent:
+            lang = "es"
+
+        state = SimpleNamespace(conversation=[], pending_action=None)
+        response, status = WebChatService(FakeAgent(), {}, mcp_manager=FakeMCP()).handle(
+            "Listá mis calendarios de Google Calendar", state, "es"
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(calls[0][0], "google_calendar.list_calendars")
+        self.assertIn("Personal", response["reply"])
+
     def test_conceptual_photo_comparison_does_not_resolve_pictures_alias(self):
         calls = []
 
