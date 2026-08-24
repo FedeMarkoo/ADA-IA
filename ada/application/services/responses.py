@@ -102,7 +102,18 @@ def text_from_result(result):
         if isinstance(result.get("inbox"), list):
             messages = result["inbox"]
             if not messages:
+                if result.get("unread_only"):
+                    return "No tenés correos no leídos en Gmail."
                 return "No encontré correos recientes en Gmail."
+            if result.get("unread_only"):
+                lines = [f"Tenés {len(messages)} correos no leídos en Gmail."]
+                for message in messages[:3]:
+                    headers = {
+                        str(item.get("name", "")).lower(): item.get("value", "")
+                        for item in (message.get("payload", {}).get("headers", []) if isinstance(message, dict) else [])
+                    }
+                    lines.append(f"• {headers.get('subject') or '(sin asunto)'}")
+                return "\n".join(lines)
             if result.get("latest_only"):
                 message = messages[0]
                 headers = {

@@ -610,6 +610,8 @@ class MCPManager:
                     # legacy local skill returned a simulated empty inbox.
                     parameters.setdefault("pageSize", 10)
                     parameters["pageSize"] = min(int(parameters.get("pageSize") or 10), 20)
+                    if re.search(r"\bno\s+le[ií]d", request_text, re.I):
+                        parameters["query"] = "is:unread"
                     listed = self._execute_google_rest("gmail", parameters, "search_threads")
                     if not listed.get("ok"):
                         return listed
@@ -628,6 +630,8 @@ class MCPManager:
                     result["count"] = len(messages)
                     if re.search(r"\b(?:[uú]ltim[oa]|m[aá]s reciente)\b", request_text, re.I):
                         result["latest_only"] = True
+                    if re.search(r"\bno\s+le[ií]d", request_text, re.I):
+                        result["unread_only"] = True
                     return {"ok": True, "result": result}
 
                 return {"ok": True, "result": f"Ejecución de {name} completada con éxito"}
