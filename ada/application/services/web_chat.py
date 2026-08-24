@@ -16,6 +16,7 @@ from typing import Optional
 from ada.application.services.responses import text_from_result
 from ada.interfaces.i18n import tr
 from ada.application.services.folder_resolver import FolderResolver
+from ada.application.router import is_capability_discussion
 
 logger = logging.getLogger("ada.web_chat")
 
@@ -103,6 +104,17 @@ class WebChatService:
     def _filesystem_intent(text):
         """Classify safe read-only filesystem questions without an LLM."""
         lowered = text.lower()
+        # “Fotos” or “archivos” may be the subject of a conceptual comparison,
+        # not a request to inspect the local filesystem.
+        if is_capability_discussion(text):
+            return None
+        # Requests for a general explanation of permissions are not directory
+        # listings.  The explicit no-access wording is a strong signal that
+        # the user wants concepts, not a filesystem operation.
+        if re.search(r"\b(explic(?:á|a|ame|ar)|qu[eé]\s+significa|c[oó]mo\s+funcionan)\b", lowered) and re.search(
+            r"\b(permisos?|acceso)\b", lowered
+        ) and re.search(r"\b(sin\s+(?:acceder|cambiar)|general|conceptual)\b", lowered):
+            return None
         location_words = (
             r"\b(ruta|ubicaci[oó]n|d[oó]nde\s+(?:est[aá]|est[aá]n|tengo|guard[eé])|"
             r"en\s+qu[eé]\s+carpeta|busc[aá]?(?:me)?\s+(?:la\s+)?carpeta|"
@@ -464,7 +476,11 @@ class WebChatService:
             return {"reply": reply, "model": "ADA · resolver de carpetas", "resolver": folder}, 200
         # Folder/file questions with a known path must not fall through to the
         # generic chat model (which can ask for the path again).
-        static_path = _resolve_path_alias(text) if not local_action and folder["status"] != "resolved" else folder.get("path")
+        static_path = (
+            _resolve_path_alias(text)
+            if not local_action and folder["status"] != "resolved" and not is_capability_discussion(text)
+            else folder.get("path")
+        )
         if static_path and re.search(r"\b(archivos?|ficheros?|documentos?|fotos?)\b", lowered):
             parsed = dict(parsed or {})
             parsed["action"] = "list_files"

@@ -8,6 +8,40 @@ from telegram.bot import TelegramListener
 
 
 class ChatPathRegressionTests(unittest.TestCase):
+    def test_conceptual_photo_comparison_is_not_filesystem_intent(self):
+        text = (
+            "Compará tres enfoques para organizar fotos personales, explicá riesgos "
+            "y terminá con una recomendación concreta."
+        )
+        self.assertIsNone(WebChatService._filesystem_intent(text))
+
+    def test_general_permission_explanation_is_not_directory_listing(self):
+        text = "Necesito una explicación general de cómo funcionan los permisos de una carpeta, sin acceder ni cambiar ningún archivo."
+        self.assertIsNone(WebChatService._filesystem_intent(text))
+
+    def test_conceptual_photo_comparison_does_not_resolve_pictures_alias(self):
+        calls = []
+
+        class FakeAgent:
+            lang = "es"
+
+            def parse_prompt(self, text, history=None):
+                return {"action": "ask", "complexity": 4}
+
+            def decide_and_run(self, task):
+                calls.append(task)
+                return {"result": "Comparación conceptual con recomendación.", "model": "test"}
+
+        state = SimpleNamespace(conversation=[], pending_action=None, pending_path_action=None, current_path=None)
+        response, status = WebChatService(FakeAgent(), {}).handle(
+            "Compará tres enfoques para organizar fotos personales, explicá riesgos y terminá con una recomendación concreta.",
+            state,
+            "es",
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("recomendación", response["reply"])
+        self.assertEqual(len(calls), 1)
+
     def test_common_path_aliases_resolve(self):
         desktop = os.path.expanduser("~/Desktop")
         self.assertEqual(_resolve_path_alias("Escritorio"), desktop)
