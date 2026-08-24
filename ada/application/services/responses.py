@@ -103,6 +103,23 @@ def text_from_result(result):
             messages = result["inbox"]
             if not messages:
                 return "No encontré correos recientes en Gmail."
+            if result.get("latest_only"):
+                message = messages[0]
+                headers = {
+                    str(item.get("name", "")).lower(): item.get("value", "")
+                    for item in (message.get("payload", {}).get("headers", []) if isinstance(message, dict) else [])
+                }
+                subject = headers.get("subject") or "(sin asunto)"
+                sender = headers.get("from") or "remitente no informado"
+                date = headers.get("date") or message.get("internalDate") or "fecha no informada"
+                snippet = message.get("snippet") if isinstance(message, dict) else None
+                return (
+                    "El último correo recibido es:\n"
+                    f"• Asunto: {subject}\n"
+                    f"• Remitente: {sender}\n"
+                    f"• Fecha: {date}\n"
+                    f"• Resumen: {snippet or 'No hay resumen disponible en los metadatos.'}"
+                )
             lines = [f"Encontré {len(messages)} correos recientes en Gmail:", ""]
             for message in messages[:20]:
                 headers = {

@@ -1468,6 +1468,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 | 2026-08-24 | `calendar_month_search` | `passed` | Conversión de `date` a rango mensual; dejó de devolver eventos históricos fuera de octubre 2026. |
 | 2026-08-24 | `calendar_range_confirm` | `passed` | El router dejó de elegir `get_event` sin ID y seleccionó `list_events` para una consulta del próximo evento. |
 | 2026-08-24 | `mail_report` | `passed` | `healthcheck_1787609020_e49c0c0b`: el router seleccionó `gmail.read_inbox`; se reemplazó el adaptador simulado por Gmail API OAuth real, leyendo IDs y metadatos de mensajes. La respuesta informó 10 asuntos, remitentes y fechas reales. |
+| 2026-08-24 | `last_email` | `passed` | `healthcheck_1787609387_333fa38c`: el mismo MCP ahora detecta el pedido de último correo y responde solo con el mensaje más reciente, asunto, remitente, fecha y snippet real. |
 
 ### Checklist de iteración
 
@@ -1480,6 +1481,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - [x] Rerun `calendar_range_confirm`.
 - [x] Rerun `mail_report` y validar contenido real, no solo ejecución MCP.
 - [x] Corregir `gmail.read_inbox` para eliminar la respuesta simulada.
+- [x] Corregir `last_email` para no listar la bandeja completa y agregar resumen del mensaje más reciente.
 - [ ] Rerun `calendar_upcoming_events`.
 - [ ] Rerun `calendar_search_event`.
 - [ ] Rerun `calendar_month_search`.
@@ -1493,3 +1495,5 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - El segundo rerun (`healthcheck_1787608691_648b3b48`) ya ejecutó `gmail.read_inbox`, pero el adaptador todavía devolvía una respuesta simulada/insuficiente.
 - Se amplió la detección a `mail`/`mails`, se mantuvo el enrutamiento IA hacia el catálogo MCP y se implementó `gmail.read_inbox` con Gmail API autenticada, listado acotado y metadatos reales.
 - El tercer rerun (`healthcheck_1787609020_e49c0c0b`) pasó con score `1.0`. No se inventaron correos; el resultado contiene los mensajes devueltos por Gmail.
+- `last_email` falló inicialmente (`healthcheck_1787609188_bd51b19b`) porque reutilizaba el reporte de bandeja y no aislaba el mensaje más reciente.
+- El rerun (`healthcheck_1787609387_333fa38c`) pasó con score `1.0`; la respuesta quedó limitada al último mensaje y su snippet real.

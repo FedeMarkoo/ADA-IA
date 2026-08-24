@@ -626,6 +626,8 @@ class MCPManager:
                     result = listed.get("result") or {}
                     result["inbox"] = messages
                     result["count"] = len(messages)
+                    if re.search(r"\b(?:[uú]ltim[oa]|m[aá]s reciente)\b", request_text, re.I):
+                        result["latest_only"] = True
                     return {"ok": True, "result": result}
 
                 return {"ok": True, "result": f"Ejecución de {name} completada con éxito"}
