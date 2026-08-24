@@ -3,7 +3,7 @@ import concurrent.futures
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 
-from ada.application.services.healthcheck import HEALTHCHECK_PROMPTS, HealthcheckStore, evaluate, llm_judge
+from ada.application.services.healthcheck import HEALTHCHECK_PROMPTS, HealthcheckStore, evaluate, llm_judge, requires_mcp
 from ada.infrastructure.persistence.sqlite import Memory
 
 
@@ -39,6 +39,12 @@ def test_healthcheck_evaluation_requires_all_capability_signals():
     failed = evaluate(item, "No pude consultar internet", 0.4)
     assert failed["passed"] is False
     assert failed["missing"] == [r"fuente", r"IA"]
+
+
+def test_external_healthchecks_require_mcp_grounding():
+    assert requires_mcp({"category": "mcp_google_calendar"}) is True
+    assert requires_mcp({"category": "calendar"}) is True
+    assert requires_mcp({"category": "reasoning"}) is False
 
 
 def test_healthcheck_run_history_is_json_safe():

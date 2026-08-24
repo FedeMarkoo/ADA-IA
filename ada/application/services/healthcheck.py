@@ -30,6 +30,16 @@ FUNCTIONAL_CATEGORY_LABELS = {
     "safety": "Seguridad",
 }
 
+MCP_REQUIRED_CATEGORIES = {
+    "web", "finance", "calendar", "mcp_google_calendar", "gmail", "mcp_gmail",
+    "filesystem", "photography", "mcp_google_drive",
+}
+
+
+def requires_mcp(item):
+    """Return whether a healthcheck result must be grounded in a tool call."""
+    return str(item.get("category") or "").lower() in MCP_REQUIRED_CATEGORIES
+
 
 def functional_category(category):
     """Translate internal source categories into user-facing capabilities."""

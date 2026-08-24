@@ -23,7 +23,7 @@ from ada.infrastructure.runtime.duplicates import detect_duplicates
 from ada.infrastructure.observability_timeseries import TimeSeriesStore, metrics_scraper_status
 from ada.infrastructure.persistence.debug_log import DebugLog
 from ada.application.services.memory_refiner import MemoryRefiner
-from ada.application.services.healthcheck import HealthcheckStore, evaluate as evaluate_healthcheck, functional_category, llm_judge
+from ada.application.services.healthcheck import HealthcheckStore, evaluate as evaluate_healthcheck, functional_category, llm_judge, requires_mcp
 import re
 import secrets
 import threading
@@ -1028,6 +1028,13 @@ def _execute_healthcheck_batch(runtime, prompts, run_id):
             status = outcome.get("status", 500)
             reply = payload.get("reply") or payload.get("message") or ""
             error = outcome.get("error") or (payload.get("error") if status >= 400 else None)
+        if not error and requires_mcp(item) and not executed_mcps:
+            error = "required_mcp_not_executed"
+            trace.append({
+                "phase": "mcp_required_but_not_executed",
+                "category": item.get("category"),
+                "at_seconds": round(time.monotonic() - started, 3),
+            })
         evaluation = evaluate_healthcheck(item, reply, time.monotonic() - started, error)
         model = payload.get("model") if isinstance(payload, dict) else None
         for event in reversed(trace):
