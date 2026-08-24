@@ -3,6 +3,9 @@
   "web_framework": "asgi",
   "ollama_url": "http://127.0.0.1:11434",
   "engine_provider": "ollama",
+  "engine_priority": ["ollama", "gemini", "groq"],
+  "gemini_model": "gemini-3.6-flash",
+  "groq_model": "llama-3.3-70b-versatile",
   "timeout_profile": "patient",
   "router_timeout": 30,
   "model_timeout": 300,
@@ -87,6 +90,9 @@
     "cron": {"enabled": false},
     "webhook": {"enabled": false}
   },
+  "ollama_keep_alive": "2m",
+  "ollama_auto_unload": true,
+  "ollama_idle_unload_seconds": 300,
   "event_rules": {
     "filesystem.file_created": {
       "action": "analyze_photo",

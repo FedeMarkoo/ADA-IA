@@ -57,6 +57,20 @@ class LocalModelRuntime:
         self.startup_timeout = float(runtime.get("startup_timeout", 12))
         configured_binary = runtime.get("binary") or os.environ.get("ADA_OLLAMA_BIN")
         self.binary = configured_binary or shutil.which("ollama")
+        if not self.binary:
+            for candidate in (
+                os.path.expanduser("~/.gemini/antigravity-ide/bin/ollama"),
+                "/usr/local/bin/ollama",
+                "/usr/bin/ollama",
+                "/bin/ollama",
+                os.path.expanduser("~/.local/bin/ollama"),
+                os.path.expanduser("~/bin/ollama"),
+                os.path.expanduser("~/.ollama/bin/ollama"),
+                "/opt/homebrew/bin/ollama",
+            ):
+                if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                    self.binary = candidate
+                    break
 
     def _healthy(self):
         try:
@@ -76,8 +90,10 @@ class LocalModelRuntime:
         with self._lock:
             if self._healthy():
                 return RuntimeStatus(self.provider, self.endpoint, True, self._process is not None, "already_running")
+
             if not self.binary:
                 return RuntimeStatus(self.provider, self.endpoint, False, False, "ollama_not_installed")
+
             try:
                 env = os.environ.copy()
                 host = self.endpoint.removeprefix("http://").removeprefix("https://")

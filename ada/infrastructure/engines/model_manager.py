@@ -19,6 +19,7 @@ from ada.models.catalog import DEFAULT_MODEL_CATALOG
 
 from ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
 from ada.infrastructure.observability import Metrics
+from ada.ollama.client import OllamaClient
 
 try:
     from openai import OpenAI
@@ -63,9 +64,53 @@ class ModelManager:
         self.metrics = Metrics("models")
         self._model_stats = {}
         self._model_stats_lock = threading.RLock()
+        self._ollama_activity = {}
+        self._ollama_activity_lock = threading.RLock()
+        self._ollama_reaper_stop = threading.Event()
         self._installed_cache = (0.0, [])
         self._apply_config(config or {})
         self.local_runtime = LocalModelRuntime(self.config)
+        if self.config.get("ollama_auto_unload", False):
+            self._ollama_reaper = threading.Thread(target=self._ollama_reaper_loop, name="ada-ollama-reaper", daemon=True)
+            self._ollama_reaper.start()
+
+    def _ollama_reaper_loop(self):
+        while not self._ollama_reaper_stop.wait(30):
+            try:
+                self.reap_idle_ollama_models()
+            except Exception:
+                pass
+
+    def _mark_ollama_started(self, model):
+        with self._ollama_activity_lock:
+            item = self._ollama_activity.setdefault(model, {"active": 0, "last_used": time.monotonic()})
+            item["active"] += 1
+            item["last_used"] = time.monotonic()
+
+    def _mark_ollama_finished(self, model):
+        with self._ollama_activity_lock:
+            item = self._ollama_activity.setdefault(model, {"active": 0, "last_used": time.monotonic()})
+            item["active"] = max(0, item["active"] - 1)
+            item["last_used"] = time.monotonic()
+
+    def reap_idle_ollama_models(self):
+        """Unload only models that have been idle beyond the configured budget."""
+        if self.provider != "ollama" or not self.config.get("ollama_auto_unload", False):
+            return []
+        idle_seconds = max(30, int(self.config.get("ollama_idle_unload_seconds", 300)))
+        now = time.monotonic()
+        client = OllamaClient(self.ollama_url, timeout=5)
+        unloaded = []
+        for model in client.running_models():
+            name = model.get("name")
+            if not name:
+                continue
+            with self._ollama_activity_lock:
+                activity = self._ollama_activity.setdefault(name, {"active": 0, "last_used": now})
+                can_unload = activity["active"] == 0 and now - activity["last_used"] >= idle_seconds
+            if can_unload and client.unload_model(name):
+                unloaded.append(name)
+        return unloaded
 
     def _apply_config(self, config):
         self.config = dict(config)
@@ -577,7 +622,7 @@ class ModelManager:
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
             "options": options,
-            "keep_alive": kwargs.get("keep_alive", self.config.get("ollama_keep_alive", "5m")),
+            "keep_alive": kwargs.get("keep_alive", self.config.get("ollama_keep_alive", "2m")),
         }
         # Ollama accepts a JSON schema here and constrains the model output.
         # This is stronger than asking for JSON in the natural-language prompt.
@@ -590,13 +635,17 @@ class ModelManager:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        self._mark_ollama_started(model)
         try:
-            with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            return data.get("message", {}).get("content", "").strip()
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError("Ollama devolvió un error: %s" % detail) from exc
+            try:
+                with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                return data.get("message", {}).get("content", "").strip()
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                raise RuntimeError("Ollama devolvió un error: %s" % detail) from exc
+        finally:
+            self._mark_ollama_finished(model)
 
     def _call_ollama_vision(self, prompt, image_base64, **kwargs):
         model = kwargs.get("ollama_model") or self._model("vision", "vision_model", "qwen2.5vl:3b")
@@ -616,19 +665,23 @@ class ModelManager:
                 "stream": False,
                 "format": "json",
                 "options": options,
-                "keep_alive": kwargs.get("keep_alive", self.config.get("ollama_keep_alive", "5m")),
+                "keep_alive": kwargs.get("keep_alive", self.config.get("ollama_keep_alive", "2m")),
             }
         ).encode("utf-8")
         request = urllib.request.Request(
             self.ollama_url + "/api/chat", data=payload, headers={"Content-Type": "application/json"}, method="POST"
         )
+        self._mark_ollama_started(model)
         try:
-            with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            return data.get("message", {}).get("content", "").strip()
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError("Ollama devolvió un error visual: %s" % detail) from exc
+            try:
+                with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                return data.get("message", {}).get("content", "").strip()
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                raise RuntimeError("Ollama devolvió un error visual: %s" % detail) from exc
+        finally:
+            self._mark_ollama_finished(model)
 
     def _call_openai(self, prompt, **kwargs):
         client = OpenAI(api_key=self.openai_key)

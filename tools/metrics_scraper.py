@@ -27,10 +27,21 @@ def store(db, text, retention_days=7):
         if "{" in key: name, labels=key.split("{",1); labels=labels.rstrip("}")
         else: name, labels=key, ""
         # ADA exposes generic Prometheus families with the real metric name
-        # in the `name` label; promote it so the dashboard can group usage.
+        # in the `name` label. Preserve the metric family when promoting it:
+        # timing count and timing average must never collapse into one series.
         if 'name="' in labels:
             promoted = labels.split('name="', 1)[1].split('"', 1)[0]
-            if promoted: name = promoted
+            if promoted:
+                if name == "ada_agent_counter":
+                    name = promoted
+                elif name == "ada_agent_timing_count":
+                    name = f"{promoted}_count"
+                elif name == "ada_agent_timing_avg_seconds":
+                    name = f"{promoted}_avg_seconds"
+        # Test and diagnostic traffic is useful for CI, but must not pollute
+        # the operational dashboard or its persisted telemetry window.
+        if "_source_ai_testing" in name or "_source_diagnostic" in name:
+            continue
         db.execute("INSERT INTO prometheus_samples VALUES (?,?,?,?)", (now,name,labels,value))
     db.execute("DELETE FROM prometheus_samples WHERE ts < ?", (now-retention_days*86400,)); db.commit()
 

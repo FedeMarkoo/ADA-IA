@@ -234,6 +234,24 @@ class OllamaClient:
         except Exception:
             return False
 
+    def load_model(self, model_name: str, keep_alive: Optional[str] = None) -> bool:
+        """Preload a model into memory/VRAM without generating text."""
+        body = {"model": model_name}
+        if keep_alive:
+            body["keep_alive"] = keep_alive
+        payload = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.endpoint}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60.0) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
     def show_model(self, model_name: str) -> Dict[str, Any]:
         """Get model parameters, system template and modelfile."""
         payload = json.dumps({"name": model_name}).encode("utf-8")
