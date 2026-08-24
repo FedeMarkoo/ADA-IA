@@ -79,10 +79,12 @@ class IntentRouter:
         if not self.mcp_manager:
             return "(sin MCPs disponibles)"
         try:
-            tools = [tool for tool in self.mcp_manager.list_tools() if tool.get("enabled")]
+            tools = [
+                tool for tool in self.mcp_manager.list_tools()
+                if tool.get("enabled") and not tool.get("requires_confirmation")
+            ]
             return "\n".join(
-                f"- {tool.get('name')}: {tool.get('description', '')}; "
-                f"riesgo={tool.get('risk_level')}; requiere_confirmación={bool(tool.get('requires_confirmation'))}"
+                f"- {tool.get('name')}"
                 for tool in tools
             ) or "(sin herramientas MCP activas)"
         except Exception:
@@ -129,7 +131,7 @@ class IntentRouter:
         )
         if not provider:
             return fallback
-        prompt = self._prompt(text, history)
+        prompt = self._mcp_prompt(text) if external_hint else self._prompt(text, history)
         logger.debug("router request=%r history_chars=%d", text, len(history))
         try:
             raw = self.model_manager.call(
@@ -137,7 +139,7 @@ class IntentRouter:
                 prompt,
                 ollama_model=self.model_manager.select_model("router", role="router"),
                 temperature=0,
-                max_tokens=600,
+                max_tokens=180,
                 timeout=self.config.get("router_timeout", 30),
                 format=self._schema("router"),
             )
@@ -297,7 +299,20 @@ class IntentRouter:
             .replace("{history}", history[-2500:])
             .replace("{text}", text)
             + "\nHerramientas MCP activas:\n" + self._tools_text()
-            + "\nSi corresponde a una consulta externa, elegí mcp_call con tool y parameters exactos. No inventes resultados."
+            + "\nSi corresponde a una consulta externa, elegí mcp_call con esta forma exacta: "
+            + '{"action":"mcp_call","tool":"nombre.del.inventario","parameters":{}}. '
+            + "No uses method, params ni nombres inventados; no inventes resultados."
+        )
+
+    def _mcp_prompt(self, text):
+        """Keep external tool selection focused on the live MCP catalog."""
+        return (
+            "Elegí una herramienta MCP del inventario para responder el pedido. "
+            "Devolvé SOLO JSON con esta forma exacta: "
+            '{"action":"mcp_call","tool":"nombre.del.inventario","parameters":{}}. '
+            "Usá únicamente un nombre listado y parámetros necesarios para el pedido. "
+            "No inventes datos ni uses method o params.\n"
+            "Inventario MCP activo:\n" + self._tools_text() + "\nPedido: " + text
         )
 
     @staticmethod
