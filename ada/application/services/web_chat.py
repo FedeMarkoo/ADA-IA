@@ -554,13 +554,14 @@ class WebChatService:
         self._emit(progress, "capability_started", **capability_details)
         result = self.agent.decide_and_run(task)
         output = result.get("result", result)
-        self._emit(
-            progress,
-            "capability_finished",
-            capability=action,
-            ok=not bool(output.get("error")) if isinstance(output, dict) else True,
-            error=output.get("error") if isinstance(output, dict) else None,
-        )
+        finished_details = {
+            "capability": action,
+            "ok": not bool(output.get("error")) if isinstance(output, dict) else True,
+            "error": output.get("error") if isinstance(output, dict) else None,
+        }
+        if action == "mcp_call":
+            finished_details.update({"server": capability_details.get("server"), "tool": capability_details.get("tool")})
+        self._emit(progress, "capability_finished", **finished_details)
         if isinstance(output, dict) and output.get("error") == "confirmation_required":
             state.pending_action = task
             reply = tr("confirmation_required", lang)
