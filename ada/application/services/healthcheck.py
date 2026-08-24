@@ -306,10 +306,19 @@ def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b
     """Use an independent model to judge task completion, not keyword presence."""
     if not reply or FAILURE_MARKERS.search(str(reply)):
         return {"passed": False, "score": 0.0, "issues": ["La respuesta indica que ADA no pudo completar o acceder a la tarea."], "rationale": "Falla explícita detectada antes de consultar al juez.", "source": "guard"}
+    category = str(item.get("category") or "").lower()
+    conceptual = category in {"chat", "reasoning", "architecture", "metrics", "safety", "diagnostics", "agent"}
+    evidence_rule = (
+        "Como este caso es conceptual y no solicita ejecutar acciones, evaluá la calidad y completitud de la explicación; "
+        "no exijas evidencia de MCP."
+        if conceptual
+        else
+        "Debe aportar el resultado solicitado o evidencia concreta de haber consultado la herramienta. "
+        "Si explica cómo hacerlo, pide datos, dice que no tiene acceso o responde con una limitación, es FAIL."
+    )
     judge_prompt = (
         "Sos un evaluador estricto de pruebas funcionales de un agente. Evaluá si la respuesta realmente cumplió el pedido. "
-        "No alcanza con que repita palabras del pedido: debe aportar el resultado solicitado o evidencia concreta de haber consultado la herramienta. "
-        "Si explica cómo hacerlo, pide datos, dice que no tiene acceso o responde con una limitación, es FAIL. "
+        "No alcanza con que repita palabras del pedido: " + evidence_rule + " "
         "Devolvé SOLO JSON válido con estas claves: passed (boolean), score (número 0 a 1), issues (lista de strings) y rationale (string).\n\n"
         f"CASO: {item.get('name')}\nPEDIDO: {item.get('prompt')}\nCRITERIOS AUXILIARES: {item.get('must_match', [])}\nRESPUESTA DE ADA: {reply}"
     )

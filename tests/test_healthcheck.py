@@ -98,3 +98,16 @@ def test_llm_judge_uses_semantic_verdict_and_score(mock_urlopen):
     assert result["passed"] is False
     assert result["source"] == "llm"
     assert result["issues"] == ["No aporta datos reales"]
+
+
+@patch("urllib.request.urlopen")
+def test_llm_judge_does_not_require_mcp_for_conceptual_cases(mock_urlopen):
+    response = MagicMock()
+    response.__enter__.return_value.read.return_value = json.dumps({"response": json.dumps({"passed": True, "score": 0.9, "issues": [], "rationale": "Explicación completa."})}).encode()
+    mock_urlopen.return_value = response
+    llm_judge(
+        {"category": "reasoning", "name": "timeout", "prompt": "Explicá qué significa un timeout", "must_match": ["tiempo"]},
+        "Un timeout es un límite de tiempo para completar una tarea.",
+    )
+    request_body = mock_urlopen.call_args.args[0].data.decode()
+    assert "no exijas evidencia de MCP" in json.loads(request_body)["prompt"]
