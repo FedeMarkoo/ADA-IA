@@ -1470,6 +1470,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 | 2026-08-24 | `mail_report` | `passed` | `healthcheck_1787609020_e49c0c0b`: el router seleccionó `gmail.read_inbox`; se reemplazó el adaptador simulado por Gmail API OAuth real, leyendo IDs y metadatos de mensajes. La respuesta informó 10 asuntos, remitentes y fechas reales. |
 | 2026-08-24 | `last_email` | `passed` | `healthcheck_1787609387_333fa38c`: el mismo MCP ahora detecta el pedido de último correo y responde solo con el mensaje más reciente, asunto, remitente, fecha y snippet real. |
 | 2026-08-24 | `gmail_unread` | `passed` | `healthcheck_1787609756_4e2f1658`: consulta Gmail con `is:unread`; respondió cantidad real (10) y los tres asuntos principales sin modificar el estado de lectura. |
+| 2026-08-24 | `web_search` | `blocked` | `healthcheck_1787610391_5328fe8c`: el router no eligió MCP y el sistema devolvió error explícito sin inventar noticia. Queda pendiente mejorar la selección de `web_search.search` y verificar que el backend produzca fuentes reales. |
 
 ### Checklist de iteración
 
@@ -1484,6 +1485,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - [x] Corregir `gmail.read_inbox` para eliminar la respuesta simulada.
 - [x] Corregir `last_email` para no listar la bandeja completa y agregar resumen del mensaje más reciente.
 - [x] Corregir `gmail_unread` para filtrar `is:unread` y devolver cantidad + tres asuntos.
+- [ ] Corregir selección MCP para consultas web; no aceptar fallback conversacional.
 - [ ] Rerun `calendar_upcoming_events`.
 - [ ] Rerun `calendar_search_event`.
 - [ ] Rerun `calendar_month_search`.
@@ -1501,3 +1503,4 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - El rerun (`healthcheck_1787609387_333fa38c`) pasó con score `1.0`; la respuesta quedó limitada al último mensaje y su snippet real.
 - `gmail_unread` tuvo un falso aprobado (`healthcheck_1787609554_ed2fd1ab`): ejecutó MCP, pero devolvió la bandeja general y no respondió la cantidad de no leídos.
 - Se agregó el filtro Gmail `is:unread` y el formato específico de tres asuntos. El rerun (`healthcheck_1787609756_4e2f1658`) pasó con score `1.0` y cantidad real de 10.
+- `web_search` falló inicialmente porque la IA eligió `google_drive.search` (`healthcheck_1787609950_24eaf7b9`). Tras impedir el fallback conversacional, el rerun (`healthcheck_1787610391_5328fe8c`) quedó bloqueado de forma explícita: el router no seleccionó MCP. Pendiente: mejorar la selección IA hacia `web_search.search` y comprobar fuentes reales del backend.

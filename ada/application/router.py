@@ -85,7 +85,7 @@ class IntentRouter:
                 if tool.get("enabled") and not tool.get("requires_confirmation")
             ]
             return "\n".join(
-                f"- {tool.get('name')}"
+                f"- {tool.get('name')} [{tool.get('category') or tool.get('server')}] — {tool.get('description') or 'sin descripción'}"
                 for tool in tools
             ) or "(sin herramientas MCP activas)"
         except Exception:
@@ -160,7 +160,7 @@ class IntentRouter:
                 prompt,
                 ollama_model=self.model_manager.select_model("router", role="router"),
                 temperature=0,
-                max_tokens=100 if external_hint else 180,
+                max_tokens=180 if external_hint else 180,
                 timeout=max(self.config.get("router_timeout", 30), 60) if external_hint else self.config.get("router_timeout", 30),
                 format=self._mcp_schema() if external_hint else self._schema("router"),
             )
@@ -335,7 +335,7 @@ class IntentRouter:
     def _mcp_prompt(self, text):
         """Keep external tool selection focused on the live MCP catalog."""
         return (
-            "Elegí una herramienta MCP del inventario para responder el pedido. "
+            "Debés elegir una herramienta MCP del inventario para responder el pedido; no respondas con texto, no pidas aclaraciones y no uses una acción local. "
             "Devolvé SOLO JSON con esta forma exacta: "
             '{"action":"mcp_call","tool":"nombre.del.inventario","parameters":{}}. '
             "Usá únicamente un nombre listado y parámetros necesarios para el pedido. "
