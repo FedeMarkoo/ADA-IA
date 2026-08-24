@@ -1429,3 +1429,20 @@ Recuerda que, antes de ejecutar cualquier acción, necesitaré tu confirmación 
 
 Este documento conserva las respuestas y estados registrados. Las siguientes ejecuciones deben guardarse en una carpeta con fecha y número incremental.
 
+## Reejecución posterior a las correcciones
+
+Caso: `calendar_list_calendars` — “Listá mis calendarios de Google Calendar y decime sus nombres. Solo lectura.”  
+Run: `healthcheck_1787604665_d42bc6f6` — 2026-08-24 20:51:05  
+Estado: `failed` correcto; no es un falso aprobado.  
+MCP ejecutado: `google-calendar / google_calendar.list_calendars`.  
+Respuesta real: `No pude completar la operación: HTTP Error 401: Unauthorized.`  
+Diagnóstico: el router eligió el MCP correcto en 16,8 s; Google rechazó la consulta por autorización. No se inventaron calendarios.
+
+Correcciones aplicadas:
+
+- [x] Enrutado genérico por catálogo MCP seleccionado por el modelo.
+- [x] Ejecución real y respuesta basada en el resultado del MCP.
+- [x] Error explícito ante OAuth faltante o HTTP 401.
+- [x] Corte del caso ante timeout del router para continuar la corrida.
+- [x] Trazabilidad sin duplicar servidor/herramienta.
+- [x] Normalización de calendarios y eventos devueltos por MCP.
