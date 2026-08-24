@@ -83,6 +83,12 @@ export const api = {
   getOllamaConfig() { return this.request('/api/ollama/config'); },
   saveOllamaConfig(config) { return this.request('/api/ollama/config', { method: 'POST', body: JSON.stringify(config) }); },
   getOllamaDetails(model) { return this.request(`/api/ollama/details?model=${encodeURIComponent(model)}`); },
+  loadOllamaModel(model) {
+    return this.request('/api/ollama/load', { method: 'POST', body: JSON.stringify({ model }) });
+  },
+  preloadAllModels() {
+    return this.request('/api/ollama/preload_all', { method: 'POST' });
+  },
   unloadOllamaModel(model) {
     return this.request('/api/ollama/unload', { method: 'POST', body: JSON.stringify({ model }) });
   },
@@ -103,6 +109,12 @@ export const api = {
   testTelegram(body = {}) { return this.request('/api/telegram/test', { method: 'POST', body: JSON.stringify(body) }); },
   getTelegramHistory() { return this.request('/api/telegram/history'); },
   saveTelegramConfig(data) { return this.request('/api/telegram/config', { method: 'POST', body: JSON.stringify(data) }); },
+
+  // Metrics Scraper Lifecycle
+  getMetricsScraperStatus() { return this.request('/api/metrics/scraper/status'); },
+  startMetricsScraper() { return this.request('/api/metrics/scraper/start', { method: 'POST' }); },
+  stopMetricsScraper() { return this.request('/api/metrics/scraper/stop', { method: 'POST' }); },
+  restartMetricsScraper() { return this.request('/api/metrics/scraper/restart', { method: 'POST' }); },
 
   // Event sources and entry points
   getTriggers() { return this.request('/api/triggers'); },
@@ -145,6 +157,17 @@ export const api = {
   getBenchmarkPrompts() {
     return this.request('/api/models/benchmark/prompts');
   },
+  getHealthcheckPrompts() { return this.request('/api/healthcheck/prompts'); },
+  addHealthcheckPrompt(data) { return this.request('/api/healthcheck/prompts', { method: 'POST', body: JSON.stringify(data) }); },
+  runHealthcheck(prompt_ids) {
+    return this.request('/api/healthcheck/run', { method: 'POST', body: JSON.stringify({ prompt_ids }) });
+  },
+  getActiveHealthcheckRuns() { return this.request('/api/healthcheck/runs/active'); },
+  getHealthcheckBatches() { return this.request('/api/healthcheck/batches'); },
+  getHealthcheckLatest() { return this.request('/api/healthcheck/latest'); },
+  getHealthcheckRun(runId, details = true) { return this.request(`/api/healthcheck/runs/${encodeURIComponent(runId)}?details=${details ? '1' : '0'}`); },
+  cancelHealthcheckRun(runId) { return this.request(`/api/healthcheck/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }); },
+  getHealthcheckHistory() { return this.request('/api/healthcheck/history'); },
 
   // MCPs Lifecycle
   getMCPsServers() { return this.request('/api/mcps/servers'); },
@@ -207,7 +230,7 @@ export const isOllamaAvailable = (statusData) => {
 };
 
 // React & Hooks
-const { useState, useEffect, useRef, useCallback, createElement: h } = window.React || {};
+const { useState, useEffect, useLayoutEffect, useRef, useCallback, createElement: h } = window.React || {};
 
 // =============================================================================
 // React Components
@@ -255,7 +278,7 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus, isOpen, on
   const navItems = [
     { id: 'overview', label: 'Resumen', group: 'OPERAR', icon: 'overview' },
     { id: 'core', label: 'Núcleo ADA', group: 'OPERAR', icon: 'core' },
-    { id: 'benchmark', label: 'Tests de Prompts', badge: '⚡ Telemetría', badgeClass: 'badge-accent', group: 'OPERAR', icon: 'bolt' },
+    { id: 'benchmark', label: 'Healthcheck de ADA', badge: '🩺 Checklist', badgeClass: 'badge-accent', group: 'OPERAR', icon: 'bolt' },
     { id: 'metrics', label: 'Métricas', group: 'OPERAR', icon: 'activity' },
     { id: 'chat', label: 'Conversar con ADA', group: 'OPERAR', icon: 'chat' },
     { id: 'ollama', label: 'Motor local', badge: isOnline ? 'Activo' : 'Detenido', badgeClass: isOnline ? 'badge-success' : 'badge-danger', group: 'CONFIGURAR', icon: 'engine' },
@@ -363,6 +386,13 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const isAgentRunning = statusData?.agent_enabled !== false;
   const mcpServers = statusData?.mcp_servers || [];
   const areMCPsRunning = mcpServers.some(server => server.status === 'active');
+  const scraperState = statusData?.metrics_scraper || {};
+  const isScraperRunning = scraperState.status === 'active' && scraperState.ok === true;
+  const scraperBadge = isScraperRunning ? 'badge-success' : scraperState.status === 'stale' ? 'badge-warning' : 'badge-danger';
+  const scraperLabel = isScraperRunning ? 'Activo' : scraperState.status === 'stale' ? 'Vencido' : 'Sin datos';
+  const scraperDetail = isScraperRunning
+    ? `Última muestra hace ${scraperState.age_seconds ?? '—'} s.`
+    : (scraperState.message || 'No hay muestras válidas del scraper.');
 
   const loadHealth = useCallback(async () => {
     try {
@@ -407,8 +437,18 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const handleOllamaStart = async () => {
     try {
       showToast('Iniciando servicio Ollama...', 'info');
-      await api.startOllama();
-      showToast('Ollama iniciado correctamente', 'success');
+      const res = await api.startOllama();
+      if (res && res.ok) {
+        showToast('Ollama iniciado correctamente', 'success');
+      } else {
+        const reason = res?.runtime?.reason || 'no_disponible';
+        const msg = reason === 'ollama_not_installed'
+          ? 'No se encontró el ejecutable de Ollama en el sistema'
+          : reason === 'startup_timeout'
+          ? 'Tiempo de espera agotado al iniciar Ollama'
+          : `No se pudo iniciar Ollama (${reason})`;
+        showToast(msg, 'danger');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al iniciar Ollama: ' + err.message, 'danger');
@@ -418,8 +458,12 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const handleOllamaStop = async () => {
     try {
       showToast('Deteniendo servicio Ollama...', 'info');
-      await api.stopOllama();
-      showToast('Ollama detenido', 'info');
+      const res = await api.stopOllama();
+      if (res && res.ok) {
+        showToast('Ollama detenido', 'info');
+      } else {
+        showToast('No se pudo detener el proceso de Ollama', 'warning');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al detener Ollama: ' + err.message, 'danger');
@@ -429,8 +473,13 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const handleOllamaRestart = async () => {
     try {
       showToast('Reiniciando servicio Ollama...', 'info');
-      await api.restartOllama();
-      showToast('Ollama reiniciado exitosamente', 'success');
+      const res = await api.restartOllama();
+      if (res && res.ok) {
+        showToast('Ollama reiniciado exitosamente', 'success');
+      } else {
+        const reason = res?.runtime?.reason || 'error';
+        showToast(`No se pudo reiniciar Ollama (${reason})`, 'danger');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al reiniciar Ollama: ' + err.message, 'danger');
@@ -585,6 +634,19 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
             h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('mcps') }, 'Ver herramientas'),
           ]),
         ]),
+        h('article', { className: 'service-card', key: 'metrics-scraper' }, [
+          h('div', { className: 'service-card-top' }, [
+            h('span', { className: 'service-icon' }, h(Icon, { name: 'activity' })),
+            h('span', { className: `badge ${scraperBadge}` }, scraperLabel),
+          ]),
+          h('h3', null, 'Scraper de métricas'),
+          h('p', null, scraperDetail),
+          h('div', { className: 'service-card-actions' }, [
+            !isScraperRunning ? h('button', { className: 'btn btn-primary', onClick: async () => { try { const res = await api.startMetricsScraper(); showToast(res.message || 'Scraper iniciado', res.ok ? 'success' : 'danger'); onRefresh(); } catch (err) { showToast('Error al iniciar scraper: ' + err.message, 'danger'); } } }, 'Iniciar scraper') : null,
+            isScraperRunning ? h('button', { className: 'btn btn-ghost', onClick: async () => { try { const res = await api.restartMetricsScraper(); showToast(res.message || 'Scraper reiniciado', res.ok ? 'success' : 'danger'); onRefresh(); } catch (err) { showToast('Error al reiniciar scraper: ' + err.message, 'danger'); } } }, 'Reiniciar scraper') : null,
+            h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('metrics') }, 'Ver telemetría'),
+          ]),
+        ]),
       ]),
     ]),
 
@@ -626,8 +688,9 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   ]);
 }
 
-function MetricsView() {
+function MetricsView({ showToast }) {
   const [data, setData] = useState({ samples: [] });
+  const [scraperBusy, setScraperBusy] = useState(false);
   useEffect(() => { let live = true; const load = () => api.getTimeSeries().then(v => live && setData(v)).catch(() => {}); load(); const id = setInterval(load, 10000); return () => { live = false; clearInterval(id); }; }, []);
   const samples = data.samples || [];
   const byMetric = samples.reduce((a, s) => { (a[s.metric] ||= []).push(s); return a; }, {});
@@ -650,6 +713,26 @@ function MetricsView() {
       return total + Math.max(0, Number(series.at(-1).value) - Number(series[0].value));
     }, 0);
   };
+  const scraper = data.scraper || {};
+  const scraperOnline = scraper.status === 'active' && data.stale !== true;
+  const scraperLabel = scraperOnline
+    ? `Scraper activo · última muestra hace ${scraper.age_seconds ?? '—'} s`
+    : scraper.status === 'stale'
+      ? `Telemetría vencida · última muestra hace ${scraper.age_seconds ?? '—'} s`
+      : scraper.message || 'Scraper sin muestras válidas';
+  const controlScraper = async (action) => {
+    setScraperBusy(true);
+    try {
+      const result = action === 'restart' ? await api.restartMetricsScraper() : await api.startMetricsScraper();
+      showToast(result.message || 'Scraper actualizado', result.ok ? 'success' : 'danger');
+      const refreshed = await api.getTimeSeries();
+      setData(refreshed);
+    } catch (error) {
+      showToast(`Error al ${action === 'restart' ? 'reiniciar' : 'iniciar'} el scraper: ${error.message}`, 'danger');
+    } finally {
+      setScraperBusy(false);
+    }
+  };
   const names = { ada: 'ADA', telegram: 'Telegram', ollama: 'Ollama' };
   const servicePanel = (service) => h('article', { className: 'metrics-panel service-panel', key: service }, [
     h('div', { className: 'metrics-panel-title' }, [h('span', { className: 'status-dot online' }), h('div', null, [h('h3', null, names[service]), h('small', null, 'Proceso local')])]),
@@ -657,7 +740,7 @@ function MetricsView() {
     h('div', { className: 'metric-spark' }, samplesForMetric(`${service}_process_rss_mb`).slice(-36).map((v, i) => h('i', { key: i, style: { height: `${Math.max(6, Math.min(100, Number(v.value) / Math.max(1, max(`${service}_process_rss_mb`)) * 100))}%` } }))),
   ]);
   return h('section', { className: 'tab-view active metrics-view' }, [
-    h('div', { className: 'metrics-hero' }, [h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Centro de métricas'), h('p', null, 'Estado operativo y rendimiento de los servicios de ADA')]), h('div', { className: 'metrics-freshness' }, [h('span', { className: 'status-dot online' }), h('span', null, 'Scraper activo · cada 1 segundo')])]),
+    h('div', { className: 'metrics-hero' }, [h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Centro de métricas'), h('p', null, 'Estado operativo y rendimiento de los servicios de ADA')]), h('div', { className: 'metrics-freshness' }, [h('span', { className: `status-dot ${scraperOnline ? 'online' : 'offline'}` }), h('span', null, scraperLabel), h('div', { className: 'metrics-scraper-actions' }, [!scraperOnline ? h('button', { className: 'btn btn-primary btn-sm', onClick: () => controlScraper('start'), disabled: scraperBusy }, scraperBusy ? 'Iniciando…' : 'Iniciar scraper') : null, h('button', { className: 'btn btn-ghost btn-sm', onClick: () => controlScraper('restart'), disabled: scraperBusy }, scraperBusy ? 'Procesando…' : 'Reiniciar scraper')])])]),
     h('div', { className: 'metrics-kpis' }, [h('article', { className: 'metric-kpi' }, [h('span', null, 'Estado del sistema'), h('strong', null, latest('ada_up') === 1 ? 'Operativo' : 'Sin datos'), h('small', null, 'Última lectura confirmada')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Eventos en la ventana'), h('strong', null, String(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations'].reduce((sum, name) => sum + counterDelta(name), 0))), h('small', null, 'Deltas observados en 24 horas')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Retención'), h('strong', null, `${data.retention_days || 7} días`), h('small', null, 'Almacenamiento temporal')])]),
     h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Recursos en tiempo real'), h('p', null, 'Consumo de los procesos que mantienen ADA funcionando')]),
     h('div', { className: 'metrics-service-grid' }, ['ada', 'ollama', 'telegram'].map(servicePanel)),
@@ -672,6 +755,11 @@ function CoreView({ onSwitchTab }) {
   const [coreData, setCoreData] = useState(null);
   const [metricsData, setMetricsData] = useState({ samples: [] });
   const [loadError, setLoadError] = useState('');
+  const networkRef = useRef(null);
+  const sphereRef = useRef(null);
+  const inputNodeRefs = useRef(new Map());
+  const outputNodeRefs = useRef(new Map());
+  const [flowGeometry, setFlowGeometry] = useState({ width: 1200, height: 600, sphere: null, inputs: [], outputs: [] });
 
   useEffect(() => {
     let mounted = true;
@@ -707,6 +795,9 @@ function CoreView({ onSwitchTab }) {
     };
   }, []);
 
+  const [activeTraceTab, setActiveTraceTab] = useState('current');
+  const [selectedHistoryTask, setSelectedHistoryTask] = useState(null);
+
   const activity = coreData?.activity || {
     status: 'idle', phase: 'idle', label: 'Conectando con ADA', detail: 'Leyendo el estado del sistema', recent: [],
   };
@@ -737,11 +828,13 @@ function CoreView({ onSwitchTab }) {
       sourceId: trigger.id,
       name: trigger.name,
       kind: 'Entrada',
-      online: trigger.running === true,
+      online: trigger.running === true || trigger.status === 'ready',
       meta: trigger.status === 'ready' ? 'Preparado' : trigger.summary,
       tab: 'triggers',
     })),
   ];
+  const inputNodes = connectors.filter(node => node.kind !== 'MCP');
+  const outputNodes = connectors.filter(node => node.kind === 'MCP');
   const working = activity.status === 'working';
   const elapsed = activity.started_at && working
     ? Math.max(0, Math.round((Number(coreData?.server_time || Date.now() / 1000) - Number(activity.started_at))))
@@ -795,19 +888,97 @@ function CoreView({ onSwitchTab }) {
     return value == null ? '—' : `${Number(value).toFixed(name.includes('percent') ? 1 : 0)}${suffix}`;
   };
   const activeConnections = connectors.filter(connector => connector.online).length;
-  const flowPoint = (index, total) => {
-    const leftCount = Math.ceil(total / 2);
-    const isLeft = index < leftCount;
-    const localIndex = isLeft ? index : index - leftCount;
-    const localTotal = isLeft ? leftCount : Math.max(1, total - leftCount);
-    const y = 12 + (localIndex / Math.max(1, localTotal - 1)) * 76;
-    return { x: isLeft ? 12 : 88, y };
-  };
-  const modelPoint = (index, total) => {
-    if (total === 1) return { x: 50, y: 50 };
-    const spread = Math.min(23, 13 + total * 2);
-    return { x: index % 2 === 0 ? 50 - spread : 50 + spread, y: index < 2 ? 43 : 60 };
-  };
+  const inputGeometryKey = inputNodes.map(node => node.id).join('|');
+  const outputGeometryKey = outputNodes.map(node => node.id).join('|');
+
+  useLayoutEffect(() => {
+    const network = networkRef.current;
+    const sphere = sphereRef.current;
+    if (!network || !sphere) return undefined;
+
+    let frame = null;
+    const measure = () => {
+      if (frame != null) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const networkRect = network.getBoundingClientRect();
+        const sphereRect = sphere.getBoundingClientRect();
+        if (!networkRect.width || !networkRect.height) return;
+
+        const centerX = sphereRect.left - networkRect.left + sphereRect.width / 2;
+        const centerY = sphereRect.top - networkRect.top + sphereRect.height / 2;
+        const haloRadius = sphereRect.width / 2 + 34;
+        const arcPoint = (side, offsetY) => {
+          const safeOffset = Math.max(-haloRadius * .72, Math.min(haloRadius * .72, offsetY));
+          const xOffset = Math.sqrt(Math.max(0, haloRadius * haloRadius - safeOffset * safeOffset));
+          return { x: centerX + (side === 'left' ? -xOffset : xOffset), y: centerY + safeOffset };
+        };
+        const spread = (index, total, maxSpread) => total <= 1 ? 0 : -maxSpread + (index / (total - 1)) * maxSpread * 2;
+
+        const inputs = inputNodes.flatMap((node, index) => {
+          const element = inputNodeRefs.current.get(node.id);
+          if (!element) return [];
+          const rect = element.getBoundingClientRect();
+          const start = { x: rect.right - networkRect.left + 1, y: rect.top - networkRect.top + rect.height / 2 };
+          const end = arcPoint('left', spread(index, inputNodes.length, 70));
+          const distance = Math.max(12, end.x - start.x);
+          return [{
+            id: node.id,
+            d: `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} C ${(start.x + distance * .42).toFixed(1)} ${start.y.toFixed(1)} ${(end.x - distance * .34).toFixed(1)} ${end.y.toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`,
+          }];
+        });
+
+        const outputRows = Math.max(1, Math.ceil(outputNodes.length / 2));
+        const outputs = outputNodes.flatMap((node, index) => {
+          const element = outputNodeRefs.current.get(node.id);
+          if (!element) return [];
+          const rect = element.getBoundingClientRect();
+          const row = Math.floor(index / 2);
+          const isSecondColumn = index % 2 === 1;
+          const start = arcPoint('right', spread(row, outputRows, 70));
+          const end = { x: rect.left - networkRect.left - 3, y: rect.top - networkRect.top + rect.height / 2 };
+          const distance = Math.max(12, end.x - start.x);
+          let d = `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} C ${(start.x + distance * .34).toFixed(1)} ${start.y.toFixed(1)} ${(end.x - distance * .42).toFixed(1)} ${end.y.toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+          if (isSecondColumn) {
+            const previousNode = outputNodes[index - 1];
+            const previousElement = previousNode && outputNodeRefs.current.get(previousNode.id);
+            if (previousElement) {
+              const previousRect = previousElement.getBoundingClientRect();
+              const branchX = previousRect.left - networkRect.left - 13;
+              const routeY = previousRect.top - networkRect.top - 8;
+              const clearX = previousRect.right - networkRect.left + 5;
+              d = `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} C ${(start.x + 16).toFixed(1)} ${start.y.toFixed(1)} ${branchX.toFixed(1)} ${(routeY + 14).toFixed(1)} ${branchX.toFixed(1)} ${routeY.toFixed(1)} L ${clearX.toFixed(1)} ${routeY.toFixed(1)} C ${(clearX + 8).toFixed(1)} ${routeY.toFixed(1)} ${(end.x - 10).toFixed(1)} ${end.y.toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+            }
+          }
+          return [{
+            id: node.id,
+            d,
+          }];
+        });
+
+        const next = {
+          width: networkRect.width,
+          height: networkRect.height,
+          sphere: { cx: centerX, cy: centerY, outerRadius: haloRadius + 43, innerRadius: haloRadius },
+          inputs,
+          outputs,
+        };
+        setFlowGeometry(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+      });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(network);
+    observer.observe(sphere);
+    inputNodeRefs.current.forEach(element => observer.observe(element));
+    outputNodeRefs.current.forEach(element => observer.observe(element));
+    window.addEventListener('resize', measure);
+    return () => {
+      if (frame != null) cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [inputGeometryKey, outputGeometryKey]);
   const renderSpark = (name, tone = 'cyan') => {
     const values = sparkValues(name);
     const peak = Math.max(...values, 1);
@@ -815,10 +986,6 @@ function CoreView({ onSwitchTab }) {
       ? values.map((value, index) => h('i', { key: `${name}-${index}`, style: { height: `${Math.max(9, Math.round((value / peak) * 100))}%` } }))
       : [h('i', { key: 'empty', style: { height: '12%' } })]);
   };
-  const center = 400;
-  const connectorRadius = 302;
-  const modelRadius = 150;
-
   return h('section', { className: `tab-view active core-view core-status-${activity.status}`, id: 'tab-core' }, [
     h('div', { className: 'core-toolbar', key: 'toolbar' }, [
       h('div', { className: 'core-live-state', role: 'status', 'aria-live': 'polite' }, [
@@ -861,8 +1028,8 @@ function CoreView({ onSwitchTab }) {
         h('div', { className: 'core-rail-brand' }, [h('span', null, 'A'), h('strong', null, 'NÚCLEO')]),
         h('div', { className: 'core-rail-section' }, [
           h('span', { className: 'core-rail-label' }, 'ESTADO'),
-          h('strong', { className: 'core-rail-value core-rail-value-ring' }, '98%'),
-          h('span', { className: 'core-rail-meta' }, 'Operativo'),
+          h('strong', { className: 'core-rail-value core-rail-value-ring' }, statusText),
+          h('span', { className: 'core-rail-meta' }, activity.label),
         ]),
         h('div', { className: 'core-rail-section' }, [
           h('span', { className: 'core-rail-label' }, 'MEMORIA'),
@@ -882,95 +1049,93 @@ function CoreView({ onSwitchTab }) {
       ]),
       h('div', {
         className: 'core-network',
+        ref: networkRef,
         role: 'region',
-        'aria-label': `${statusText}. ${activity.label}. ${modelGroups.length} modelos y ${connectors.length} conectores visibles.`,
+        'aria-label': `${statusText}. Flujo con ${inputNodes.length} iniciadores, ${modelGroups.length} modelos y ${outputNodes.length} MCPs de salida.`,
         key: 'network',
       }, [
-        h('svg', { className: 'core-link-layer', viewBox: '0 0 800 800', 'aria-hidden': 'true' }, [
-          h('circle', { cx: center, cy: center, r: connectorRadius, className: 'core-orbit orbit-outer', key: 'outer' }),
-          h('circle', { cx: center, cy: center, r: modelRadius, className: 'core-orbit orbit-inner', key: 'inner' }),
-          ...Array.from({ length: 18 }, (_, index) => {
-            const side = index % 2 === 0 ? -1 : 1;
-            const band = Math.floor(index / 2);
-            const endX = center + side * (145 + band * 24);
-            const endY = 255 + (band % 9) * 34;
-            const controlX = center + side * (48 + band * 9);
-            const controlY = center + (band - 4) * 21;
+        h('svg', { className: 'core-link-layer', viewBox: `0 0 ${flowGeometry.width} ${flowGeometry.height}`, preserveAspectRatio: 'none', 'aria-hidden': 'true' }, [
+          h('defs', { key: 'defs' }, [
+            h('marker', { id: 'core-arrow-in', viewBox: '0 0 10 10', refX: '8.2', refY: '5', markerWidth: '5', markerHeight: '5', orient: 'auto', markerUnits: 'strokeWidth' }, h('path', { d: 'M 0 0 L 10 5 L 0 10 z', className: 'core-arrow-head core-arrow-head-input' })),
+            h('marker', { id: 'core-arrow-out', viewBox: '0 0 10 10', refX: '8.2', refY: '5', markerWidth: '5', markerHeight: '5', orient: 'auto', markerUnits: 'strokeWidth' }, h('path', { d: 'M 0 0 L 10 5 L 0 10 z', className: 'core-arrow-head core-arrow-head-output' })),
+          ]),
+          flowGeometry.sphere ? h('circle', { cx: flowGeometry.sphere.cx, cy: flowGeometry.sphere.cy, r: flowGeometry.sphere.outerRadius, className: 'core-orbit orbit-outer', key: 'outer' }) : null,
+          flowGeometry.sphere ? h('circle', { cx: flowGeometry.sphere.cx, cy: flowGeometry.sphere.cy, r: flowGeometry.sphere.innerRadius, className: 'core-orbit orbit-inner', key: 'inner' }) : null,
+          ...flowGeometry.inputs.map(path => {
+            const node = inputNodes.find(item => item.id === path.id);
             return h('path', {
-              key: `strand-${index}`,
-              d: `M ${center} ${center} C ${controlX} ${controlY - 55} ${controlX} ${controlY + 35} ${endX} ${endY}`,
-              className: 'core-neural-strand',
+              key: `input-${path.id}`,
+              d: path.d,
+              className: `core-link core-link-input ${node?.online ? 'online' : 'offline'} ${node && activeConnector(node) ? 'active' : ''}`,
+              markerEnd: 'url(#core-arrow-in)',
             });
           }),
-          ...connectors.map((node, index) => {
-            const point = flowPoint(index, connectors.length);
-            const outerX = point.x * 8;
-            const outerY = point.y * 8;
-            const direction = point.x < 50 ? -1 : 1;
-            const controlX = center + direction * 90;
-            const controlY = outerY + (center - outerY) * .35;
+          ...flowGeometry.outputs.map(path => {
+            const node = outputNodes.find(item => item.id === path.id);
             return h('path', {
-              key: `line-${node.id}`,
-              d: `M ${center} ${center} C ${center + direction * 72} ${center - 50} ${controlX} ${controlY} ${outerX} ${outerY}`,
-              className: `core-link ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+              key: `output-${path.id}`,
+              d: path.d,
+              className: `core-link core-link-output ${node?.online ? 'online' : 'offline'} ${node && activeConnector(node) ? 'active' : ''}`,
+              markerEnd: 'url(#core-arrow-out)',
             });
           }),
         ]),
-        h('div', { className: 'core-sphere-wrap' }, [
-          h('div', { className: 'core-sphere-halo halo-one' }),
-          h('div', { className: 'core-sphere-halo halo-two' }),
-          h('div', { className: 'core-sphere' }, [
-            h('div', { className: 'core-sphere-grid' }),
-            h('span', { className: 'core-sphere-kicker' }, 'NÚCLEO LOCAL'),
-            h('strong', { className: 'core-sphere-name' }, 'ADA'),
-            h('span', { className: 'core-sphere-state' }, activity.label),
-            activity.model ? h('span', { className: 'core-sphere-model' }, activity.model) : null,
+        h('section', { className: 'core-flow-lane core-flow-inputs', 'aria-label': 'Iniciadores y canales de entrada' }, [
+          h('div', { className: 'core-flow-heading' }, [h('span', null, 'ENTRADA'), h('strong', null, 'Iniciadores →')]),
+          h('div', { className: 'core-flow-stack' }, inputNodes.map(node => h('button', {
+            key: node.id, type: 'button', onClick: () => onSwitchTab(node.tab),
+            ref: element => { if (element) inputNodeRefs.current.set(node.id, element); else inputNodeRefs.current.delete(node.id); },
+            className: `core-flow-node ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+            'aria-label': `${node.name}, ${node.kind}, ${node.online ? 'activo' : 'inactivo'}, ${node.meta}`,
+          }, [
+            h('span', { className: 'core-node-signal' }),
+            h('span', { className: 'core-flow-node-kind' }, node.kind),
+            h('strong', null, node.name),
+            h('small', null, node.meta),
+          ]))),
+        ]),
+        h('section', { className: 'core-flow-stage', 'aria-label': 'Núcleo ADA y modelos activos' }, [
+          h('div', { className: 'core-flow-heading core-stage-heading' }, [h('span', null, 'PROCESAMIENTO'), h('strong', null, 'ADA / Núcleo')]),
+          h('div', { className: 'core-sphere-wrap', ref: sphereRef }, [
+            h('div', { className: 'core-sphere-halo halo-one' }),
+            h('div', { className: 'core-sphere-halo halo-two' }),
+            h('div', { className: 'core-sphere' }, [
+              h('div', { className: 'core-sphere-grid' }),
+              h('span', { className: 'core-sphere-kicker' }, 'NÚCLEO LOCAL'),
+              h('strong', { className: 'core-sphere-name' }, 'ADA'),
+              h('span', { className: 'core-sphere-state' }, activity.label),
+              activity.model ? h('span', { className: 'core-sphere-model' }, activity.model) : null,
+            ]),
+          ]),
+          h('div', { className: 'core-model-dock', 'aria-label': 'Modelos activos' }, [
+            h('span', { className: 'core-model-dock-label' }, 'MODELOS ACTIVOS'),
+            h('div', { className: 'core-model-list' }, modelGroups.map(model => {
+              const isActive = working && (
+                (activity.component === 'model' && (activity.model === model.name || model.roles.includes(activity.role)))
+                || (activity.component === 'router' && model.roles.includes('router'))
+              );
+              return h('button', {
+                key: model.name, type: 'button', onClick: () => onSwitchTab('models'),
+                className: `core-model-chip ${isActive ? 'active' : ''}`,
+                'aria-label': `${model.name}: ${model.roles.map(role => roleLabels[role] || role).join(', ')}`,
+              }, [h('span', { className: 'core-node-signal' }), h('strong', null, model.name), h('small', null, model.roles.map(role => roleLabels[role] || role).join(' · '))]);
+            })),
           ]),
         ]),
-        h('div', { className: 'core-model-orbit', 'aria-label': 'Modelos activos' },
-          modelGroups.map((model, index) => {
-            const point = modelPoint(index, modelGroups.length);
-            const x = point.x;
-            const y = point.y;
-            const isActive = working && (
-              (activity.component === 'model' && (
-                activity.model === model.name || model.roles.includes(activity.role)
-              ))
-              || (activity.component === 'router' && model.roles.includes('router'))
-            );
-            return h('button', {
-              key: model.name,
-              type: 'button',
-              className: `core-model-node ${isActive ? 'active' : ''}`,
-              style: { left: `${x}%`, top: `${y}%` },
-              onClick: () => onSwitchTab('models'),
-              'aria-label': `${model.name}: ${model.roles.map(role => roleLabels[role] || role).join(', ')}`,
-            }, [
-              h('span', { className: 'core-node-signal' }),
-              h('strong', null, model.name),
-              h('span', null, model.roles.map(role => roleLabels[role] || role).join(' · ')),
-            ]);
-          })
-        ),
-        h('div', { className: 'core-connectors', 'aria-label': 'Conectores y MCP' },
-          connectors.map((node, index) => {
-            const point = flowPoint(index, connectors.length);
-            const x = point.x;
-            const y = point.y;
-            return h('button', {
-              key: node.id,
-              type: 'button',
-              className: `core-connector ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
-              style: { left: `${x}%`, top: `${y}%` },
-              onClick: () => onSwitchTab(node.tab),
-              'aria-label': `${node.name}, ${node.kind}, ${node.online ? 'activo' : 'inactivo'}, ${node.meta}`,
-            }, [
-              h('span', { className: 'core-node-signal' }),
-              h('strong', null, node.name),
-              h('span', null, node.kind === 'MCP' ? node.meta : node.kind),
-            ]);
-          })
-        ),
+        h('section', { className: 'core-flow-lane core-flow-outputs', 'aria-label': 'MCPs y herramientas de salida' }, [
+          h('div', { className: 'core-flow-heading core-flow-heading-output' }, [h('span', null, 'SALIDA'), h('strong', null, '→ MCPs invocables')]),
+          h('div', { className: 'core-flow-stack' }, outputNodes.map(node => h('button', {
+            key: node.id, type: 'button', onClick: () => onSwitchTab(node.tab),
+            ref: element => { if (element) outputNodeRefs.current.set(node.id, element); else outputNodeRefs.current.delete(node.id); },
+            className: `core-flow-node ${node.online ? 'online' : 'offline'} ${activeConnector(node) ? 'active' : ''}`,
+            'aria-label': `${node.name}, MCP, ${node.online ? 'activo' : 'inactivo'}, ${node.meta}`,
+          }, [
+            h('span', { className: 'core-node-signal' }),
+            h('span', { className: 'core-flow-node-kind' }, 'MCP / SALIDA'),
+            h('strong', null, node.name),
+            h('small', null, node.meta),
+          ]))),
+        ]),
       ]),
       h('div', { className: 'core-activity-panel', key: 'activity' }, [
         h('div', { className: 'core-activity-header' }, [
@@ -997,15 +1162,82 @@ function CoreView({ onSwitchTab }) {
             h('strong', { className: 'core-meta-val text-accent' }, `${connectors.filter(c => c.online).length} de ${connectors.length}`),
           ]),
         ]),
-        (activity.recent && activity.recent.length > 0) ? h('div', { className: 'core-recent-phases', 'aria-label': 'Últimas fases' }, [
-          h('span', { className: 'core-recent-title' }, 'Flujo reciente'),
-          h('div', { className: 'core-phases-list' },
-            (activity.recent || []).slice(-4).map((event, index) => h('span', {
-              key: `${event.at}-${index}`,
-              className: `core-phase phase-${event.status}`,
-            }, event.label))
-          ),
-        ]) : null,
+        // Trace / Historial View Tabs & Content
+        h('div', { className: 'core-trace-container' }, [
+          h('div', { className: 'core-trace-nav' }, [
+            h('span', { className: 'core-activity-eyebrow' }, activeTraceTab === 'current' ? 'TRAZA EN TIEMPO REAL' : 'HISTORIAL DE TAREAS'),
+            h('div', { className: 'core-trace-tabs' }, [
+              h('button', {
+                type: 'button',
+                className: `core-trace-tab ${activeTraceTab === 'current' ? 'active' : ''}`,
+                onClick: () => { setActiveTraceTab('current'); setSelectedHistoryTask(null); },
+              }, 'Paso a Paso'),
+              h('button', {
+                type: 'button',
+                className: `core-trace-tab ${activeTraceTab === 'history' ? 'active' : ''}`,
+                onClick: () => setActiveTraceTab('history'),
+              }, `Historial (${(activity.history || []).length})`),
+            ]),
+          ]),
+
+          // Tab 1: Current Live / Selected Task Trace Steps
+          activeTraceTab === 'current' ? h('div', { className: 'core-trace-timeline' },
+            (() => {
+              const activeSteps = selectedHistoryTask ? selectedHistoryTask.trace : (activity.trace || []);
+              if (!activeSteps.length) {
+                return [h('span', { key: 'empty', className: 'text-xs text-muted py-2' }, 'Sin trazas de ejecución en este momento.')];
+              }
+              return activeSteps.map((step, idx) => {
+                const isModel = step.phase.includes('model');
+                const isRouter = step.phase.includes('router') || step.phase.includes('route_');
+                const isTool = step.phase.includes('capability') || step.phase.includes('folder_');
+                const tagClass = isModel ? 'tag-model' : isRouter ? 'tag-router' : isTool ? 'tag-tool' : '';
+                const tagLabel = isModel ? (step.model || 'Modelo') : isRouter ? 'Decisión Router' : isTool ? 'Herramienta' : (step.component || 'Agente');
+
+                return h('div', { key: `${step.at}-${idx}`, className: `core-trace-step step-${step.status}` }, [
+                  h('div', { className: 'core-trace-step-dot' }),
+                  h('div', { className: 'core-trace-step-header' }, [
+                    h('span', { className: 'core-trace-step-title' }, step.label),
+                    h('span', { className: `core-trace-step-tag ${tagClass}` }, tagLabel),
+                  ]),
+                  step.detail ? h('div', { className: 'core-trace-step-detail' }, step.detail) : null,
+                ]);
+              });
+            })()
+          ) : null,
+
+          // Tab 2: Completed Tasks History
+          activeTraceTab === 'history' ? h('div', { className: 'core-history-list' },
+            (() => {
+              const history = activity.history || [];
+              if (!history.length) {
+                return [h('span', { key: 'empty', className: 'text-xs text-muted py-2' }, 'No hay tareas registradas en el historial reciente.')];
+              }
+              return history.map(item => {
+                const isSelected = selectedHistoryTask?.id === item.id;
+                return h('div', {
+                  key: item.id,
+                  className: `core-history-item ${isSelected ? 'selected' : ''}`,
+                  onClick: () => {
+                    setSelectedHistoryTask(item);
+                    setActiveTraceTab('current');
+                  },
+                }, [
+                  h('div', { className: 'core-history-item-top' }, [
+                    h('span', { className: 'core-history-prompt' }, item.prompt),
+                    h('span', { className: `badge ${item.status === 'complete' ? 'badge-success' : 'badge-danger'} text-2xs` }, item.status === 'complete' ? 'Completado' : 'Error'),
+                  ]),
+                  h('div', { className: 'core-history-meta' }, [
+                    h('span', null, `⏱ ${item.duration_seconds}s`),
+                    item.model ? h('span', { className: 'font-mono text-accent' }, item.model) : null,
+                    item.decision?.action ? h('span', { className: 'text-primary' }, `→ ${item.decision.action}`) : null,
+                    h('span', null, `${(item.trace || []).length} pasos`),
+                  ]),
+                ]);
+              });
+            })()
+          ) : null,
+        ]),
       ]),
     ]),
     h('div', { className: 'core-telemetry-grid', key: 'telemetry' }, [
@@ -1128,8 +1360,18 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const handleStart = async () => {
     try {
       showToast('Iniciando servicio Ollama...', 'info');
-      await api.startOllama();
-      showToast('Ollama iniciado correctamente', 'success');
+      const res = await api.startOllama();
+      if (res && res.ok) {
+        showToast('Ollama iniciado correctamente', 'success');
+      } else {
+        const reason = res?.runtime?.reason || 'no_disponible';
+        const msg = reason === 'ollama_not_installed'
+          ? 'No se encontró el ejecutable de Ollama en el sistema'
+          : reason === 'startup_timeout'
+          ? 'Tiempo de espera agotado al iniciar Ollama'
+          : `No se pudo iniciar Ollama (${reason})`;
+        showToast(msg, 'danger');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al iniciar: ' + err.message, 'danger');
@@ -1139,8 +1381,12 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const handleStop = async () => {
     try {
       showToast('Deteniendo servicio Ollama...', 'info');
-      await api.stopOllama();
-      showToast('Ollama detenido', 'info');
+      const res = await api.stopOllama();
+      if (res && res.ok) {
+        showToast('Ollama detenido', 'info');
+      } else {
+        showToast('No se pudo detener el proceso de Ollama', 'warning');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al detener: ' + err.message, 'danger');
@@ -1150,8 +1396,13 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const handleRestart = async () => {
     try {
       showToast('Reiniciando servicio Ollama...', 'info');
-      await api.restartOllama();
-      showToast('Ollama reiniciado exitosamente', 'success');
+      const res = await api.restartOllama();
+      if (res && res.ok) {
+        showToast('Ollama reiniciado exitosamente', 'success');
+      } else {
+        const reason = res?.runtime?.reason || 'error';
+        showToast(`No se pudo reiniciar Ollama (${reason})`, 'danger');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al reiniciar: ' + err.message, 'danger');
@@ -1224,6 +1475,36 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
     } catch (err) {
       showToast('Error en pull: ' + err.message, 'danger');
       setPulling(false);
+    }
+  };
+
+  const handleLoad = async (name) => {
+    try {
+      showToast(`Cargando ${name} en memoria...`, 'info');
+      const res = await api.loadOllamaModel(name);
+      if (res && res.ok) {
+        showToast(`Modelo ${name} precargado en memoria (VRAM/RAM)`, 'success');
+      } else {
+        showToast(`No se pudo cargar el modelo ${name}`, 'danger');
+      }
+      onRefresh();
+    } catch (err) {
+      showToast('Error al cargar modelo: ' + err.message, 'danger');
+    }
+  };
+
+  const handlePreloadAll = async () => {
+    try {
+      showToast('Precalentando modelos en memoria según la política activa...', 'info');
+      const res = await api.preloadAllModels();
+      if (res && res.ok) {
+        showToast(`Modelos levantados: ${(res.loaded || []).join(', ') || 'Listos'}`, 'success');
+      } else {
+        showToast('No se pudieron precargar los modelos', 'warning');
+      }
+      onRefresh();
+    } catch (err) {
+      showToast('Error al precargar modelos: ' + err.message, 'danger');
     }
   };
 
@@ -1576,7 +1857,10 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
           h('h3', { className: 'card-title' }, 'Biblioteca de Modelos Instalados en Disco'),
           h('span', { className: 'badge badge-primary' }, `${models.length} modelos`),
         ]),
-        h('button', { className: 'btn btn-sm btn-ghost', onClick: onRefresh }, '🔄 Actualizar Lista'),
+        h('div', { className: 'flex items-center gap-2' }, [
+          models.length > 0 ? h('button', { className: 'btn btn-sm btn-primary', onClick: handlePreloadAll, title: 'Carga los modelos en memoria para que respondan al instante sin demoras' }, '⚡ Precargar Todos en Memoria') : null,
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: onRefresh }, '🔄 Actualizar Lista'),
+        ]),
       ]),
       h('div', { className: 'card-body' }, [
         !models.length ? h('div', { className: 'empty-state-sm text-center py-6 text-muted' }, 'No se encontraron modelos descargados en este equipo.')
@@ -1596,12 +1880,16 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
                       m.details?.family ? h('span', { className: 'badge text-2xs', key: 'f' }, m.details.family) : null,
                     ]),
                   ]),
-                  h('div', { className: 'flex justify-between items-center gap-2 mt-3 pt-2 border-t border-subtle' }, [
-                    h('div', { className: 'flex gap-1' }, [
-                      h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Ver Arquitectura y Modelfile', onClick: () => handleShowDetails(m.name) }, 'ℹ️ Info'),
-                      h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Testear velocidad de respuesta', onClick: () => onBenchmark(m.name) }, '⚡ Benchmark'),
+                  h('div', { className: 'flex flex-col gap-2 mt-3 pt-2 border-t border-subtle' }, [
+                    !isRunning ? h('button', { className: 'btn btn-sm btn-primary w-full text-xs font-semibold', onClick: () => handleLoad(m.name) }, '⚡ Cargar en Memoria')
+                               : h('button', { className: 'btn btn-sm btn-secondary text-danger w-full text-xs', onClick: () => handleUnload(m.name) }, '🔻 Descargar de Memoria'),
+                    h('div', { className: 'flex justify-between items-center gap-1' }, [
+                      h('div', { className: 'flex gap-1' }, [
+                        h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Ver Arquitectura y Modelfile', onClick: () => handleShowDetails(m.name) }, 'ℹ️ Info'),
+                        h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Testear velocidad de respuesta', onClick: () => onBenchmark(m.name) }, '⚡ Bench'),
+                      ]),
+                      h('button', { className: 'btn btn-sm btn-ghost text-danger text-xs', title: 'Borrar de disco', onClick: () => handleDelete(m.name) }, '🗑️ Borrar'),
                     ]),
-                    h('button', { className: 'btn btn-sm btn-secondary text-danger text-xs', title: 'Borrar de disco', onClick: () => handleDelete(m.name) }, '🗑️ Borrar'),
                   ]),
                 ]);
               })
@@ -2138,7 +2426,192 @@ function ModelsView({ installedModels, showToast }) {
   ]);
 }
 
-// 5.1 Dedicated Benchmark & Prompt Test Suite View
+// 5.1 Functional ADA checklist: these prompts go through ADA and its tools.
+function HealthcheckView({ showToast }) {
+  const [prompts, setPrompts] = useState([]);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [activeRun, setActiveRun] = useState(null);
+  const [latestByPrompt, setLatestByPrompt] = useState({});
+  const [latestLoaded, setLatestLoaded] = useState(false);
+  const [promptsLoaded, setPromptsLoaded] = useState(false);
+  const [newCase, setNewCase] = useState({ id: '', category: 'web', name: '', capability: 'web', tags: 'web, readonly', prompt: '', must_match: '(respuesta|fuente)' });
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer;
+    const loadPrompts = async (attempt = 0) => {
+      try {
+        const data = await api.getHealthcheckPrompts();
+        const loadedPrompts = data.prompts || [];
+        if (!loadedPrompts.length) throw new Error('El catálogo llegó vacío');
+        if (!cancelled) { setPrompts(loadedPrompts); setPromptsLoaded(true); }
+      } catch (err) {
+        if (cancelled) return;
+        if (attempt < 3) {
+          retryTimer = setTimeout(() => loadPrompts(attempt + 1), 1000 * (attempt + 1));
+        } else {
+          setPromptsLoaded(true);
+          showToast('No se pudieron cargar los casos del healthcheck. Reintentá actualizar.', 'danger');
+        }
+      }
+    };
+    loadPrompts();
+    api.getHealthcheckLatest().then(data => setLatestByPrompt(Object.fromEntries((data.results || []).map(item => [item.prompt_id, item])))).catch(() => {}).finally(() => setLatestLoaded(true));
+    Promise.all([api.getActiveHealthcheckRuns(), api.getHealthcheckBatches()]).then(([active, recent]) => {
+      setActiveRun(active.runs?.[0] || recent.runs?.[0] || null);
+    }).catch(() => {});
+    return () => { cancelled = true; clearTimeout(retryTimer); };
+  }, []);
+
+  const refreshRun = async (runId) => {
+    try {
+      const data = await api.getHealthcheckRun(runId, false);
+      setActiveRun(data.run);
+      if (['completed', 'interrupted'].includes(data.run.status)) {
+        const completedData = await api.getHealthcheckRun(runId, true);
+        const details = completedData.history.map(item => ({ ...item, ...(prompts.find(prompt => prompt.id === item.prompt_id) || {}), reply: item.response, ...item.evaluation }));
+        setResult({ ok: completedData.run.failed === 0, run_id: runId, summary: { total: completedData.run.total, passed: completedData.run.passed, failed: completedData.run.failed }, results: details });
+        api.getHealthcheckLatest().then(latest => setLatestByPrompt(Object.fromEntries((latest.results || []).map(item => [item.prompt_id, item])))).catch(() => {});
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    if (!activeRun?.run_id) return undefined;
+    refreshRun(activeRun.run_id);
+    if (['completed', 'interrupted'].includes(activeRun.status)) return undefined;
+    const timer = setInterval(() => refreshRun(activeRun.run_id), 2000);
+    return () => clearInterval(timer);
+  }, [activeRun?.run_id, prompts.length]);
+
+  const run = async (promptIds) => {
+    setLoading(true); setResult(null);
+    try {
+      const data = await api.runHealthcheck(promptIds);
+      setActiveRun(data.run);
+      showToast('Healthcheck iniciado; el progreso queda guardado en SQLite', 'info');
+    } catch (err) { showToast(`No se pudo ejecutar el healthcheck: ${err.message}`, 'danger'); }
+    finally { setLoading(false); }
+  };
+
+  const cancelRun = async () => {
+    if (!activeRun?.run_id) return;
+    try {
+      const data = await api.cancelHealthcheckRun(activeRun.run_id);
+      setActiveRun(data.run);
+      showToast('Healthcheck detenido y marcado como interrumpido.', 'warning');
+    } catch (err) { showToast(`No se pudo detener el healthcheck: ${err.message}`, 'danger'); }
+  };
+
+  const grouped = prompts.reduce((groups, item) => {
+    // Compatibilidad con casos creados antes de agregar la columna category.
+    const category = item.functional_category || item.category || item.capability || item.tags?.[0] || 'Otros';
+    (groups[category] ||= []).push({ ...item, category });
+    return groups;
+  }, {});
+  const categoryNames = Object.keys(grouped);
+  const activeCategory = grouped[selectedCategory] ? selectedCategory : categoryNames[0];
+  const activePrompts = grouped[activeCategory] || [];
+  const runInProgress = Boolean(activeRun && !['completed', 'interrupted'].includes(activeRun.status));
+  const unexecutedPromptIds = latestLoaded ? prompts.filter(prompt => !latestByPrompt[prompt.id]).map(prompt => prompt.id) : [];
+  const interruptedCompletedIds = new Set((result?.results || []).map(item => item.id || item.prompt_id));
+  const interruptedPendingIds = activeRun?.status === 'interrupted'
+    ? prompts.filter(prompt => !interruptedCompletedIds.has(prompt.id)).map(prompt => prompt.id)
+    : [];
+  const resumablePromptIds = interruptedPendingIds.length ? interruptedPendingIds : unexecutedPromptIds;
+  const currentPrompt = prompts.find(prompt => prompt.id === activeRun?.current_prompt_id);
+  const currentPromptCategory = currentPrompt?.functional_category || currentPrompt?.category || currentPrompt?.capability;
+  const currentPromptLabel = currentPrompt
+    ? `${currentPromptCategory ? `${currentPromptCategory} -> ` : ''}${currentPrompt.name}`
+    : activeRun?.current_prompt_id || 'próximo caso';
+  const categoryStats = (category) => grouped[category].reduce((stats, item) => {
+    const isExecuting = runInProgress && activeRun?.current_prompt_id === item.id;
+    const last = latestByPrompt[item.id];
+    if (isExecuting) stats.running += 1;
+    else if (last?.status === 'passed' || last?.passed) stats.ok += 1;
+    else if (last?.status === 'failed' || last?.status === 'error') stats.failed += 1;
+    return stats;
+  }, { ok: 0, failed: 0, running: 0 });
+  const addCase = async () => {
+    const data = { ...newCase, id: newCase.id.trim(), name: newCase.name.trim(), tags: newCase.tags.split(',').map(value => value.trim()).filter(Boolean), prompt: newCase.prompt.trim(), must_match: newCase.must_match.split('\n').map(value => value.trim()).filter(Boolean) };
+    if (!data.id || !data.name || !data.prompt || !data.must_match.length) { showToast('Completá id, nombre, prompt y al menos un criterio', 'warning'); return; }
+    try { await api.addHealthcheckPrompt(data); const fresh = await api.getHealthcheckPrompts(); setPrompts(fresh.prompts || []); setShowAdd(false); setNewCase({ id: '', category: 'web', name: '', capability: 'web', tags: 'web, readonly', prompt: '', must_match: '(respuesta|fuente)' }); showToast('Caso agregado al grupo', 'success'); }
+    catch (err) { showToast(`No se pudo agregar: ${err.message}`, 'danger'); }
+  };
+
+  return h('section', { className: 'tab-view active', id: 'tab-benchmark' }, [
+    h('div', { className: 'card mb-6', key: 'intro' }, [
+      h('div', { className: 'card-header flex justify-between items-center' }, [
+        h('div', null, [h('h3', { className: 'card-title' }, '🩺 Healthcheck funcional de ADA'), h('p', { className: 'text-sm text-muted' }, 'Checklist real: cada prueba atraviesa ADA y consulta las herramientas disponibles en modo lectura.')]),
+        h('span', { className: 'badge badge-accent' }, 'SQLite · historial'),
+      ]),
+      h('div', { className: 'card-body' }, [
+        h('div', { className: 'flex gap-3 mb-5' }, [
+          h('button', { className: 'btn btn-primary', disabled: loading || runInProgress || !promptsLoaded || !prompts.length, onClick: () => run() }, runInProgress ? '⏳ Checklist en curso…' : '▶ Ejecutar checklist completo'),
+          runInProgress ? h('button', { className: 'btn btn-danger', disabled: loading, onClick: cancelRun }, '■ Detener') : null,
+          h('button', { className: 'btn btn-secondary', disabled: loading || runInProgress || !promptsLoaded || !latestLoaded || !resumablePromptIds.length, onClick: () => run(resumablePromptIds) }, activeRun?.status === 'interrupted' ? `▶ Continuar corrida (${resumablePromptIds.length})` : `▶ Ejecutar no ejecutados${latestLoaded ? ` (${resumablePromptIds.length})` : '…'}`),
+          h('button', { className: 'btn btn-secondary', disabled: loading || runInProgress, onClick: () => setShowAdd(!showAdd) }, showAdd ? 'Cerrar alta' : '+ Agregar caso'),
+          h('span', { className: 'text-sm text-muted self-center' }, promptsLoaded ? `${prompts.length} capacidades verificables` : 'Cargando casos…'),
+        ]),
+        activeRun ? h('div', { className: `healthcheck-progress mb-5 ${['completed', 'interrupted'].includes(activeRun.status) ? 'is-completed' : ''}` }, [
+          h('div', { className: 'flex justify-between items-center mb-2' }, [h('strong', { className: 'text-sm' }, activeRun.status === 'completed' ? 'Última corrida registrada' : activeRun.status === 'interrupted' ? 'Corrida interrumpida' : 'Progreso guardado'), h('span', { className: 'text-sm text-primary' }, `${activeRun.completed}/${activeRun.total} · ${activeRun.percent}%`)]),
+          h('div', { className: 'healthcheck-progress-track' }, [h('div', { className: 'healthcheck-progress-bar', style: { width: `${activeRun.percent}%` } })]),
+          h('div', { className: 'text-xs text-muted mt-2' }, activeRun.status === 'completed' ? `${activeRun.passed} aprobados · ${activeRun.failed} fallidos · finalizada ${activeRun.finished_at || ''}` : activeRun.status === 'interrupted' ? `${activeRun.completed} casos guardados · se detuvo antes de finalizar. Podés ejecutarla nuevamente.` : (activeRun.current_prompt_id ? `Ejecutando: ${currentPromptLabel}` : 'Preparando el próximo caso…')),
+        ]) : null,
+        showAdd ? h('div', { className: 'p-4 mb-5 rounded-lg border border-subtle bg-base' }, [
+          h('h4', { className: 'text-sm font-semibold mb-3' }, 'Agregar caso al catálogo'),
+          h('div', { className: 'grid grid-cols-2 gap-3' }, [
+            ...[['id', 'ID único'], ['name', 'Nombre'], ['category', 'Categoría'], ['capability', 'Tag/capacidad'], ['tags', 'Tags separados por coma']].map(([key, label]) => h('input', { key, className: 'form-input', placeholder: label, value: newCase[key], onChange: e => setNewCase({ ...newCase, [key]: e.target.value }) })),
+          ]),
+          h('textarea', { className: 'form-input form-textarea mt-3', rows: 3, placeholder: 'Prompt de solo lectura', value: newCase.prompt, onChange: e => setNewCase({ ...newCase, prompt: e.target.value }) }),
+          h('textarea', { className: 'form-input form-textarea mt-3', rows: 2, placeholder: 'Un regex esperado por línea', value: newCase.must_match, onChange: e => setNewCase({ ...newCase, must_match: e.target.value }) }),
+          h('button', { className: 'btn btn-primary mt-3', onClick: addCase }, 'Guardar en SQLite'),
+        ]) : null,
+        h('div', { className: 'healthcheck-browser' }, [
+          h('aside', { className: 'healthcheck-category-nav' }, [
+            h('div', { className: 'healthcheck-nav-label' }, 'Categorías'),
+            !promptsLoaded ? h('div', { className: 'text-xs text-muted p-2' }, 'Cargando categorías…') : categoryNames.map(category => {
+              const stats = categoryStats(category);
+              const isGroupRunning = stats.running > 0;
+              return h('button', { className: `healthcheck-category-item ${activeCategory === category ? 'is-active' : ''} ${isGroupRunning ? 'is-running' : ''}`, key: category, onClick: () => setSelectedCategory(category) }, [
+                h('div', { className: 'healthcheck-category-main' }, [h('strong', null, category), h('span', { className: 'healthcheck-count' }, grouped[category].length)]),
+                h('div', { className: 'healthcheck-category-stats', title: `${stats.ok} aprobados · ${stats.failed} fallidos${stats.running ? ` · ${stats.running} en ejecución` : ''}` }, [
+                  h('span', { className: 'healthcheck-category-stat is-ok' }, stats.ok),
+                  h('span', { className: 'healthcheck-category-stat is-fail' }, stats.failed),
+                ]),
+                h('div', { className: 'healthcheck-category-tags' }, isGroupRunning ? '⏳ En ejecución...' : 'Pruebas funcionales de ADA'),
+              ]);
+            })
+          ]),
+          h('div', { className: 'healthcheck-prompt-panel' }, [
+            h('div', { className: 'flex justify-between items-center mb-3' }, [h('div', null, [h('h4', { className: 'text-sm font-semibold uppercase' }, activeCategory || (promptsLoaded ? 'Sin categorías' : 'Cargando casos…')), h('p', { className: 'text-xs text-muted' }, promptsLoaded ? `${activePrompts.length} prompts en esta categoría` : 'Esperando el catálogo')]), h('button', { className: 'btn btn-secondary btn-sm', disabled: loading || runInProgress || !promptsLoaded || !activePrompts.length, onClick: () => run(activePrompts.map(item => item.id)) }, 'Probar grupo')]),
+            !promptsLoaded ? h('div', { className: 'healthcheck-empty' }, 'Cargando casos…') : activePrompts.length ? h('div', { className: 'healthcheck-prompt-list' }, activePrompts.map(item => {
+            const check = result?.results?.find(r => r.id === item.id);
+            const last = check || latestByPrompt[item.id];
+            const isExecuting = runInProgress && activeRun?.current_prompt_id === item.id;
+            const lastStatus = isExecuting ? 'running' : (last?.status || (last?.passed ? 'passed' : null));
+            return h('article', { className: 'healthcheck-prompt-card', key: item.id }, [
+            h('div', { className: 'healthcheck-prompt-heading' }, [h('strong', null, item.name), h('span', { className: `healthcheck-status ${lastStatus === 'passed' ? 'is-ok' : lastStatus === 'error' ? 'is-error' : lastStatus === 'failed' ? 'is-fail' : lastStatus === 'running' ? 'is-running' : ''}` }, lastStatus === 'passed' ? '✓ Aprobado' : lastStatus === 'error' ? '⚠ Error' : lastStatus === 'failed' ? '✗ Falló' : lastStatus === 'running' ? '⏳ En ejecución' : 'Pendiente')]),
+            h('p', { className: 'healthcheck-prompt-text' }, item.prompt),
+            isExecuting ? h('div', { className: 'text-xs text-secondary' }, 'En ejecución') : last ? h('div', { className: 'text-xs text-secondary' }, `${last.elapsed_seconds || 0}s · ${last.model || 'modelo no registrado'} · ${last.created_at || ''}`) : h('div', { className: 'text-xs text-muted' }, 'Todavía no ejecutado'),
+            h('button', { className: 'healthcheck-run-button', disabled: loading, onClick: () => run([item.id]) }, 'Probar ahora'),
+          ]);
+        })) : h('div', { className: 'healthcheck-empty' }, 'No hay prompts en esta categoría.'),
+          ]),
+        ]),
+      ]),
+    ]),
+    result ? h('div', { className: 'card', key: 'result' }, [
+      h('div', { className: 'card-header flex justify-between items-center' }, [h('h3', { className: 'card-title' }, 'Resultado de la ejecución'), h('span', { className: `badge ${result.ok ? 'badge-success' : 'badge-danger'}` }, `${result.summary.passed}/${result.summary.total} OK`)]),
+      h('div', { className: 'card-body' }, result.results.map(item => h('details', { className: 'mb-3', key: item.id }, [h('summary', { className: 'cursor-pointer' }, `${item.passed ? '✓' : '✗'} ${item.name} · ${item.judge?.source === 'llm' ? `${Math.round((item.score || 0) * 100)}%` : 'sin juez IA'}`), h('div', { className: 'bench-output mt-2' }, item.reply || item.error || 'Sin respuesta'), item.judge ? h('p', { className: 'text-xs text-muted mt-2' }, `${item.judge.rationale || ''}${item.judge.issues?.length ? ` · Problemas: ${item.judge.issues.join('; ')}` : ''}`) : null]))),
+    ]) : null,
+  ]);
+}
+
+// Model benchmark view kept separately for latency/token measurements.
 function BenchmarkView({ installedModels, showToast }) {
   const [benchModel, setBenchModel] = useState('');
   const [benchPrompt, setBenchPrompt] = useState('suite');
@@ -4062,7 +4535,7 @@ export function App() {
   const titles = {
     overview: ['Resumen', 'Estado y decisiones importantes de tu asistente local'],
     core: ['Núcleo ADA', 'Actividad en vivo de modelos, canales y herramientas'],
-    benchmark: ['🧪 Tests de Prompts & Telemetría', 'Medición en vivo de velocidad, latencia, CPU, RAM y VRAM'],
+    benchmark: ['🩺 Healthcheck funcional de ADA', 'Checklist real de capacidades y herramientas disponibles'],
     metrics: ['Métricas', 'Telemetría de ADA con retención de 7 días'],
     ollama: ['Motor local', 'Modelos instalados, consumo y configuración de inferencia'],
     models: ['Modelos y roles', 'Qué modelo usa ADA para cada tipo de tarea'],
@@ -4127,8 +4600,8 @@ export function App() {
       h('div', { className: 'content-container', key: 'content' }, [
         activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: selectTab, showToast, onRefresh: refreshAll }) : null,
         activeTab === 'core' ? h(CoreView, { onSwitchTab: selectTab }) : null,
-        activeTab === 'benchmark' ? h(BenchmarkView, { installedModels: ollamaData.models || [], showToast }) : null,
-        activeTab === 'metrics' ? h(MetricsView) : null,
+        activeTab === 'benchmark' ? h(HealthcheckView, { showToast }) : null,
+        activeTab === 'metrics' ? h(MetricsView, { showToast }) : null,
         activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { selectTab('benchmark'); } }) : null,
         activeTab === 'models' ? h(ModelsView, { installedModels: ollamaData.models || [], showToast }) : null,
         activeTab === 'mcps' ? h(MCPsView, { showToast }) : null,

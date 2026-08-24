@@ -83,6 +83,12 @@ export const api = {
   getOllamaConfig() { return this.request('/api/ollama/config'); },
   saveOllamaConfig(config) { return this.request('/api/ollama/config', { method: 'POST', body: JSON.stringify(config) }); },
   getOllamaDetails(model) { return this.request(`/api/ollama/details?model=${encodeURIComponent(model)}`); },
+  loadOllamaModel(model) {
+    return this.request('/api/ollama/load', { method: 'POST', body: JSON.stringify({ model }) });
+  },
+  preloadAllModels() {
+    return this.request('/api/ollama/preload_all', { method: 'POST' });
+  },
   unloadOllamaModel(model) {
     return this.request('/api/ollama/unload', { method: 'POST', body: JSON.stringify({ model }) });
   },
@@ -103,6 +109,11 @@ export const api = {
   testTelegram(body = {}) { return this.request('/api/telegram/test', { method: 'POST', body: JSON.stringify(body) }); },
   getTelegramHistory() { return this.request('/api/telegram/history'); },
   saveTelegramConfig(data) { return this.request('/api/telegram/config', { method: 'POST', body: JSON.stringify(data) }); },
+
+  // Metrics Scraper Lifecycle
+  getMetricsScraperStatus() { return this.request('/api/metrics/scraper/status'); },
+  startMetricsScraper() { return this.request('/api/metrics/scraper/start', { method: 'POST' }); },
+  stopMetricsScraper() { return this.request('/api/metrics/scraper/stop', { method: 'POST' }); },
 
   // Event sources and entry points
   getTriggers() { return this.request('/api/triggers'); },
@@ -407,8 +418,18 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const handleOllamaStart = async () => {
     try {
       showToast('Iniciando servicio Ollama...', 'info');
-      await api.startOllama();
-      showToast('Ollama iniciado correctamente', 'success');
+      const res = await api.startOllama();
+      if (res && res.ok) {
+        showToast('Ollama iniciado correctamente', 'success');
+      } else {
+        const reason = res?.runtime?.reason || 'no_disponible';
+        const msg = reason === 'ollama_not_installed'
+          ? 'No se encontró el ejecutable de Ollama en el sistema'
+          : reason === 'startup_timeout'
+          ? 'Tiempo de espera agotado al iniciar Ollama'
+          : `No se pudo iniciar Ollama (${reason})`;
+        showToast(msg, 'danger');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al iniciar Ollama: ' + err.message, 'danger');
@@ -418,8 +439,12 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const handleOllamaStop = async () => {
     try {
       showToast('Deteniendo servicio Ollama...', 'info');
-      await api.stopOllama();
-      showToast('Ollama detenido', 'info');
+      const res = await api.stopOllama();
+      if (res && res.ok) {
+        showToast('Ollama detenido', 'info');
+      } else {
+        showToast('No se pudo detener el proceso de Ollama', 'warning');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al detener Ollama: ' + err.message, 'danger');
@@ -429,8 +454,13 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const handleOllamaRestart = async () => {
     try {
       showToast('Reiniciando servicio Ollama...', 'info');
-      await api.restartOllama();
-      showToast('Ollama reiniciado exitosamente', 'success');
+      const res = await api.restartOllama();
+      if (res && res.ok) {
+        showToast('Ollama reiniciado exitosamente', 'success');
+      } else {
+        const reason = res?.runtime?.reason || 'error';
+        showToast(`No se pudo reiniciar Ollama (${reason})`, 'danger');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al reiniciar Ollama: ' + err.message, 'danger');
@@ -626,45 +656,98 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   ]);
 }
 
+function MetricLineChart({ series = [], colors = ['#5ce1e6', '#a78bfa', '#fbbf24'], unit = '', empty = 'Sin muestras en esta ventana' }) {
+  const width = 720, height = 190, pad = { top: 12, right: 12, bottom: 24, left: 12 };
+  const values = series.flatMap(item => item.values || []).map(Number).filter(Number.isFinite);
+  if (!values.length) return h('div', { className: 'metrics-chart-empty' }, empty);
+  const min = Math.min(...values), max = Math.max(...values), range = Math.max(0.0001, max - min);
+  const longest = Math.max(...series.map(item => item.values.length), 1);
+  const points = (item) => item.values.map((value, index) => {
+    const x = pad.left + (index / Math.max(1, longest - 1)) * (width - pad.left - pad.right);
+    const y = pad.top + (1 - (Number(value) - min) / range) * (height - pad.top - pad.bottom);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return h('div', { className: 'metrics-chart-wrap' }, [
+    h('svg', { className: 'metrics-line-chart', viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': 'Serie temporal de métricas' }, [
+      [0, .5, 1].map((fraction, index) => h('line', { key: `grid-${index}`, x1: pad.left, x2: width - pad.right, y1: pad.top + fraction * (height - pad.top - pad.bottom), y2: pad.top + fraction * (height - pad.top - pad.bottom), className: 'metrics-grid-line' })),
+      series.map((item, index) => h('polyline', { key: item.label || index, points: points(item), fill: 'none', stroke: colors[index % colors.length], strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' })),
+    ]),
+    h('div', { className: 'metrics-chart-scale' }, [h('span', null, `${max.toFixed(max < 10 ? 1 : 0)}${unit}`), h('span', null, `${min.toFixed(min < 10 ? 1 : 0)}${unit}`)]),
+    h('div', { className: 'metrics-legend' }, series.map((item, index) => h('span', { key: item.label || index }, [h('i', { style: { background: colors[index % colors.length] } }), item.label]))),
+  ]);
+}
+
+function MetricBarList({ items = [], empty = 'Sin actividad registrada' }) {
+  const max = Math.max(...items.map(item => item.value), 1);
+  if (!items.length) return h('div', { className: 'metrics-chart-empty' }, empty);
+  return h('div', { className: 'metrics-bar-list' }, items.slice(0, 8).map(item => h('div', { className: 'metrics-bar-row', key: item.label }, [
+    h('div', { className: 'metrics-bar-meta' }, [h('span', null, item.label), h('strong', null, item.value.toLocaleString('es-AR'))]),
+    h('div', { className: 'metrics-bar-track' }, h('i', { style: { width: `${Math.max(4, item.value / max * 100)}%` } })),
+  ])));
+}
+
 function MetricsView() {
   const [data, setData] = useState({ samples: [] });
   useEffect(() => { let live = true; const load = () => api.getTimeSeries().then(v => live && setData(v)).catch(() => {}); load(); const id = setInterval(load, 10000); return () => { live = false; clearInterval(id); }; }, []);
   const samples = data.samples || [];
-  const byMetric = samples.reduce((a, s) => { (a[s.metric] ||= []).push(s); return a; }, {});
-  const counterNames = new Set(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations']);
-  const samplesForMetric = (name) => Object.entries(byMetric).flatMap(([metric, values]) => (
-    metric === name || (counterNames.has(name) && metric.startsWith(`${name}_`)) ? values : []
-  ));
-  const latest = (name) => samplesForMetric(name).slice().sort((a, b) => a.ts - b.ts).at(-1)?.value;
-  const max = (name) => Math.max(...samplesForMetric(name).map(s => Number(s.value)), 0);
-  const counterDelta = (name) => {
-    const groups = new Map();
-    samplesForMetric(name).forEach(sample => {
-      const key = `${sample.metric}:${sample.tags || 'default'}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(sample);
-    });
-    return [...groups.values()].reduce((total, series) => {
-      series.sort((a, b) => a.ts - b.ts);
-      if (series.length < 2) return total;
-      return total + Math.max(0, Number(series.at(-1).value) - Number(series[0].value));
-    }, 0);
+  const counterBases = new Set(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations', 'tool_invocations', 'chat_errors', 'chat_successes', 'initializer_invocations']);
+  const parseSample = (sample) => {
+    let metric = String(sample.metric || ''), kind = 'gauge';
+    if (metric.endsWith('_avg_seconds')) { kind = 'timing'; metric = metric.slice(0, -12); }
+    else if (metric.endsWith('_count')) { kind = 'count'; metric = metric.slice(0, -6); }
+    const pieces = metric.split('.');
+    const base = pieces.shift();
+    const tags = {};
+    pieces.join('.').split('.').forEach(part => { const index = part.indexOf('='); if (index > 0) tags[part.slice(0, index)] = part.slice(index + 1); });
+    return { ...sample, base, kind, tags };
   };
-  const names = { ada: 'ADA', telegram: 'Telegram', ollama: 'Ollama' };
-  const servicePanel = (service) => h('article', { className: 'metrics-panel service-panel', key: service }, [
-    h('div', { className: 'metrics-panel-title' }, [h('span', { className: 'status-dot online' }), h('div', null, [h('h3', null, names[service]), h('small', null, 'Proceso local')])]),
-    h('div', { className: 'resource-values' }, [h('div', null, [h('strong', null, `${(latest(`${service}_process_cpu_percent`) || 0).toFixed(1)}%`), h('span', null, 'CPU actual')]), h('div', null, [h('strong', null, `${(latest(`${service}_process_rss_mb`) || 0).toFixed(0)} MB`), h('span', null, 'Memoria RAM')])]),
-    h('div', { className: 'metric-spark' }, samplesForMetric(`${service}_process_rss_mb`).slice(-36).map((v, i) => h('i', { key: i, style: { height: `${Math.max(6, Math.min(100, Number(v.value) / Math.max(1, max(`${service}_process_rss_mb`)) * 100))}%` } }))),
-  ]);
-  return h('section', { className: 'tab-view active metrics-view' }, [
-    h('div', { className: 'metrics-hero' }, [h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Centro de métricas'), h('p', null, 'Estado operativo y rendimiento de los servicios de ADA')]), h('div', { className: 'metrics-freshness' }, [h('span', { className: 'status-dot online' }), h('span', null, 'Scraper activo · cada 1 segundo')])]),
-    h('div', { className: 'metrics-kpis' }, [h('article', { className: 'metric-kpi' }, [h('span', null, 'Estado del sistema'), h('strong', null, latest('ada_up') === 1 ? 'Operativo' : 'Sin datos'), h('small', null, 'Última lectura confirmada')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Eventos en la ventana'), h('strong', null, String(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations'].reduce((sum, name) => sum + counterDelta(name), 0))), h('small', null, 'Deltas observados en 24 horas')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Retención'), h('strong', null, `${data.retention_days || 7} días`), h('small', null, 'Almacenamiento temporal')])]),
-    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Recursos en tiempo real'), h('p', null, 'Consumo de los procesos que mantienen ADA funcionando')]),
-    h('div', { className: 'metrics-service-grid' }, ['ada', 'ollama', 'telegram'].map(servicePanel)),
-    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Uso de ADA'), h('p', null, 'Invocaciones, mensajes y resultados observados por el scraper')]),
-    h('div', { className: 'metrics-usage-grid' }, [['messages_received', 'Mensajes recibidos'], ['chat_invocations', 'Conversaciones'], ['router_invocations', 'Clasificaciones del router'], ['model_invocations', 'Llamadas a modelos'], ['capability_invocations', 'Herramientas ejecutadas']].map(([metric, title]) => h('article', { className: 'metric-kpi metric-usage', key: metric }, [h('span', null, title), h('strong', null, String(counterDelta(metric))), h('small', null, 'Eventos nuevos en la ventana')]))) ,
-    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Cobertura de telemetría'), h('p', null, 'Las invocaciones de modelos, router, MCPs y tools aparecerán aquí cuando registren actividad real')]),
-    h('div', { className: 'metrics-empty-panel' }, [h('strong', null, 'Esperando actividad de componentes'), h('span', null, 'No se muestran valores inventados: cada serie aparece sólo cuando ADA registra una invocación real.')]),
+  const parsed = samples.map(parseSample);
+  const seriesFor = (base, filter = {}) => {
+    const groups = new Map();
+    parsed.filter(item => item.base === base && Object.entries(filter).every(([key, value]) => item.tags[key] === value)).forEach(item => {
+      const key = Object.entries(item.tags).filter(([name]) => name !== 'status').map(([name, value]) => `${name}=${value}`).join(' · ') || 'total';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    return [...groups.entries()].map(([label, values]) => ({ label, values: values.sort((a, b) => a.ts - b.ts) }));
+  };
+  const latest = (base, filter = {}) => seriesFor(base, filter).flatMap(item => item.values).sort((a, b) => a.ts - b.ts).at(-1)?.value;
+  const delta = (base, filter = {}) => seriesFor(base, filter).reduce((total, item) => item.values.length > 1 ? total + Math.max(0, Number(item.values.at(-1).value) - Number(item.values[0].value)) : total, 0);
+  const counterItems = (base, tag) => seriesFor(base).map(item => ({ label: item.label === 'total' ? 'General' : (item.label.split('=')[1] || item.label), value: item.values.length > 1 ? Math.max(0, Number(item.values.at(-1).value) - Number(item.values[0].value)) : 0 })).filter(item => item.value > 0).sort((a, b) => b.value - a.value);
+  const timingStats = (base) => {
+    const values = seriesFor(base).flatMap(item => item.values).map(item => Number(item.value) * 1000).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!values.length) return { avg: null, p95: null };
+    return { avg: values.reduce((sum, value) => sum + value, 0) / values.length, p95: values[Math.min(values.length - 1, Math.floor(values.length * .95))] };
+  };
+  const formatCount = value => Number(value || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+  const formatMs = value => value == null ? '—' : `${Math.round(value).toLocaleString('es-AR')} ms`;
+  const lastSample = data.last_sample_at ? new Date(data.last_sample_at * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+  const systemOk = data.scraper?.ok && latest('ada_up') === 1;
+  const cpuSeries = ['ada', 'ollama', 'telegram'].map(service => ({ label: service.toUpperCase(), values: seriesFor(`${service}_process_cpu_percent`).flatMap(item => item.values).slice(-60).map(item => Number(item.value)) })).filter(item => item.values.length);
+  const ramSeries = ['ada', 'ollama', 'telegram'].map(service => ({ label: service.toUpperCase(), values: seriesFor(`${service}_process_rss_mb`).flatMap(item => item.values).slice(-60).map(item => Number(item.value)) })).filter(item => item.values.length);
+  const events = ['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations', 'tool_invocations'].reduce((sum, name) => sum + delta(name), 0);
+  const errors = delta('chat_errors') + delta('provider.errors') + delta('capability.errors');
+  const chatLatency = timingStats('chat_response_seconds');
+  const toolLatency = timingStats('tool_response_seconds');
+  const modelLatency = timingStats('provider.duration');
+  const section = (eyebrow, title, copy, content, className = '') => h('section', { className: `metrics-section ${className}` }, [h('div', { className: 'metrics-section-heading' }, [h('div', null, [h('span', { className: 'eyebrow' }, eyebrow), h('h2', null, title), h('p', null, copy)])]), content]);
+  const kpiCards = [
+    ['Estado', systemOk ? 'Operativo' : 'Revisar', systemOk ? 'Scraper y ADA responden' : (data.scraper?.message || 'No hay datos recientes'), 'primary'],
+    ['Eventos / ventana', formatCount(events), 'Mensajes, modelos, router y herramientas', ''],
+    ['Latencia p95', formatMs(chatLatency.p95), 'Respuesta completa de chat', chatLatency.p95 > 30000 ? 'danger' : ''],
+    ['Errores observados', formatCount(errors), errors ? 'Revisar señales de fallo' : 'Sin errores de chat', errors ? 'warning' : ''],
+  ].map(([label, value, copy, tone]) => h('article', { className: `metric-kpi metric-kpi-${tone}`, key: label }, [h('span', null, label), h('strong', null, value), h('small', null, copy)]));
+  return h('section', { className: 'tab-view active metrics-view metrics-dashboard' }, [
+    h('div', { className: 'metrics-hero' }, [h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD / LIVE'), h('h1', null, 'ADA Telemetry'), h('p', null, 'Un mapa operativo para detectar saturación, latencia y componentes que necesitan atención.')]), h('div', { className: 'metrics-freshness' }, [h('span', { className: `status-dot ${systemOk ? 'online' : 'offline'}` }), h('div', null, [h('strong', null, systemOk ? 'Sistema saludable' : 'Telemetría degradada'), h('span', null, `Última muestra ${lastSample}`)])])]),
+    h('div', { className: 'metrics-kpis metrics-kpis-wide' }, kpiCards),
+    section('RECURSOS', 'CPU y memoria por proceso', 'La línea permite ver picos, fugas y el costo relativo de cada servicio.', h('div', { className: 'metrics-chart-grid' }, [h('article', { className: 'metrics-panel chart-panel' }, [h('div', { className: 'metrics-panel-title' }, [h('h3', null, 'CPU de procesos'), h('small', null, 'últimas 60 muestras')]), h(MetricLineChart, { series: cpuSeries, unit: '%' })]), h('article', { className: 'metrics-panel chart-panel' }, [h('div', { className: 'metrics-panel-title' }, [h('h3', null, 'Memoria residente'), h('small', null, 'RSS · MB')]), h(MetricLineChart, { series: ramSeries, unit: ' MB' })])])),
+    section('RENDIMIENTO', 'Tiempos de invocación', 'Promedio y p95 observado; un salto sostenido suele indicar saturación, modelo frío o MCP lento.', h('div', { className: 'metrics-latency-grid' }, [['chat_response_seconds', 'Chat completo', chatLatency], ['provider.duration', 'Modelo / Ollama', modelLatency], ['tool_response_seconds', 'MCP / herramienta', toolLatency], ['router_response_seconds', 'Router', timingStats('router_response_seconds')]].map(([name, label, stats]) => h('article', { className: 'metrics-panel latency-card', key: name }, [h('span', { className: 'metric-card-label' }, label), h('strong', null, formatMs(stats.p95)), h('div', { className: 'latency-detail' }, [h('span', null, `promedio ${formatMs(stats.avg)}`), h('span', null, `${seriesFor(name).reduce((sum, item) => sum + item.values.length, 0)} muestras`)]), h('div', { className: `latency-signal ${stats.p95 > 30000 ? 'bad' : stats.p95 > 5000 ? 'warn' : ''}` }, stats.p95 == null ? 'Esperando datos' : stats.p95 > 30000 ? 'Lento · investigar' : stats.p95 > 5000 ? 'Vigilar tendencia' : 'Dentro de objetivo')]))),
+    section('DISTRIBUCIÓN', '¿Dónde se está usando ADA?', 'Ranking por dimensión para saber qué modelo, MCP o inicializador concentra el trabajo.', h('div', { className: 'metrics-distribution-grid' }, [['model_invocations', 'Por modelo', 'model'], ['capability_invocations', 'Por capacidad / MCP', 'capability'], ['tool_invocations', 'Por herramienta', 'tool'], ['initializer_invocations', 'Por inicializador', 'initializer']].map(([name, title, tag]) => h('article', { className: 'metrics-panel distribution-card', key: name }, [h('div', { className: 'metrics-panel-title' }, [h('h3', null, title), h('small', null, `${formatCount(delta(name))} invocaciones`)]), h(MetricBarList, { items: counterItems(name, tag), empty: name === 'initializer_invocations' ? 'Aún no hay eventos de inicialización' : 'Sin actividad en la ventana' })])))),
+    section('SEÑALES', 'Puntos de mejora', 'Lecturas rápidas para priorizar una investigación antes de que el problema se convierta en una caída.', h('div', { className: 'metrics-insights-grid' }, [
+      h('article', { className: 'metrics-panel insight-card' }, [h('span', { className: 'insight-icon' }, '↗'), h('div', null, [h('strong', null, chatLatency.p95 > 30000 ? 'La conversación está lenta' : 'Latencia de conversación estable'), h('p', null, chatLatency.p95 > 30000 ? 'Revisá el modelo activo, la memoria disponible y el tiempo de respuesta de Ollama.' : 'Seguí esta serie durante una carga real para encontrar regresiones.')])]),
+      h('article', { className: 'metrics-panel insight-card' }, [h('span', { className: 'insight-icon' }, errors ? '!' : '✓'), h('div', null, [h('strong', null, errors ? 'Hay errores que requieren triage' : 'Sin errores de chat registrados'), h('p', null, errors ? 'Usá la actividad y el log de depuración para correlacionar el fallo con modelo o MCP.' : 'La ausencia de errores es una buena señal, pero no reemplaza revisar la latencia.')])]),
+      h('article', { className: 'metrics-panel insight-card' }, [h('span', { className: 'insight-icon' }, '◌'), h('div', null, [h('strong', null, data.stale ? 'La fuente de métricas está atrasada' : 'Telemetría llegando en tiempo'), h('p', null, data.stale ? (data.scraper?.message || 'Revisá el proceso metrics_scraper.') : 'Las muestras se actualizan automáticamente cada 10 segundos en esta vista.')])]),
+    ])),
   ]);
 }
 
@@ -706,6 +789,9 @@ function CoreView({ onSwitchTab }) {
       clearInterval(interval);
     };
   }, []);
+
+  const [activeTraceTab, setActiveTraceTab] = useState('current');
+  const [selectedHistoryTask, setSelectedHistoryTask] = useState(null);
 
   const activity = coreData?.activity || {
     status: 'idle', phase: 'idle', label: 'Conectando con ADA', detail: 'Leyendo el estado del sistema', recent: [],
@@ -997,15 +1083,82 @@ function CoreView({ onSwitchTab }) {
             h('strong', { className: 'core-meta-val text-accent' }, `${connectors.filter(c => c.online).length} de ${connectors.length}`),
           ]),
         ]),
-        (activity.recent && activity.recent.length > 0) ? h('div', { className: 'core-recent-phases', 'aria-label': 'Últimas fases' }, [
-          h('span', { className: 'core-recent-title' }, 'Flujo reciente'),
-          h('div', { className: 'core-phases-list' },
-            (activity.recent || []).slice(-4).map((event, index) => h('span', {
-              key: `${event.at}-${index}`,
-              className: `core-phase phase-${event.status}`,
-            }, event.label))
-          ),
-        ]) : null,
+        // Trace / Historial View Tabs & Content
+        h('div', { className: 'core-trace-container' }, [
+          h('div', { className: 'core-trace-nav' }, [
+            h('span', { className: 'core-activity-eyebrow' }, activeTraceTab === 'current' ? 'TRAZA EN TIEMPO REAL' : 'HISTORIAL DE TAREAS'),
+            h('div', { className: 'core-trace-tabs' }, [
+              h('button', {
+                type: 'button',
+                className: `core-trace-tab ${activeTraceTab === 'current' ? 'active' : ''}`,
+                onClick: () => { setActiveTraceTab('current'); setSelectedHistoryTask(null); },
+              }, 'Paso a Paso'),
+              h('button', {
+                type: 'button',
+                className: `core-trace-tab ${activeTraceTab === 'history' ? 'active' : ''}`,
+                onClick: () => setActiveTraceTab('history'),
+              }, `Historial (${(activity.history || []).length})`),
+            ]),
+          ]),
+
+          // Tab 1: Current Live / Selected Task Trace Steps
+          activeTraceTab === 'current' ? h('div', { className: 'core-trace-timeline' },
+            (() => {
+              const activeSteps = selectedHistoryTask ? selectedHistoryTask.trace : (activity.trace || []);
+              if (!activeSteps.length) {
+                return [h('span', { key: 'empty', className: 'text-xs text-muted py-2' }, 'Sin trazas de ejecución en este momento.')];
+              }
+              return activeSteps.map((step, idx) => {
+                const isModel = step.phase.includes('model');
+                const isRouter = step.phase.includes('router') || step.phase.includes('route_');
+                const isTool = step.phase.includes('capability') || step.phase.includes('folder_');
+                const tagClass = isModel ? 'tag-model' : isRouter ? 'tag-router' : isTool ? 'tag-tool' : '';
+                const tagLabel = isModel ? (step.model || 'Modelo') : isRouter ? 'Decisión Router' : isTool ? 'Herramienta' : (step.component || 'Agente');
+
+                return h('div', { key: `${step.at}-${idx}`, className: `core-trace-step step-${step.status}` }, [
+                  h('div', { className: 'core-trace-step-dot' }),
+                  h('div', { className: 'core-trace-step-header' }, [
+                    h('span', { className: 'core-trace-step-title' }, step.label),
+                    h('span', { className: `core-trace-step-tag ${tagClass}` }, tagLabel),
+                  ]),
+                  step.detail ? h('div', { className: 'core-trace-step-detail' }, step.detail) : null,
+                ]);
+              });
+            })()
+          ) : null,
+
+          // Tab 2: Completed Tasks History
+          activeTraceTab === 'history' ? h('div', { className: 'core-history-list' },
+            (() => {
+              const history = activity.history || [];
+              if (!history.length) {
+                return [h('span', { key: 'empty', className: 'text-xs text-muted py-2' }, 'No hay tareas registradas en el historial reciente.')];
+              }
+              return history.map(item => {
+                const isSelected = selectedHistoryTask?.id === item.id;
+                return h('div', {
+                  key: item.id,
+                  className: `core-history-item ${isSelected ? 'selected' : ''}`,
+                  onClick: () => {
+                    setSelectedHistoryTask(item);
+                    setActiveTraceTab('current');
+                  },
+                }, [
+                  h('div', { className: 'core-history-item-top' }, [
+                    h('span', { className: 'core-history-prompt' }, item.prompt),
+                    h('span', { className: `badge ${item.status === 'complete' ? 'badge-success' : 'badge-danger'} text-2xs` }, item.status === 'complete' ? 'Completado' : 'Error'),
+                  ]),
+                  h('div', { className: 'core-history-meta' }, [
+                    h('span', null, `⏱ ${item.duration_seconds}s`),
+                    item.model ? h('span', { className: 'font-mono text-accent' }, item.model) : null,
+                    item.decision?.action ? h('span', { className: 'text-primary' }, `→ ${item.decision.action}`) : null,
+                    h('span', null, `${(item.trace || []).length} pasos`),
+                  ]),
+                ]);
+              });
+            })()
+          ) : null,
+        ]),
       ]),
     ]),
     h('div', { className: 'core-telemetry-grid', key: 'telemetry' }, [
@@ -1128,8 +1281,18 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const handleStart = async () => {
     try {
       showToast('Iniciando servicio Ollama...', 'info');
-      await api.startOllama();
-      showToast('Ollama iniciado correctamente', 'success');
+      const res = await api.startOllama();
+      if (res && res.ok) {
+        showToast('Ollama iniciado correctamente', 'success');
+      } else {
+        const reason = res?.runtime?.reason || 'no_disponible';
+        const msg = reason === 'ollama_not_installed'
+          ? 'No se encontró el ejecutable de Ollama en el sistema'
+          : reason === 'startup_timeout'
+          ? 'Tiempo de espera agotado al iniciar Ollama'
+          : `No se pudo iniciar Ollama (${reason})`;
+        showToast(msg, 'danger');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al iniciar: ' + err.message, 'danger');
@@ -1139,8 +1302,12 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const handleStop = async () => {
     try {
       showToast('Deteniendo servicio Ollama...', 'info');
-      await api.stopOllama();
-      showToast('Ollama detenido', 'info');
+      const res = await api.stopOllama();
+      if (res && res.ok) {
+        showToast('Ollama detenido', 'info');
+      } else {
+        showToast('No se pudo detener el proceso de Ollama', 'warning');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al detener: ' + err.message, 'danger');
@@ -1150,8 +1317,13 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const handleRestart = async () => {
     try {
       showToast('Reiniciando servicio Ollama...', 'info');
-      await api.restartOllama();
-      showToast('Ollama reiniciado exitosamente', 'success');
+      const res = await api.restartOllama();
+      if (res && res.ok) {
+        showToast('Ollama reiniciado exitosamente', 'success');
+      } else {
+        const reason = res?.runtime?.reason || 'error';
+        showToast(`No se pudo reiniciar Ollama (${reason})`, 'danger');
+      }
       onRefresh();
     } catch (err) {
       showToast('Error al reiniciar: ' + err.message, 'danger');
@@ -1224,6 +1396,36 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
     } catch (err) {
       showToast('Error en pull: ' + err.message, 'danger');
       setPulling(false);
+    }
+  };
+
+  const handleLoad = async (name) => {
+    try {
+      showToast(`Cargando ${name} en memoria...`, 'info');
+      const res = await api.loadOllamaModel(name);
+      if (res && res.ok) {
+        showToast(`Modelo ${name} precargado en memoria (VRAM/RAM)`, 'success');
+      } else {
+        showToast(`No se pudo cargar el modelo ${name}`, 'danger');
+      }
+      onRefresh();
+    } catch (err) {
+      showToast('Error al cargar modelo: ' + err.message, 'danger');
+    }
+  };
+
+  const handlePreloadAll = async () => {
+    try {
+      showToast('Precalentando modelos en memoria según la política activa...', 'info');
+      const res = await api.preloadAllModels();
+      if (res && res.ok) {
+        showToast(`Modelos levantados: ${(res.loaded || []).join(', ') || 'Listos'}`, 'success');
+      } else {
+        showToast('No se pudieron precargar los modelos', 'warning');
+      }
+      onRefresh();
+    } catch (err) {
+      showToast('Error al precargar modelos: ' + err.message, 'danger');
     }
   };
 
@@ -1576,7 +1778,10 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
           h('h3', { className: 'card-title' }, 'Biblioteca de Modelos Instalados en Disco'),
           h('span', { className: 'badge badge-primary' }, `${models.length} modelos`),
         ]),
-        h('button', { className: 'btn btn-sm btn-ghost', onClick: onRefresh }, '🔄 Actualizar Lista'),
+        h('div', { className: 'flex items-center gap-2' }, [
+          models.length > 0 ? h('button', { className: 'btn btn-sm btn-primary', onClick: handlePreloadAll, title: 'Carga los modelos en memoria para que respondan al instante sin demoras' }, '⚡ Precargar Todos en Memoria') : null,
+          h('button', { className: 'btn btn-sm btn-ghost', onClick: onRefresh }, '🔄 Actualizar Lista'),
+        ]),
       ]),
       h('div', { className: 'card-body' }, [
         !models.length ? h('div', { className: 'empty-state-sm text-center py-6 text-muted' }, 'No se encontraron modelos descargados en este equipo.')
@@ -1596,12 +1801,16 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
                       m.details?.family ? h('span', { className: 'badge text-2xs', key: 'f' }, m.details.family) : null,
                     ]),
                   ]),
-                  h('div', { className: 'flex justify-between items-center gap-2 mt-3 pt-2 border-t border-subtle' }, [
-                    h('div', { className: 'flex gap-1' }, [
-                      h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Ver Arquitectura y Modelfile', onClick: () => handleShowDetails(m.name) }, 'ℹ️ Info'),
-                      h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Testear velocidad de respuesta', onClick: () => onBenchmark(m.name) }, '⚡ Benchmark'),
+                  h('div', { className: 'flex flex-col gap-2 mt-3 pt-2 border-t border-subtle' }, [
+                    !isRunning ? h('button', { className: 'btn btn-sm btn-primary w-full text-xs font-semibold', onClick: () => handleLoad(m.name) }, '⚡ Cargar en Memoria')
+                               : h('button', { className: 'btn btn-sm btn-secondary text-danger w-full text-xs', onClick: () => handleUnload(m.name) }, '🔻 Descargar de Memoria'),
+                    h('div', { className: 'flex justify-between items-center gap-1' }, [
+                      h('div', { className: 'flex gap-1' }, [
+                        h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Ver Arquitectura y Modelfile', onClick: () => handleShowDetails(m.name) }, 'ℹ️ Info'),
+                        h('button', { className: 'btn btn-sm btn-ghost text-xs', title: 'Testear velocidad de respuesta', onClick: () => onBenchmark(m.name) }, '⚡ Bench'),
+                      ]),
+                      h('button', { className: 'btn btn-sm btn-ghost text-danger text-xs', title: 'Borrar de disco', onClick: () => handleDelete(m.name) }, '🗑️ Borrar'),
                     ]),
-                    h('button', { className: 'btn btn-sm btn-secondary text-danger text-xs', title: 'Borrar de disco', onClick: () => handleDelete(m.name) }, '🗑️ Borrar'),
                   ]),
                 ]);
               })
