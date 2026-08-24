@@ -1,13 +1,16 @@
 import json
 import os
+import re
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 import threading
 import urllib.parse
 import urllib.request
+import urllib.error
 
 def _find_project_root() -> Path:
     p = Path(__file__).resolve().parent
@@ -485,6 +488,53 @@ class MCPManager:
             return server.as_dict()
 
     def execute_tool(self, name: str, parameters: Dict[str, Any], agent: Any = None) -> Dict[str, Any]:
+        parameters = dict(parameters or {})
+        request_text = str(parameters.pop("_request", "") or "")
+        if name == "google_calendar.search_events" and request_text:
+            quoted = re.search(r"[‘'\"]([^‘’'\"]+)[’'\"]", request_text)
+            if quoted:
+                parameters["query"] = quoted.group(1)
+        if name == "google_calendar.search_events" and parameters.get("date"):
+            try:
+                requested_month = str(parameters.pop("date"))[:7]
+                month_start = datetime.strptime(requested_month, "%Y-%m")
+                next_month = month_start.replace(day=28) + timedelta(days=4)
+                month_end = next_month.replace(day=1)
+                parameters.update({
+                    "_search_month": requested_month,
+                    "timeMin": month_start.replace(tzinfo=timezone.utc).isoformat(),
+                    "timeMax": month_end.replace(tzinfo=timezone.utc).isoformat(),
+                })
+            except (TypeError, ValueError):
+                parameters.pop("date", None)
+        if name == "google_calendar.list_events" and not parameters.get("timeMin"):
+            now = datetime.now(timezone.utc)
+            parameters.update({
+                "timeMin": now.isoformat(),
+                "timeMax": (now + timedelta(days=30)).isoformat(),
+                "singleEvents": True,
+                "orderBy": "startTime",
+                "maxResults": 20,
+            })
+        if name == "google_calendar.list_events":
+            now = datetime.now(timezone.utc)
+            try:
+                parsed_min = datetime.fromisoformat(str(parameters["timeMin"]).replace("Z", "+00:00"))
+                if parsed_min.tzinfo is None:
+                    parsed_min = parsed_min.replace(tzinfo=timezone.utc)
+                if parsed_min < now:
+                    parameters["timeMin"] = now.isoformat()
+            except (KeyError, TypeError, ValueError):
+                parameters["timeMin"] = now.isoformat()
+            try:
+                parsed_max = datetime.fromisoformat(str(parameters["timeMax"]).replace("Z", "+00:00"))
+                if parsed_max.tzinfo is None:
+                    parsed_max = parsed_max.replace(tzinfo=timezone.utc)
+                parsed_min = datetime.fromisoformat(str(parameters["timeMin"]).replace("Z", "+00:00"))
+                if parsed_max <= max(now, parsed_min):
+                    parameters["timeMax"] = (now + timedelta(days=7 if "timeMax" in parameters else 30)).isoformat()
+            except (KeyError, TypeError, ValueError):
+                parameters["timeMax"] = (now + timedelta(days=30)).isoformat()
         with self._lock:
             tool = self._tools.get(name)
             if not tool:
@@ -505,7 +555,7 @@ class MCPManager:
                     return self._execute_google_rest("drive", parameters)
                 if name.startswith("google_calendar."):
                     result = self._execute_remote("https://calendarmcp.googleapis.com/mcp/v1", name.split(".", 1)[1], parameters)
-                    if result.get("ok") or name.split(".", 1)[1] not in {"list_calendars", "list_events"}:
+                    if result.get("ok") or name.split(".", 1)[1] not in {"list_calendars", "list_events", "search_events"}:
                         return result
                     return self._execute_google_rest("calendar", parameters, name.split(".", 1)[1])
                 if name.startswith("gmail.") and name != "gmail.read_inbox":
@@ -567,11 +617,7 @@ class MCPManager:
     @staticmethod
     def _execute_remote(url: str, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Call a remote Google MCP using the encrypted ADA OAuth token."""
-        from ada.infrastructure.credentials import SecureVault
-
-        vault = SecureVault()
-        token = vault.get("google_oauth_token") or {}
-        access_token = token.get("access_token") if isinstance(token, dict) else None
+        access_token = MCPManager._google_access_token()
         if not access_token:
             return {"ok": False, "error": "Falta autorizar Google OAuth para ADA."}
         payload = json.dumps({
@@ -585,8 +631,13 @@ class MCPManager:
             "Accept": "application/json, text/event-stream",
             "Authorization": f"Bearer {access_token}",
         })
-        with urllib.request.urlopen(req, timeout=60) as response:
-            body = json.loads(response.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                body = json.loads(response.read().decode())
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                return {"ok": False, "error": "Google OAuth access token vencido", "status": 401}
+            return {"ok": False, "error": f"Google Calendar MCP HTTP {exc.code}", "status": exc.code}
         if body.get("error"):
             return {"ok": False, "error": body["error"]}
         result = body.get("result", {})
@@ -595,10 +646,7 @@ class MCPManager:
     @staticmethod
     def _execute_google_rest(service: str, parameters: Dict[str, Any], operation: str = "list_files") -> Dict[str, Any]:
         """Read-only fallback while Google's remote MCP APIs are in preview."""
-        from ada.infrastructure.credentials import SecureVault
-
-        token = SecureVault().get("google_oauth_token") or {}
-        access_token = token.get("access_token") if isinstance(token, dict) else None
+        access_token = MCPManager._google_access_token()
         if not access_token:
             return {"ok": False, "error": "Falta autorizar Google OAuth para ADA."}
         if service == "drive":
@@ -619,8 +667,15 @@ class MCPManager:
                 url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + urllib.parse.quote(str(parameters.get("messageId", "")), safe="")
             else:
                 url = "https://gmail.googleapis.com/gmail/v1/users/me/threads/" + urllib.parse.quote(str(parameters.get("threadId", "")), safe="")
-        elif operation == "list_events":
-            query = urllib.parse.urlencode({"maxResults": parameters.get("pageSize", 100), "singleEvents": "true", "orderBy": "startTime"})
+        elif operation in {"list_events", "search_events"}:
+            query = urllib.parse.urlencode({
+                "maxResults": parameters.get("maxResults", parameters.get("pageSize", 100)),
+                "singleEvents": str(parameters.get("singleEvents", True)).lower(),
+                "orderBy": parameters.get("orderBy", "startTime"),
+                **({"timeMin": parameters["timeMin"]} if parameters.get("timeMin") else {}),
+                **({"timeMax": parameters["timeMax"]} if parameters.get("timeMax") else {}),
+                **({"q": parameters["query"]} if operation == "search_events" and parameters.get("query") else {}),
+            })
             url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?" + query
         else:
             query = urllib.parse.urlencode({"maxResults": parameters.get("pageSize", 100)})
@@ -633,6 +688,80 @@ class MCPManager:
                     for item in payload.get("files", []):
                         if item.get("webViewLink"):
                             item.setdefault("link", item["webViewLink"])
-                return {"ok": True, "result": {"fallback": "google-rest", **payload}}
+                result_payload = {"fallback": "google-rest", **payload}
+                if operation == "search_events" and parameters.get("query"):
+                    result_payload["search_query"] = parameters["query"]
+                if operation == "search_events" and parameters.get("_search_month"):
+                    result_payload["search_month"] = parameters["_search_month"]
+                return {"ok": True, "result": result_payload}
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                fresh_token = MCPManager._google_access_token(force_refresh=True)
+                if fresh_token and fresh_token != access_token:
+                    return MCPManager._execute_google_rest(service, parameters, operation)
+            return {"ok": False, "error": f"Google Calendar API HTTP {exc.code}"}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
+
+    @staticmethod
+    def _google_access_token(force_refresh: bool = False) -> Optional[str]:
+        """Return a usable Google access token, refreshing it without prompts."""
+        from ada.infrastructure.credentials import SecureVault
+
+        vault = SecureVault()
+        token = vault.get("google_oauth_token") or {}
+        if not isinstance(token, dict):
+            return None
+        access_token = token.get("access_token")
+        refresh_token = token.get("refresh_token")
+        refreshed_at = token.get("refreshed_at")
+        expires_in = token.get("expires_in")
+        token_is_fresh = False
+        if access_token and not force_refresh:
+            try:
+                # Refresh one minute early; OAuth access tokens normally live
+                # for 3600 seconds and the vault stores when we received it.
+                token_is_fresh = bool(refreshed_at and expires_in and time.time() < float(refreshed_at) + float(expires_in) - 60)
+            except (TypeError, ValueError):
+                token_is_fresh = False
+            if token_is_fresh or not refreshed_at:
+                # Older vault entries may not have refreshed_at. Keep using
+                # them until the 401 retry path proves they are expired.
+                return access_token
+        if access_token and not force_refresh and token_is_fresh:
+            return access_token
+        if not refresh_token:
+            return access_token
+
+        client_id = token.get("client_id") or vault.get("google_oauth_client_id")
+        client_secret = token.get("client_secret") or vault.get("google_oauth_client_secret")
+        if not client_id or not client_secret:
+            return access_token
+        body = urllib.parse.urlencode({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }).encode()
+        request = urllib.request.Request(
+            "https://oauth2.googleapis.com/token",
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                refreshed = json.loads(response.read().decode())
+        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
+            return access_token
+        if not refreshed.get("access_token"):
+            return access_token
+        refreshed.update({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "refreshed_at": time.time(),
+            "scopes": token.get("scopes") or [s for s in token.get("scope", "").split() if s],
+        })
+        vault.set("google_oauth_token", refreshed, meta={"provider": "google", "scopes": refreshed["scopes"]})
+        return refreshed["access_token"]

@@ -24,7 +24,10 @@ class FakeModelManager:
 
 class FakeMCPManager:
     def list_tools(self):
-        return [{"name": "google_calendar.list_calendars", "enabled": True, "requires_confirmation": False}]
+        return [
+            {"name": "google_calendar.list_calendars", "enabled": True, "requires_confirmation": False},
+            {"name": "google_calendar.list_events", "enabled": True, "requires_confirmation": False},
+        ]
 
 
 class IntentRouterTests(unittest.TestCase):
@@ -105,6 +108,13 @@ class IntentRouterTests(unittest.TestCase):
         ).route("¿Cuál es mi próximo evento de Google Calendar?")
         self.assertEqual(result["action"], "ask")
         self.assertEqual(result["routing_error"], "mcp_router_failed")
+
+    def test_truncated_mcp_json_recovers_only_explicit_tool(self):
+        manager = FakeModelManager('{"action":"mcp_call","tool":"google_calendar.list_events"')
+        router = IntentRouter(manager, memory=self.memory, mcp_manager=FakeMCPManager())
+        result = router.route("¿Qué eventos próximos tengo en Google Calendar?")
+        self.assertEqual(result["action"], "mcp_call")
+        self.assertEqual(result["tool"], "google_calendar.list_events")
 
     def test_photo_path_can_be_followed_by_more_text(self):
         from ada.application.agent import Agent

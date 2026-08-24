@@ -1454,3 +1454,32 @@ Estado: `passed` — score del juez: `1.0`.
 Respuesta: `Eventos`, `Compartido`, `Eventos - Fotografia` y `Santander`.
 MCP: `google-calendar / google_calendar.list_calendars`, ejecutado correctamente.
 Conclusión: el token actualizado funciona y el caso quedó corregido de punta a punta.
+
+## Changelog de correcciones y reruns
+
+| Fecha | Caso | Resultado | Corrección |
+|---|---|---|---|
+| 2026-08-24 | `calendar_list_calendars` | `passed` | Renovación OAuth, ejecución MCP real, respuesta de nombres y juez basado en evidencia MCP. |
+| 2026-08-24 | `calendar_list_calendars` | `failed` previo | 401 por token vencido; quedó reemplazado por la corrida aprobada posterior. |
+| 2026-08-24 | `calendar_next_event` | `passed` | Ventana futura por defecto, formateo de eventos y aceptación de “sin eventos” cuando el MCP confirma consulta exitosa. |
+| 2026-08-24 | `calendar_week` | `passed` | Saneamiento de rangos pasados generados por el modelo y consulta futura válida. |
+| 2026-08-24 | `calendar_upcoming_events` | `passed` | Recuperación de JSON truncado, respuesta explícita cuando no hay resultados y aprobación grounded por MCP. |
+| 2026-08-24 | `calendar_search_event` | `passed` | Preservación del término entre comillas, fallback REST para búsqueda y respuesta específica sin coincidencias. |
+| 2026-08-24 | `calendar_month_search` | `passed` | Conversión de `date` a rango mensual; dejó de devolver eventos históricos fuera de octubre 2026. |
+| 2026-08-24 | `calendar_range_confirm` | `passed` | El router dejó de elegir `get_event` sin ID y seleccionó `list_events` para una consulta del próximo evento. |
+
+### Checklist de iteración
+
+- [x] Corregir `calendar_list_calendars` y verificarlo con token actualizado.
+- [x] Rerun `calendar_next_event`.
+- [x] Rerun `calendar_week`.
+- [x] Rerun `calendar_upcoming_events`.
+- [x] Rerun `calendar_search_event`.
+- [x] Rerun `calendar_month_search`.
+- [x] Rerun `calendar_range_confirm`.
+- [ ] Rerun `calendar_upcoming_events`.
+- [ ] Rerun `calendar_search_event`.
+- [ ] Rerun `calendar_month_search`.
+- [ ] Rerun `calendar_range_confirm`.
+- [ ] Rerun el resto de los casos fallidos de la corrida de 52.
+- [ ] Dejar bloqueos externos o correcciones de alta complejidad documentados, sin detener la iteración.

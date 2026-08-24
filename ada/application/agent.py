@@ -87,6 +87,7 @@ class Agent:
             else:
                 tool = str((task.get("payload") or {}).get("tool") or "")
                 parameters = dict((task.get("payload") or {}).get("parameters") or {})
+                parameters.setdefault("_request", task.get("prompt", ""))
                 result = self.mcp_manager.execute_tool(tool, parameters, self)
             self.mem.record_task(task, result, provider="mcp", success=not bool(result.get("error")))
             return {"model": "mcp", "result": result}

@@ -314,7 +314,7 @@ FAILURE_MARKERS = re.compile(r"\b(no pude|no puedo|no tengo acceso|sin acceso|no
 
 def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b", mcp_evidence=None):
     """Use an independent model to judge task completion, not keyword presence."""
-    if not reply or FAILURE_MARKERS.search(str(reply)):
+    if not reply or (FAILURE_MARKERS.search(str(reply)) and not mcp_evidence):
         return {"passed": False, "score": 0.0, "issues": ["La respuesta indica que ADA no pudo completar o acceder a la tarea."], "rationale": "Falla explícita detectada antes de consultar al juez.", "source": "guard"}
     category = str(item.get("category") or "").lower()
     conceptual = category in {"chat", "reasoning", "architecture", "metrics", "safety", "diagnostics", "agent"}

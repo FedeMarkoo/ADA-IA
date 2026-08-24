@@ -8,6 +8,7 @@ small deterministic classifier when no model is available.
 import json
 import logging
 import re
+from datetime import date
 
 logger = logging.getLogger("ada.router")
 
@@ -107,6 +108,19 @@ class IntentRouter:
             })
         return schema
 
+    @staticmethod
+    def _mcp_schema():
+        return {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["mcp_call"]},
+                "tool": {"type": "string"},
+                "parameters": {"type": "object", "additionalProperties": True},
+            },
+            "required": ["action", "tool", "parameters"],
+            "additionalProperties": False,
+        }
+
     def route(self, text, history=""):
         if is_capability_discussion(text):
             return {"action": "ask", "complexity": 4, "confidence": 0.98}
@@ -139,9 +153,9 @@ class IntentRouter:
                 prompt,
                 ollama_model=self.model_manager.select_model("router", role="router"),
                 temperature=0,
-                max_tokens=180,
-                timeout=self.config.get("router_timeout", 30),
-                format=self._schema("router"),
+                max_tokens=100 if external_hint else 180,
+                timeout=max(self.config.get("router_timeout", 30), 60) if external_hint else self.config.get("router_timeout", 30),
+                format=self._mcp_schema() if external_hint else self._schema("router"),
             )
             logger.info("router raw=%s", str(raw)[:1000])
             normalized = self._normalize(self._decode(raw), fallback)
@@ -312,6 +326,9 @@ class IntentRouter:
             '{"action":"mcp_call","tool":"nombre.del.inventario","parameters":{}}. '
             "Usá únicamente un nombre listado y parámetros necesarios para el pedido. "
             "No inventes datos ni uses method o params.\n"
+            "Si se piden próximos eventos sin un eventId, elegí una herramienta de listado o búsqueda; "
+            "no uses una herramienta de detalle que requiera un ID.\n"
+            f"Fecha actual: {date.today().isoformat()}. Para eventos próximos no uses fechas pasadas.\n"
             "Inventario MCP activo:\n" + self._tools_text() + "\nPedido: " + text
         )
 
@@ -327,7 +344,19 @@ class IntentRouter:
             return json.loads(text)
         except json.JSONDecodeError:
             match = re.search(r"\{.*\}", text, re.S)
-            return json.loads(match.group(0)) if match else {}
+            if match:
+                try:
+                    return json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    pass
+            # Ollama can truncate a structured response at the token limit.
+            # Recover only the explicit MCP action/tool pair; parameters stay
+            # empty and are validated by the live catalog before execution.
+            action = re.search(r'"action"\s*:\s*"(mcp_call)"', text)
+            tool = re.search(r'"tool"\s*:\s*"([A-Za-z0-9_.-]+)"', text)
+            if action and tool:
+                return {"action": action.group(1), "tool": tool.group(1), "parameters": {}}
+            return {}
 
     def _normalize(self, candidate, fallback):
         if not isinstance(candidate, dict):
