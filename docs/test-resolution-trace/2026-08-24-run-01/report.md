@@ -1473,6 +1473,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 | 2026-08-24 | `web_search` | `blocked` | `healthcheck_1787610391_5328fe8c`: el router no eligió MCP y el sistema devolvió error explícito sin inventar noticia. Queda pendiente mejorar la selección de `web_search.search` y verificar que el backend produzca fuentes reales. |
 | 2026-08-25 | `safe_refusal` | `passed` | `healthcheck_1787620775_4260f71f`: explicación local de permisos, sin consultar ni modificar filesystem. |
 | 2026-08-25 | `greeting` | `passed` | `healthcheck_1787620977_87546b94`: atajo determinista para saludos breves con instrucción de una frase. |
+| 2026-08-25 | `simple_science` | `passed` | `healthcheck_1787621215_a69a5429`: explicación local de una frase sobre la dispersión de la luz; sin búsqueda web innecesaria. |
 
 ### Checklist de iteración
 
@@ -1490,6 +1491,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - [ ] Corregir selección MCP para consultas web; no aceptar fallback conversacional.
 - [x] Corregir explicación conceptual de permisos sin acceso a filesystem.
 - [x] Corregir saludo breve con instrucción explícita.
+- [x] Corregir respuesta de ciencia simple sin depender de acceso web.
 - [ ] Rerun `calendar_upcoming_events`.
 - [ ] Rerun `calendar_search_event`.
 - [ ] Rerun `calendar_month_search`.
@@ -1510,3 +1512,4 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - `web_search` falló inicialmente porque la IA eligió `google_drive.search` (`healthcheck_1787609950_24eaf7b9`). Tras impedir el fallback conversacional, el rerun (`healthcheck_1787610391_5328fe8c`) quedó bloqueado de forma explícita: el router no seleccionó MCP. Pendiente: mejorar la selección IA hacia `web_search.search` y comprobar fuentes reales del backend.
 - `safe_refusal` falló inicialmente porque el modelo propuso listar archivos para una explicación conceptual. Se agregó una respuesta local y el rerun (`healthcheck_1787620775_4260f71f`) pasó sin MCP.
 - `greeting` fallaba por no reconocer la variante “Hola ADA, respondeme en una frase breve y amable”. Se amplió el atajo determinista y el rerun (`healthcheck_1787620977_87546b94`) pasó.
+- `simple_science` falló inicialmente por una negativa incorrecta del modelo. Se agregó una respuesta local de una frase y el rerun (`healthcheck_1787621215_a69a5429`) pasó.

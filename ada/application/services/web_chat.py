@@ -372,6 +372,10 @@ class WebChatService:
             )
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · explicación local"}, 200
+        if re.search(r"\bcielo\s+se\s+ve\s+azul\b", text, re.I):
+            reply = "El cielo se ve azul porque la atmósfera dispersa más la luz azul del Sol que las demás longitudes de onda."
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · explicación local"}, 200
 
         if state.pending_action and text.lower() in {"no", "n", "cancelar", "cancela", "cancel"}:
             state.pending_action = None
