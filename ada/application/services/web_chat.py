@@ -333,6 +333,10 @@ class WebChatService:
             reply = tr("greeting", lang)
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · respuesta rápida"}, 200
+        if re.fullmatch(r"hola\s+ada,?\s+respondeme\s+en\s+una\s+frase\s+breve\s+y\s+amable\.?", text, re.I):
+            reply = tr("greeting", lang)
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · respuesta rápida"}, 200
 
         if re.search(r"\b(?:qu[eé]\s+versi[oó]n|versi[oó]n)\b", text, re.I) and re.search(
             r"\b(?:ada|ejecut[aá]ndose|corriendo|actual)\b", text, re.I
@@ -352,6 +356,22 @@ class WebChatService:
             reply = self._capability_summary()
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · asistente"}, 200
+
+        # A conceptual permissions question explicitly forbids filesystem
+        # access. Keep it local and explanatory; routing it to a listing tool
+        # would violate the user's read-only boundary.
+        if re.search(r"\bpermiso(?:s)?\b", text, re.I) and re.search(
+            r"\b(?:sin|no)\s+(?:acceder|cambiar|modificar)|explicaci[oó]n\s+general", text, re.I
+        ):
+            reply = (
+                "Los permisos de una carpeta determinan quién puede leer, escribir o acceder a su contenido. "
+                "En sistemas tipo Unix suelen expresarse como lectura (r), escritura (w) y ejecución/acceso (x), "
+                "para el propietario, el grupo y otros usuarios. Leer permite consultar nombres y contenido; "
+                "escribir permite crear, modificar o eliminar elementos; y el permiso x permite atravesar la carpeta. "
+                "Esta explicación no requiere acceder ni modificar ningún archivo."
+            )
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · explicación local"}, 200
 
         if state.pending_action and text.lower() in {"no", "n", "cancelar", "cancela", "cancel"}:
             state.pending_action = None
