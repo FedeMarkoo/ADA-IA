@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: ada
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:5005"]
+    scrape_timeout: 4s
+

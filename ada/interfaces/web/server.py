@@ -21,6 +21,7 @@ from ada.mcps.manager import MCPManager
 from ada.interfaces.web.doctor import HealthDoctor
 from ada.infrastructure.runtime.duplicates import detect_duplicates
 from ada.infrastructure.observability_timeseries import TimeSeriesStore, metrics_scraper_status
+from ada.infrastructure.prometheus_metrics import REQUESTS, REQUEST_LATENCY, RESPONSES, exposition, operation_finished, operation_started
 from ada.infrastructure.persistence.debug_log import DebugLog
 from ada.application.services.memory_refiner import MemoryRefiner
 from ada.application.services.healthcheck import HealthcheckStore, evaluate as evaluate_healthcheck, functional_category, llm_judge, requires_mcp
@@ -68,6 +69,21 @@ def _find_project_root() -> Path:
 PROJECT_ROOT = _find_project_root()
 DASHBOARD_DIR = PROJECT_ROOT / "dashboard" if (PROJECT_ROOT / "dashboard").is_dir() else PROJECT_ROOT / "ui"
 app = Flask(__name__, static_folder=str(DASHBOARD_DIR), static_url_path="/static")
+
+
+@app.before_request
+def start_prometheus_request_timer():
+    g.prometheus_request_started = time.perf_counter()
+
+
+@app.after_request
+def record_prometheus_request(response):
+    started = getattr(g, "prometheus_request_started", None)
+    if started is not None and request.path != "/metrics":
+        route = request.url_rule.rule if request.url_rule else request.path
+        REQUESTS.labels(request.method, route, str(response.status_code)).inc()
+        REQUEST_LATENCY.labels(request.method, route).observe(time.perf_counter() - started)
+    return response
 
 
 @app.errorhandler(Exception)
@@ -539,39 +555,21 @@ def metrics_api():
 
 @app.route("/metrics")
 def prometheus_metrics():
-    """Prometheus-compatible exposition endpoint; scraping is external."""
-    runtime = _runtime(); agent = runtime["agent"]
-    lines = ["# TYPE ada_up gauge", "ada_up 1"]
-    for namespace, snapshot in (("agent", agent.metrics.snapshot()), ("models", agent.model_manager.metrics.snapshot())):
-        for key, value in snapshot.get("counters", {}).items():
-            safe = re.sub(r"[^a-zA-Z0-9_]", "_", key)
-            lines.append(f'ada_{namespace}_counter{{name="{safe}"}} {float(value)}')
-        for key, timing in snapshot.get("timings", {}).items():
-            safe = re.sub(r"[^a-zA-Z0-9_]", "_", key)
-            lines.append(f'ada_{namespace}_timing_count{{name="{safe}"}} {timing.get("count", 0)}')
-            lines.append(f'ada_{namespace}_timing_avg_seconds{{name="{safe}"}} {timing.get("avg_seconds", 0)}')
-    return Response("\n".join(lines) + "\n", mimetype="text/plain; version=0.0.4")
+    """Prometheus scrape endpoint. Grafana reads the Prometheus server."""
+    return Response(exposition(), mimetype="text/plain; version=0.0.4")
 
 @app.route("/api/metrics/timeseries")
 def metrics_timeseries_api():
-    store = TimeSeriesStore()
-    hours = max(1, min(24 * 7, int(request.args.get("hours", 24))))
-    since = time.time() - hours * 3600
-    with __import__('sqlite3').connect(store.path) as db:
-        rows = db.execute(
-            """
-            SELECT ts,name,labels,value
-            FROM prometheus_samples
-            WHERE ts>=?
-              AND name NOT LIKE '%_source_ai_testing%'
-              AND name NOT LIKE '%_source_diagnostic%'
-            ORDER BY ts ASC
-            """,
-            (since,),
-        ).fetchall()
-    samples = [{"ts": r[0], "metric": r[1], "tags": r[2], "value": r[3], "component": (r[2].split('=')[1].strip('"') if 'component=' in r[2] else "ada")} for r in rows]
-    scraper = metrics_scraper_status()
-    return jsonify({"retention_days": 7, "source": "external_scraper", "last_sample_at": scraper.get("last_sample_at"), "stale": not scraper.get("ok"), "scraper": scraper, "samples": samples})
+    # Compatibility response for the legacy ADA dashboard. Historical data is
+    # intentionally no longer read from SQLite; Prometheus owns the range
+    # query and Grafana is the canonical historical UI.
+    now = time.time()
+    runtime = _runtime()
+    samples = []
+    for component, snapshot in (("ada", runtime["agent"].metrics.snapshot()), ("models", runtime["agent"].model_manager.metrics.snapshot())):
+        for name, value in snapshot.get("counters", {}).items():
+            samples.append({"ts": now, "metric": name, "tags": "", "value": value, "component": component})
+    return jsonify({"retention_days": 15, "source": "prometheus", "last_sample_at": now, "stale": False, "scraper": {"status": "migrated", "ok": True, "message": "Histórico disponible en Grafana"}, "samples": samples})
 
 
 # ==============================================================================
@@ -1466,43 +1464,11 @@ _metrics_scraper_lock = threading.RLock()
 
 
 def start_metrics_scraper_service() -> Dict[str, Any]:
-    global _metrics_scraper_process
-    with _metrics_scraper_lock:
-        status = metrics_scraper_status()
-        if status.get("ok"):
-            return {"ok": True, "message": "El scraper de métricas ya se encuentra activo.", "status": status}
-
-        root = _find_project_root()
-        script_path = root / "tools" / "metrics_scraper.py"
-        if not script_path.exists():
-            return {"ok": False, "error": f"No se encontró el script {script_path}"}
-
-        import subprocess
-        import sys
-        try:
-            # Check if there is already a dead process handle
-            if _metrics_scraper_process and _metrics_scraper_process.poll() is None:
-                try:
-                    _metrics_scraper_process.terminate()
-                    _metrics_scraper_process.wait(timeout=2)
-                except Exception:
-                    pass
-
-            env = os.environ.copy()
-            env["PYTHONPATH"] = str(root)
-            _metrics_scraper_process = subprocess.Popen(
-                [sys.executable, str(script_path), "--interval", "2"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=env,
-                start_new_session=True,
-            )
-            # Give it a second to start
-            time.sleep(1.2)
-            new_status = metrics_scraper_status()
-            return {"ok": True, "message": "Scraper de métricas iniciado", "status": new_status}
-        except Exception as exc:
-            return {"ok": False, "error": f"Error al iniciar scraper: {exc}"}
+    return {
+        "ok": False,
+        "status": "migrated",
+        "message": "El scraper SQLite fue reemplazado por Prometheus. Configurá Prometheus para /metrics y abrí Grafana.",
+    }
 
 
 def stop_metrics_scraper_service() -> Dict[str, Any]:
@@ -1526,12 +1492,8 @@ def stop_metrics_scraper_service() -> Dict[str, Any]:
 
 
 def restart_metrics_scraper_service() -> Dict[str, Any]:
-    """Restart the metrics scraper managed by ADA."""
-    stop_metrics_scraper_service()
-    time.sleep(0.2)
-    result = start_metrics_scraper_service()
-    result["message"] = "Scraper de métricas reiniciado" if result.get("ok") else result.get("message", "No se pudo reiniciar el scraper")
-    return result
+    """Compatibility endpoint retained while clients migrate to Grafana."""
+    return start_metrics_scraper_service()
 
 
 @app.route("/api/metrics/scraper/status")
@@ -1853,6 +1815,20 @@ def publish_event_api():
     if not topic or len(topic) > 128 or not isinstance(payload, dict):
         return jsonify({"error": "invalid_event"}), 400
     runtime = _runtime()
+    if topic == "presence.updated":
+        from ada.infrastructure.runtime.presence import PresenceStore
+
+        location = str(payload.get("location") or "").strip()
+        if not location or len(location) > 64:
+            return jsonify({"error": "invalid_presence_location"}), 400
+        presence = PresenceStore(runtime["cfg"].get("presence_path"))
+        state = presence.set(
+            location,
+            active=bool(payload.get("active", True)),
+            ttl_seconds=min(86400, max(60, int(payload.get("ttl_seconds", 7200)))),
+            source=str(payload.get("source") or "webhook"),
+        )
+        return jsonify({"ok": True, "topic": topic, "presence": state}), 202
     event_id = runtime["agent"].mem.publish_event(
         topic,
         payload,
@@ -1890,6 +1866,7 @@ def chat():
     telemetry.increment("chat_invocations", tags={"source": source})
     if not runtime.get("agent_enabled", True):
         return jsonify({"error": "agent_disabled", "message": "ADA Agent Core está apagado."}), 503
+    operation_started("chat")
     state = _session_state()
     debug = runtime.get("debug_log") if runtime.get("debug_enabled") else None
     if debug:
@@ -1897,9 +1874,21 @@ def chat():
 
     def progress(phase, details):
         activity_details = dict(details)
-        if phase == "router_model_started": telemetry.increment("router_invocations", tags={"source": source})
-        elif phase == "model_started": telemetry.increment("model_invocations", tags={"model": str(details.get("model") or "unknown")})
-        elif phase == "capability_started": telemetry.increment("capability_invocations", tags={"capability": str(details.get("capability") or "unknown")})
+        if phase == "router_model_started":
+            telemetry.increment("router_invocations", tags={"source": source})
+            operation_started("router")
+        elif phase == "router_model_finished":
+            operation_finished("router")
+        elif phase == "model_started":
+            telemetry.increment("model_invocations", tags={"model": str(details.get("model") or "unknown")})
+            operation_started("model")
+        elif phase == "model_finished":
+            operation_finished("model")
+        elif phase == "capability_started":
+            telemetry.increment("capability_invocations", tags={"capability": str(details.get("capability") or "unknown")})
+            operation_started("capability")
+        elif phase == "capability_finished":
+            operation_finished("capability")
         if phase == "received":
             activity_details["channel"] = data.get("source") or "web"
         _activity_update(runtime, phase, activity_details, session_id=state.session_id)
@@ -1910,6 +1899,7 @@ def chat():
         payload, status_code = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"), progress=progress)
     telemetry.observe("chat_response_seconds", time.monotonic() - request_started, tags={"source": source, "status": "error" if payload.get("error") else "ok"})
     telemetry.increment("chat_errors" if payload.get("error") else "chat_successes", tags={"source": source})
+    RESPONSES.labels(source=source, status="error" if payload.get("error") else "ok").inc()
     _activity_update(
         runtime,
         "error" if payload.get("error") else "completed",
@@ -1932,6 +1922,7 @@ def chat():
             record_telegram_interaction(data, raw_reply)
         except Exception:
             pass
+    operation_finished("chat")
     return jsonify(payload), status_code
 
 

@@ -2,6 +2,8 @@ from collections import defaultdict, deque
 import threading
 import time
 
+from ada.infrastructure.prometheus_metrics import EVENTS, OPERATIONS
+
 
 class Metrics:
     def __init__(self, namespace="ada"):
@@ -17,11 +19,19 @@ class Metrics:
 
     def increment(self, name, value=1, tags=None):
         with self._lock:
-            self._counters[self._key(name, tags)] += float(value)
+            key = self._key(name, tags)
+            self._counters[key] += float(value)
+            EVENTS.labels(metric=f"{self.namespace}_{name}", tags=self._labels(tags)).inc(float(value))
 
     def observe(self, name, seconds, tags=None):
         with self._lock:
-            self._timings[self._key(name, tags)].append(round(float(seconds), 6))
+            value = round(float(seconds), 6)
+            self._timings[self._key(name, tags)].append(value)
+            OPERATIONS.labels(metric=f"{self.namespace}_{name}", tags=self._labels(tags)).observe(value)
+
+    @staticmethod
+    def _labels(tags=None):
+        return ",".join(f"{key}={value}" for key, value in sorted((tags or {}).items())) or "none"
 
     def timer(self, name, tags=None):
         metrics = self

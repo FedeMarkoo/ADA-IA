@@ -1,0 +1,25 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {"type":"stat","title":"ADA online","gridPos":{"h":4,"w":6,"x":0,"y":0},"targets":[{"expr":"ada_up","refId":"A"}]},
+    {"type":"stat","title":"Requests / min","gridPos":{"h":4,"w":6,"x":6,"y":0},"targets":[{"expr":"rate(ada_http_requests_total[5m])*60","refId":"A"}]},
+    {"type":"timeseries","title":"HTTP latency p95","gridPos":{"h":8,"w":12,"x":0,"y":4},"targets":[{"expr":"histogram_quantile(0.95, sum by (le) (rate(ada_http_request_duration_seconds_bucket[5m])))","legendFormat":"p95","refId":"A"}]},
+    {"type":"timeseries","title":"Application events / min","gridPos":{"h":8,"w":12,"x":12,"y":4},"targets":[{"expr":"sum by (metric) (rate(ada_events_total[5m]))*60","legendFormat":"{{metric}}","refId":"A"}]},
+    {"type":"timeseries","title":"Operation latency p95","gridPos":{"h":8,"w":12,"x":0,"y":12},"targets":[{"expr":"histogram_quantile(0.95, sum by (le, metric) (rate(ada_operation_duration_seconds_bucket[5m])))","legendFormat":"{{metric}}","refId":"A"}]},
+    {"type":"timeseries","title":"Error rate","gridPos":{"h":8,"w":12,"x":12,"y":12},"targets":[{"expr":"sum(rate(ada_http_requests_total{status=~\"5..\"}[5m]))","legendFormat":"5xx / sec","refId":"A"}]},
+    {"type":"timeseries","title":"MCP executions / min","gridPos":{"h":8,"w":12,"x":0,"y":20},"targets":[{"expr":"sum by (mcp, tool, status) (rate(ada_mcp_tool_executions_total[5m]))*60","legendFormat":"{{mcp}} / {{tool}} / {{status}}","refId":"A"}]},
+    {"type":"timeseries","title":"MCP latency p95","gridPos":{"h":8,"w":12,"x":12,"y":20},"targets":[{"expr":"histogram_quantile(0.95, sum by (le, mcp, tool) (rate(ada_mcp_tool_duration_seconds_bucket[5m])))","legendFormat":"{{mcp}} / {{tool}}","refId":"A"}]},
+    {"type":"timeseries","title":"Memoria del sistema y ADA","gridPos":{"h":8,"w":12,"x":0,"y":28},"targets":[{"expr":"ada_system_memory_bytes{state=\"available\"}","legendFormat":"disponible","refId":"A"},{"expr":"ada_process_memory_bytes","legendFormat":"ADA","refId":"B"},{"expr":"ada_mcp_memory_bytes","legendFormat":"MCP {{mcp}}","refId":"C"}]},
+    {"type":"timeseries","title":"CPU del sistema y ADA","gridPos":{"h":8,"w":12,"x":12,"y":28},"targets":[{"expr":"ada_system_cpu_usage_ratio*100","legendFormat":"sistema %","refId":"A"},{"expr":"ada_process_cpu_usage_ratio*100","legendFormat":"ADA %","refId":"B"}]},
+    {"type":"timeseries","title":"Actividad en curso","gridPos":{"h":8,"w":12,"x":0,"y":36},"targets":[{"expr":"ada_active_operations","legendFormat":"{{operation}}","refId":"A"},{"expr":"ada_mcp_in_flight","legendFormat":"MCP {{mcp}}","refId":"B"},{"expr":"ada_mcp_tool_in_flight","legendFormat":"{{mcp}} / {{tool}}","refId":"C"}]},
+    {"type":"timeseries","title":"Respuestas OK vs error","gridPos":{"h":8,"w":12,"x":12,"y":36},"targets":[{"expr":"sum by (source, status) (rate(ada_responses_total[5m]))*60","legendFormat":"{{source}} / {{status}}","refId":"A"}]}
+  ],
+  "schemaVersion": 39,
+  "tags": ["ada", "operations"],
+  "templating": {"list": []},
+  "time": {"from":"now-6h","to":"now"},
+  "title": "ADA — Operaciones",
+  "uid": "ada-overview",
+  "version": 1
+}

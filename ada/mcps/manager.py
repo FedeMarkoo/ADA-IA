@@ -12,6 +12,18 @@ import urllib.parse
 import urllib.request
 import urllib.error
 
+from ada.infrastructure.prometheus_metrics import (
+    MCP_CPU,
+    MCP_DURATION,
+    MCP_EXECUTIONS,
+    MCP_IN_FLIGHT,
+    MCP_MEMORY,
+    MCP_RUNNING,
+    MCP_SERVER_IN_FLIGHT,
+    MCP_TOOL_ENABLED,
+)
+import psutil
+
 def _find_project_root() -> Path:
     p = Path(__file__).resolve().parent
     for parent in [p, *p.parents]:
@@ -402,6 +414,11 @@ class MCPManager:
                 counts[tool.server] = counts.get(tool.server, 0) + 1
             for name, server in self._servers.items():
                 server.tool_count = counts.get(name, 0)
+                MCP_RUNNING.labels(mcp=name).set(1 if server.status == "active" else 0)
+                try:
+                    MCP_MEMORY.labels(mcp=name).set(psutil.Process().memory_info().rss if server.status == "active" else 0)
+                except psutil.Error:
+                    pass
             return [s.as_dict() for s in self._servers.values()]
 
     def list_tools(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -409,6 +426,8 @@ class MCPManager:
             tools = list(self._tools.values())
             if category and category != "all":
                 tools = [t for t in tools if t.category == category or t.server == category]
+            for tool in tools:
+                MCP_TOOL_ENABLED.labels(mcp=tool.server, tool=tool.name).set(1 if tool.enabled else 0)
             return [t.as_dict() for t in tools]
 
     def get_tool(self, name: str) -> Optional[Dict[str, Any]]:
@@ -488,6 +507,35 @@ class MCPManager:
             return server.as_dict()
 
     def execute_tool(self, name: str, parameters: Dict[str, Any], agent: Any = None) -> Dict[str, Any]:
+        """Execute one tool and record complete MCP-level telemetry."""
+        definition = self.get_tool(name) or {}
+        mcp = str(definition.get("server") or "unknown")
+        MCP_IN_FLIGHT.labels(mcp=mcp, tool=name).inc()
+        MCP_SERVER_IN_FLIGHT.labels(mcp=mcp).inc()
+        started = time.monotonic()
+        cpu_started = psutil.Process().cpu_times()
+        try:
+            result = self._execute_tool(name, parameters, agent)
+            status = "error" if isinstance(result, dict) and (result.get("error") or result.get("ok") is False) else "ok"
+            return result
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            duration = time.monotonic() - started
+            MCP_EXECUTIONS.labels(mcp=mcp, tool=name, status=status).inc()
+            MCP_DURATION.labels(mcp=mcp, tool=name, status=status).observe(duration)
+            MCP_IN_FLIGHT.labels(mcp=mcp, tool=name).dec()
+            MCP_SERVER_IN_FLIGHT.labels(mcp=mcp).dec()
+            try:
+                cpu_finished = psutil.Process().cpu_times()
+                cpu_delta = max(0.0, (cpu_finished.user + cpu_finished.system) - (cpu_started.user + cpu_started.system))
+                MCP_CPU.labels(mcp=mcp, tool=name).inc(cpu_delta)
+                MCP_MEMORY.labels(mcp=mcp).set(psutil.Process().memory_info().rss)
+            except psutil.Error:
+                pass
+
+    def _execute_tool(self, name: str, parameters: Dict[str, Any], agent: Any = None) -> Dict[str, Any]:
         parameters = dict(parameters or {})
         request_text = str(parameters.pop("_request", "") or "")
         if name == "google_calendar.search_events" and request_text:
