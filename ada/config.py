@@ -89,7 +89,7 @@ def validate_config(config):
     for key in list_keys:
         if key in config and not isinstance(config[key], list):
             raise ValueError(f"{key} debe ser una lista.")
-    for key in ("local_runtime", "models", "model_policy", "model_role_max_tokens", "gpt4all", "telegram"):
+    for key in ("local_runtime", "models", "model_policy", "model_role_max_tokens", "gpt4all", "telegram", "provider_router", "context_policy", "transport", "update"):
         if key in config and not isinstance(config[key], dict):
             raise ValueError(f"{key} debe ser un objeto.")
     bool_keys = ("confirm_risky", "adaptive_models", "auto_pull_models")

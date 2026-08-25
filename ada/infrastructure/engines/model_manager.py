@@ -20,6 +20,7 @@ from ada.models.catalog import DEFAULT_MODEL_CATALOG
 from ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
 from ada.infrastructure.observability import Metrics
 from ada.ollama.client import OllamaClient
+from ada.infrastructure.engines.provider_router import ProviderRouter
 
 try:
     from openai import OpenAI
@@ -69,6 +70,7 @@ class ModelManager:
         self._ollama_reaper_stop = threading.Event()
         self._installed_cache = (0.0, [])
         self._apply_config(config or {})
+        self.provider_router = ProviderRouter(self.config)
         self.local_runtime = LocalModelRuntime(self.config)
         if self.config.get("ollama_auto_unload", False):
             self._ollama_reaper = threading.Thread(target=self._ollama_reaper_loop, name="ada-ollama-reaper", daemon=True)
@@ -121,6 +123,7 @@ class ModelManager:
         self.anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
         self.gemini_key = os.environ.get("GEMINI_API_KEY")
         self.groq_key = os.environ.get("GROQ_API_KEY")
+        self.openrouter_key = os.environ.get("OPENROUTER_API_KEY")
         self._load_remote_keys()
         self.provider = self.config.get(
             "engine_provider",
@@ -134,6 +137,7 @@ class ModelManager:
             self._apply_config(config)
         else:
             self._apply_config(self.config)
+        self.provider_router = ProviderRouter(self.config)
         self.local_runtime.reload(self.config)
         with self._model_stats_lock:
             self._gpt4all = None
@@ -150,6 +154,7 @@ class ModelManager:
             "anthropic": bool(Anthropic and self.anthropic_key),
             "gemini": bool(self.gemini_key),
             "groq": bool(self.groq_key),
+            "openrouter": bool(OpenAI and self.openrouter_key),
             "gpt4all": self._gpt4all_available(),
         }
 
@@ -161,6 +166,7 @@ class ModelManager:
             self.openai_key = self.openai_key or vault.get("openai_api_key")
             self.gemini_key = self.gemini_key or vault.get("gemini_api_key")
             self.groq_key = self.groq_key or vault.get("groq_api_key")
+            self.openrouter_key = self.openrouter_key or vault.get("openrouter_api_key")
         except Exception:
             pass
 
@@ -549,11 +555,21 @@ class ModelManager:
 
         complexity = max(1, min(10, int(task.get("complexity", 3))))
         privacy = task.get("privacy", self.config.get("privacy_default", "normal"))
-        if privacy == "high" and available.get(self.provider):
+        fallback_providers = [self.provider] + list(self.config.get("engine_priority", []))
+        if privacy == "high":
+            fallback_providers = [item for item in fallback_providers if item in {"ollama", "local", "gpt4all"}]
+        routed = self.provider_router.choose(
+            task,
+            available,
+            fallback_providers,
+        )
+        if routed:
+            return routed
+        if privacy == "high" and self.provider in {"ollama", "local", "gpt4all"} and available.get(self.provider):
             return self.provider
-        if complexity <= int(self.config.get("local_max_complexity", 5)) and available.get(self.provider):
+        if privacy != "high" and complexity <= int(self.config.get("local_max_complexity", 5)) and available.get(self.provider):
             return self.provider
-        if self.provider in available and available[self.provider]:
+        if self.provider in available and available[self.provider] and privacy != "high":
             return self.provider
         priority = [
             {"local": "ollama", "chatgpt": "openai", "claude": "anthropic", "grok": "groq"}.get(item, item)
@@ -561,9 +577,13 @@ class ModelManager:
         ]
         if complexity >= 7:
             for provider in priority:
+                if privacy == "high" and provider not in {"ollama", "local", "gpt4all"}:
+                    continue
                 if available.get(provider, False):
                     return provider
         for provider in priority:
+            if privacy == "high" and provider not in {"ollama", "local", "gpt4all"}:
+                continue
             if available.get(provider, False):
                 return provider
         return None
@@ -579,6 +599,13 @@ class ModelManager:
                 return self._call_ollama(prompt, **kwargs)
             if provider == "openai":
                 return self._call_openai(prompt, **kwargs)
+            if provider == "openrouter":
+                return self._call_openai(
+                    prompt,
+                    api_key=self.openrouter_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    **kwargs,
+                )
             if provider == "gemini":
                 return self._call_gemini(prompt, **kwargs)
             if provider == "groq":
@@ -684,7 +711,7 @@ class ModelManager:
             self._mark_ollama_finished(model)
 
     def _call_openai(self, prompt, **kwargs):
-        client = OpenAI(api_key=self.openai_key)
+        client = OpenAI(api_key=kwargs.get("api_key") or self.openai_key, base_url=kwargs.get("base_url"))
         response = client.chat.completions.create(
             model=kwargs.get("openai_model", self.config.get("openai_model", "gpt-4o-mini")),
             messages=[{"role": "user", "content": prompt}],

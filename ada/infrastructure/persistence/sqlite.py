@@ -123,6 +123,10 @@ class Memory:
                 session TEXT NOT NULL DEFAULT 'main', role TEXT NOT NULL,
                 text TEXT NOT NULL, model TEXT
             );
+            CREATE TABLE IF NOT EXISTS conversation_summaries (
+                session TEXT PRIMARY KEY, summary TEXT NOT NULL DEFAULT '',
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE IF NOT EXISTS router_catalog (
                 action TEXT PRIMARY KEY, description TEXT NOT NULL,
                 keywords TEXT, enabled INTEGER NOT NULL DEFAULT 1, meta TEXT
@@ -505,6 +509,10 @@ class Memory:
             self.conn.commit()
 
     def knowledge(self, query=None, limit=3):
+        with self._lock:
+            return self._knowledge_locked(query, limit)
+
+    def _knowledge_locked(self, query=None, limit=3):
         if query and self._fts_available:
             terms = [t for t in re.findall(r"[\wáéíóúñü]+", query.lower()) if len(t) > 2]
             if terms:
@@ -530,6 +538,10 @@ class Memory:
         return [content for score, content in scored[:limit] if score]
 
     def search_text(self, vector_or_query, k=5, kind=None):
+        with self._lock:
+            return self._search_text_locked(vector_or_query, k, kind)
+
+    def _search_text_locked(self, vector_or_query, k=5, kind=None):
         query = vector_or_query if isinstance(vector_or_query, str) else ""
         if not query:
             return []
@@ -567,10 +579,11 @@ class Memory:
 
     def list_recent_sessions(self, limit=20):
         """Return distinct session names ordered by recent activity."""
-        rows = self.conn.execute(
-            "SELECT DISTINCT session FROM conversation_messages ORDER BY id DESC LIMIT ?",
+        with self._lock:
+            rows = self.conn.execute(
+            "SELECT session FROM conversation_messages GROUP BY session ORDER BY MAX(id) DESC LIMIT ?",
             (max(1, int(limit)),)
-        ).fetchall()
+            ).fetchall()
         return [row[0] for row in rows if row[0]]
 
     def prune_by_kind_and_age(self, kinds=("note", "task_result"), days=30):
@@ -725,7 +738,9 @@ class Memory:
 
     def recent_tasks(self, limit=10):
         result = []
-        for row in self.conn.execute("SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,)).fetchall():
+        with self._lock:
+            rows = self.conn.execute("SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        for row in rows:
             item = dict(row)
             item["task"] = self._open(item["task"])
             item["result"] = self._open(item["result"])
@@ -769,17 +784,34 @@ class Memory:
             self.conn.commit()
 
     def conversation(self, session="main", limit=1000):
-        rows = self.conn.execute(
-            "SELECT id, created_at, role, text, model FROM conversation_messages "
-            "WHERE session=? ORDER BY id DESC LIMIT ?",
-            (session, limit),
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT id, created_at, role, text, model FROM conversation_messages "
+                "WHERE session=? ORDER BY id DESC LIMIT ?",
+                (session, limit),
+            ).fetchall()
         result = []
         for row in reversed(rows):
             item = dict(row)
             item["text"] = self._open(item["text"])
             result.append(item)
         return result
+
+    def get_conversation_summary(self, session="main"):
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT summary FROM conversation_summaries WHERE session=?", (session,)
+            ).fetchone()
+        return self._open(row[0]) if row else ""
+
+    def save_conversation_summary(self, session, summary):
+        with self._lock:
+            self.conn.execute(
+                "INSERT INTO conversation_summaries(session, summary, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT(session) DO UPDATE SET summary=excluded.summary, updated_at=CURRENT_TIMESTAMP",
+                (session, self._seal(summary or "")),
+            )
+            self.conn.commit()
 
     def clear_conversation(self, session="main"):
         with self._lock:

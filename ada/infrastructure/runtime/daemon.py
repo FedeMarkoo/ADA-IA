@@ -13,8 +13,10 @@ from ada.infrastructure.runtime.event_bus import EventBus
 from ada.infrastructure.runtime.scheduler import Scheduler
 from ada.infrastructure.runtime.watchers import FolderWatcher
 from ada.infrastructure.runtime.calendar_digest import CalendarTelegramDigest, cron_due
+from ada.application.services.transport_alert import TransportTelegramAlert
 from ada.mcps.manager import MCPManager
 from telegram.bot import TelegramListener
+from ada.infrastructure.update import UpdateManager
 
 logger = logging.getLogger("ada.daemon")
 
@@ -50,13 +52,22 @@ def run(config=None):
     watchers = [FolderWatcher(folder, bus) for folder in config.get("watch_folders", [])]
     backup_interval = max(0.0, float(config.get("backup_interval_seconds", 0)))
     next_backup = time.monotonic() + backup_interval if backup_interval else None
+    update_manager = UpdateManager(config) if (config.get("update") or {}).get("enabled") else None
+    update_interval = max(300.0, float((config.get("update") or {}).get("check_interval_seconds", 3600)))
+    next_update_check = time.monotonic() if update_manager else None
     cron_config = (config.get("triggers") or {}).get("cron") or {}
     digest_config = cron_config.get("calendar_weekly_digest") or {}
     digest = None
     last_digest_date = None
-    if cron_config.get("enabled") and digest_config.get("enabled"):
+    transport_alert = None
+    last_transport_date = None
+    status_config = cron_config.get("sarmiento_status") or {}
+    if cron_config.get("enabled") and (digest_config.get("enabled") or status_config.get("enabled")):
         telegram = TelegramListener(config)
-        digest = CalendarTelegramDigest(mcp_manager, telegram.send_message, config)
+        if digest_config.get("enabled"):
+            digest = CalendarTelegramDigest(mcp_manager, telegram.send_message, config)
+        if status_config.get("enabled"):
+            transport_alert = TransportTelegramAlert(agent, telegram.send_message, config)
 
     logger.info("ada_daemon_started watch_folders=%d", len(watchers))
     while not stop_event.is_set():
@@ -79,6 +90,14 @@ def run(config=None):
                 logger.exception("memory_backup_failed path=%s", backup_path)
             next_backup = time.monotonic() + backup_interval
 
+        if update_manager is not None and time.monotonic() >= next_update_check:
+            try:
+                update_result = update_manager.run_once()
+                logger.info("update_check status=%s local=%s remote=%s", update_result.get("status"), update_result.get("local_sha"), update_result.get("remote_sha"))
+            except Exception:
+                logger.exception("update_check_failed")
+            next_update_check = time.monotonic() + update_interval
+
         if digest is not None:
             now = datetime.now().astimezone()
             try:
@@ -93,6 +112,23 @@ def run(config=None):
                     logger.info("calendar_weekly_digest_sent chat_id=%s events=%s", result.get("chat_id"), result.get("event_count"))
                 else:
                     logger.error("calendar_weekly_digest_failed error=%s", result.get("error"))
+
+        if transport_alert is not None:
+            now = datetime.now().astimezone()
+            status_config = cron_config.get("sarmiento_status") or {}
+            try:
+                hour = int(status_config.get("hour", 13))
+                minute = int(status_config.get("minute", 0))
+            except (TypeError, ValueError):
+                hour, minute = 13, 0
+            if cron_due(now, last_transport_date, hour, minute):
+                result = transport_alert.run_once(now)
+                if result.get("status") != "presence_inactive":
+                    last_transport_date = now.date().isoformat()
+                if result.get("ok"):
+                    logger.info("sarmiento_status_processed status=%s", result.get("status"))
+                else:
+                    logger.error("sarmiento_status_failed error=%s", result.get("error"))
 
         # Write daemon health heartbeat
         health_path = config.get("daemon_health_path")

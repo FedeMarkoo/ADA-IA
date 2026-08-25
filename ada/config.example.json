@@ -68,6 +68,29 @@
       "fallbacks": []
     }
   },
+  "provider_router": {
+    "sort": "balanced",
+    "providers": [
+      {"name": "ollama", "local": true, "priority": 10, "latency_ms": 150},
+      {"name": "gemini", "priority": 4, "price_per_million_tokens": 0, "latency_ms": 800},
+      {"name": "openrouter", "priority": 2, "price_per_million_tokens": 1, "latency_ms": 900}
+    ]
+  },
+  "context_policy": {
+    "router": {"token_budget": 4096},
+    "chat": {"token_budget": 8192},
+    "coding": {"token_budget": 16384},
+    "reasoning": {"token_budget": 24576},
+    "tools": {"token_budget": 8192}
+  },
+  "update": {
+    "enabled": false,
+    "auto_pull": false,
+    "restart_on_update": false,
+    "branch": "main",
+    "check_interval_seconds": 3600,
+    "state_path": "~/Desktop/ADA_Data/runtime/update.json"
+  },
   "confirm_risky": true,
   "privacy_default": "normal",
   "local_runtime": {
@@ -94,9 +117,23 @@
         "hour": 8,
         "minute": 0,
         "chat_id": ""
+      },
+      "sarmiento_status": {
+        "enabled": false,
+        "hour": 13,
+        "minute": 0,
+        "required_location": "work",
+        "chat_id": ""
       }
     },
     "webhook": {"enabled": false}
+  },
+  "presence_path": "~/Desktop/ADA_Data/runtime/presence.json",
+  "transport": {
+    "api_base_url": "https://api-transporte.buenosaires.gob.ar",
+    "service_alerts_path": "/trenes/serviceAlerts",
+    "sarmiento_route_id": "Sarmiento",
+    "timeout_seconds": 8
   },
   "ollama_keep_alive": "2m",
   "ollama_auto_unload": true,

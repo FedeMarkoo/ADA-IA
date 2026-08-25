@@ -16,6 +16,7 @@ from typing import Optional
 from ada.application.services.responses import text_from_result
 from ada.interfaces.i18n import tr
 from ada.application.services.folder_resolver import FolderResolver
+from ada.application.context_manager import ContextManager
 from ada.application.router import is_capability_discussion
 
 logger = logging.getLogger("ada.web_chat")
@@ -72,6 +73,7 @@ class WebChatService:
         self.config = config or getattr(agent, "cfg", {})
         self._memory = getattr(agent, "mem", None)
         self.folder_resolver = FolderResolver(self.config, self._memory)
+        self.context_manager = ContextManager(self._memory, self.config)
         self.mcp_manager = mcp_manager or getattr(agent, "mcp_manager", None)
 
     def _capability_summary(self):
@@ -189,18 +191,19 @@ class WebChatService:
     def _remember(state, user_text, reply):
         state.conversation.extend([{"role": "user", "text": user_text}, {"role": "assistant", "text": reply}])
 
-    @staticmethod
-    def _conversation_context(state, limit=8):
-        """Return only this web session's recent turns, clearly attributed."""
-        items = list(getattr(state, "conversation", []) or [])[-limit:]
-        lines = []
-        for item in items:
-            text = str(item.get("text") or "").strip()
-            if not text:
-                continue
-            speaker = "Usuario" if item.get("role") == "user" else "ADA"
-            lines.append(f"{speaker}: {text}")
-        return "\n".join(lines)[-3500:]
+    def _conversation_context(self, state, query="", role="router", complexity=3):
+        """Build bounded context from the live session plus persistent memory."""
+        packet = self.context_manager.build(
+            conversation_id=getattr(state, "session_id", "main"),
+            query=query,
+            messages=getattr(state, "conversation", []) or [],
+            role=role,
+            complexity=complexity,
+        )
+        rendered = packet.render()
+        if not rendered:
+            return ""
+        return rendered
 
     @staticmethod
     def _filesystem_followup(text, context_path):
@@ -431,7 +434,7 @@ class WebChatService:
             contextual_followup.get("action") if contextual_followup else None
         )
         summarize_folder = bool(contextual_followup and contextual_followup.get("summarize"))
-        conversation_context = self._conversation_context(state)
+        conversation_context = self._conversation_context(state, text, role="router", complexity=3)
         cached_result = getattr(state, "last_result", None)
         if (
             summarize_folder

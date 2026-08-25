@@ -8,6 +8,7 @@ from ada.application.services.web_chat import WebChatService
 
 @dataclass
 class SessionState:
+    session_id: str = "main"
     messages: list = field(default_factory=list)
     pending_action: object = None
     lock: object = field(default_factory=threading.RLock)
@@ -26,7 +27,8 @@ class ChatService:
 
     def session(self, session_id="main"):
         with self._lock:
-            return self._sessions.setdefault(str(session_id), SessionState())
+            key = str(session_id)
+            return self._sessions.setdefault(key, SessionState(session_id=key))
 
     def _remember(self, state, role, text):
         state.messages.append({"role": role, "text": str(text)})
