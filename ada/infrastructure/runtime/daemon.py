@@ -4,6 +4,7 @@ from pathlib import Path
 import signal
 import threading
 import time
+from datetime import datetime
 
 from ada.application.agent import Agent
 from ada.application.services.autonomy import AutonomyService
@@ -11,13 +12,17 @@ from ada.config import load_config
 from ada.infrastructure.runtime.event_bus import EventBus
 from ada.infrastructure.runtime.scheduler import Scheduler
 from ada.infrastructure.runtime.watchers import FolderWatcher
+from ada.infrastructure.runtime.calendar_digest import CalendarTelegramDigest, cron_due
+from ada.mcps.manager import MCPManager
+from telegram.bot import TelegramListener
 
 logger = logging.getLogger("ada.daemon")
 
 
 def run(config=None):
     config = config or load_config()
-    agent = Agent(config)
+    mcp_manager = MCPManager(config)
+    agent = Agent(config, mcp_manager=mcp_manager)
     autonomy = AutonomyService(agent, config)
     bus = EventBus(agent.mem)
 
@@ -45,6 +50,13 @@ def run(config=None):
     watchers = [FolderWatcher(folder, bus) for folder in config.get("watch_folders", [])]
     backup_interval = max(0.0, float(config.get("backup_interval_seconds", 0)))
     next_backup = time.monotonic() + backup_interval if backup_interval else None
+    cron_config = (config.get("triggers") or {}).get("cron") or {}
+    digest_config = cron_config.get("calendar_weekly_digest") or {}
+    digest = None
+    last_digest_date = None
+    if cron_config.get("enabled") and digest_config.get("enabled"):
+        telegram = TelegramListener(config)
+        digest = CalendarTelegramDigest(mcp_manager, telegram.send_message, config)
 
     logger.info("ada_daemon_started watch_folders=%d", len(watchers))
     while not stop_event.is_set():
@@ -66,6 +78,21 @@ def run(config=None):
             except Exception:
                 logger.exception("memory_backup_failed path=%s", backup_path)
             next_backup = time.monotonic() + backup_interval
+
+        if digest is not None:
+            now = datetime.now().astimezone()
+            try:
+                hour = int(digest_config.get("hour", 8))
+                minute = int(digest_config.get("minute", 0))
+            except (TypeError, ValueError):
+                hour, minute = 8, 0
+            if cron_due(now, last_digest_date, hour, minute):
+                result = digest.run_once(now)
+                last_digest_date = now.date().isoformat()
+                if result.get("ok"):
+                    logger.info("calendar_weekly_digest_sent chat_id=%s events=%s", result.get("chat_id"), result.get("event_count"))
+                else:
+                    logger.error("calendar_weekly_digest_failed error=%s", result.get("error"))
 
         # Write daemon health heartbeat
         health_path = config.get("daemon_health_path")

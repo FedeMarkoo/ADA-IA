@@ -87,7 +87,15 @@
   "triggers": {
     "removable-device": {"enabled": false},
     "calendar": {"enabled": false},
-    "cron": {"enabled": false},
+    "cron": {
+      "enabled": false,
+      "calendar_weekly_digest": {
+        "enabled": false,
+        "hour": 8,
+        "minute": 0,
+        "chat_id": ""
+      }
+    },
     "webhook": {"enabled": false}
   },
   "ollama_keep_alive": "2m",

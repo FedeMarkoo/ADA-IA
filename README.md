@@ -139,3 +139,27 @@ manifiesto utilizable por la acción `undo`.
 Las reglas evento→acción se configuran en `event_rules`; por defecto solo se
 ejecutan automáticamente acciones no riesgosas. Las acciones sensibles quedan
 como propuestas auditadas hasta recibir confirmación explícita.
+
+### Resumen diario de Google Calendar por Telegram
+
+El daemon autónomo puede enviar una vez por día los eventos de los próximos
+siete días. Configurá el `chat_id` de destino y habilitá ambos niveles:
+
+```json
+"triggers": {
+  "cron": {
+    "enabled": true,
+    "calendar_weekly_digest": {
+      "enabled": true,
+      "hour": 8,
+      "minute": 0,
+      "chat_id": "TU_CHAT_ID"
+    }
+  }
+}
+```
+
+El job consulta `google_calendar.list_events` en modo solo lectura y envía el
+mensaje únicamente si la consulta MCP termina correctamente. El test
+`tests/test_calendar_digest.py` valida la ventana de siete días, el contenido,
+el destinatario y que no se envíe nada ante un error de Calendar.
