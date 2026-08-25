@@ -219,19 +219,22 @@ class Agent:
             if item.strip(" ,") and len(item.strip(" ,").split()) <= 4
         ]
         normalized = " ".join(ingredients)
+        allergy_note = " Si sos alérgico a los frutos secos, evitá cualquier fruto seco y revisá etiquetas y contaminación cruzada."
         if "arroz" in normalized and ("huevo" in normalized or "huevos" in normalized):
             tomato = " y tomate" if "tomate" in normalized else ""
-            return (
+            response = (
                 f"Hacé un arroz salteado con huevo{tomato}: calentá el arroz, sumá el tomate picado "
                 "y terminá con el huevo revuelto en la misma sartén. Como segunda opción, mezclá todo "
                 "y hacé una tortilla dorada de ambos lados."
             )
+            return response + (allergy_note if re.search(r"al[eé]rg", lowered) and "fruto" in lowered else "")
         if ingredients:
             shown = ", ".join(ingredients[:4])
-            return (
+            response = (
                 f"Con {shown}, haría un salteado rápido: cociná primero lo más firme y agregá el resto al final. "
                 "Como alternativa, unilo con huevo o una base de arroz/pasta si tenés para hacer una tortilla o bowl."
             )
+            return response + (allergy_note if re.search(r"al[eé]rg", lowered) and "fruto" in lowered else "")
         return "Decime qué ingredientes tenés y te propongo una comida concreta y una alternativa rápida."
 
     def advise_food(self, request):
