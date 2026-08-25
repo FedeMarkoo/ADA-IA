@@ -1895,8 +1895,12 @@ def chat():
         if debug:
             debug.write("chat_phase", {"phase": phase, **details}, session_id=state.session_id)
 
-    with state.lock:
-        payload, status_code = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"), progress=progress)
+    try:
+        with state.lock:
+            payload, status_code = runtime["web_chat"].handle(data.get("message", ""), state, data.get("lang"), progress=progress)
+    except Exception:
+        operation_finished("chat")
+        raise
     telemetry.observe("chat_response_seconds", time.monotonic() - request_started, tags={"source": source, "status": "error" if payload.get("error") else "ok"})
     telemetry.increment("chat_errors" if payload.get("error") else "chat_successes", tags={"source": source})
     RESPONSES.labels(source=source, status="error" if payload.get("error") else "ok").inc()
@@ -1938,12 +1942,28 @@ def _run_chat_in_worker(data, session_id, runtime_app, progress_queue):
     ):
         runtime = _runtime()
         state = _session_state()
+        telemetry = runtime["agent"].metrics
         debug = runtime.get("debug_log") if runtime.get("debug_enabled") else None
 
         def progress(phase, details):
             event = {"phase": phase, **details}
             progress_queue.put(event)
             activity_details = dict(details)
+            if phase == "router_model_started":
+                telemetry.increment("router_invocations", tags={"source": str(data.get("source") or "web")})
+                operation_started("router")
+            elif phase == "router_model_finished":
+                operation_finished("router")
+            elif phase == "model_started":
+                telemetry.increment("model_invocations", tags={"model": str(details.get("model") or "unknown")})
+                operation_started("model")
+            elif phase == "model_finished":
+                operation_finished("model")
+            elif phase == "capability_started":
+                telemetry.increment("capability_invocations", tags={"capability": str(details.get("capability") or "unknown")})
+                operation_started("capability")
+            elif phase == "capability_finished":
+                operation_finished("capability")
             if phase == "received":
                 activity_details["channel"] = data.get("source") or "web"
             _activity_update(runtime, phase, activity_details, session_id=state.session_id)
@@ -2011,6 +2031,7 @@ def chat_stream():
 
     @stream_with_context
     def events():
+        operation_started("chat_stream")
         progress_queue = Queue()
         future = _runtime()["chat_executor"].submit(
             _run_chat_in_worker,
@@ -2065,6 +2086,7 @@ def chat_stream():
                     {"duration_ms": round((time.monotonic() - request_started) * 1000), "payload": payload},
                     session_id=state.session_id,
                 )
+            RESPONSES.labels(source=str(data.get("source") or "web"), status="error" if payload.get("error") else "ok").inc()
             if payload.get("error"):
                 yield _sse("error", {"text": payload.get("message") or payload["error"]})
             else:
@@ -2077,6 +2099,8 @@ def chat_stream():
             _activity_update(_runtime(), "error", {"detail": failure}, session_id=state.session_id)
             state.conversation.extend([{"role": "assistant", "text": failure, "kind": "error"}])
             yield _sse("error", {"text": failure})
+        finally:
+            operation_finished("chat_stream")
         yield _sse("done", {"ok": True})
 
     response_stream = events()  # type: ignore[call-arg]
