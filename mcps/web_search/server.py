@@ -13,7 +13,7 @@ from mcps.web_search.searcher import WebSearcher
 
 
 def create_web_search_server() -> StdioMCPServer:
-    server = StdioMCPServer("web-search", "1.0.0")
+    server = StdioMCPServer("web-search", "1.1.0")
     searcher = WebSearcher()
 
     server.register_tool(

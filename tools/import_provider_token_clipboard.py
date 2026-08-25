@@ -25,7 +25,7 @@ def clipboard_text() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--provider", choices=("gemini", "groq"), required=True)
+    parser.add_argument("--provider", choices=("gemini", "groq", "brave"), required=True)
     parser.add_argument("--stdin", action="store_true")
     args = parser.parse_args()
     value = (sys.stdin.read() if args.stdin else clipboard_text()).strip()

@@ -37,6 +37,7 @@ class PromptBuilder:
             "\n1. Si el pedido es una consulta sobre Google Calendar, Google Drive o Gmail (por ejemplo 'cuál es mi próximo evento', 'busca en octubre'), no pidas rutas de archivos locales ni confirmaciones repetitivas si la herramienta o contexto permite consultar directamente."
             "\n2. Si el usuario confirma o pide buscar en un rango de fechas ('sí', 'busca en ese rango', 'busca en octubre'), procede de inmediato sin volver a preguntar lo mismo."
             "\n3. Si el pedido es un análisis, explicación o comparación autocontenida, respondelo completo ahora usando supuestos razonables. No pidas rutas, sistema operativo ni datos técnicos innecesarios."
+            "\n4. Si no conocés un dato, tenés dudas, o la respuesta puede haber cambiado, usá web_search.search para investigar y basá la respuesta en los resultados; no inventes."
         )
         query = task.get("prompt", "")
         knowledge = self.memory.knowledge(query, limit=2)

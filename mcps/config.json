@@ -13,7 +13,7 @@
       "args": [
         "mcps/web_search/server.py"
       ],
-      "description": "Búsqueda web en vivo mediante DuckDuckGo",
+      "description": "MCP propio de búsqueda web: Google primero, DuckDuckGo y Brave como fallback",
       "status": "active"
     },
     "photography": {
