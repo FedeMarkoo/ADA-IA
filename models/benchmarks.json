@@ -712,6 +712,30 @@
       "duration_seconds": 0.0,
       "cpu_percent": 0.0,
       "ram_used_gb": 7.69
+    },
+    {
+      "model": "qwen2.5:7b",
+      "prompt_key": "quick",
+      "prompt_title": "Prompt Personalizado",
+      "timestamp": "2026-08-25T22:22:53Z",
+      "tokens_per_second": 40.0,
+      "ttft_ms": null,
+      "total_tokens": 20,
+      "duration_seconds": 0.0,
+      "cpu_percent": 100.0,
+      "ram_used_gb": 4.39
+    },
+    {
+      "model": "llama3:8b",
+      "prompt_key": "quick",
+      "prompt_title": "Respuesta Rápida",
+      "timestamp": "2026-08-25T22:22:53Z",
+      "tokens_per_second": 37.5,
+      "ttft_ms": 150.0,
+      "total_tokens": 45,
+      "duration_seconds": 0.0,
+      "cpu_percent": 100.0,
+      "ram_used_gb": 4.39
     }
   ]
 }
