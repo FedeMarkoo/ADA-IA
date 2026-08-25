@@ -719,6 +719,176 @@ bugs concretos y categorías que faltaban.
 - Habilita, además, comparar modelos objetivamente cuando se cambie la política de 14.2 ("¿el modelo X redacta mails
   igual de bien y más rápido?").
 
+### 15.6 Revisión de borradores y cambios recientes (2026-08-25)
+
+Los últimos borradores y cambios locales agregan búsqueda web con fallback entre Google, Brave y DuckDuckGo,
+un presupuesto mensual local, credenciales para Google Search y un digest de Google Calendar enviado por Telegram.
+La dirección es correcta, pero conviene registrar estas mejoras para cerrar los riesgos de producción:
+
+- **Búsqueda web detrás de un contrato único.** Extraer un `SearchProvider`/`Protocol` con capacidades, cuota,
+  latencia y calidad declaradas. Así se puede sustituir el scraping de Google sin modificar el router ni el formato.
+- **No depender de scraping como camino principal.** El HTML de Google puede cambiar, activar CAPTCHA o devolver
+  resultados incompletos. Identificar las respuestas parciales, conservar `provider` y `error`, y evitar presentar
+  snippets sin fuente o con una falsa apariencia de cobertura. Priorizar APIs oficiales cuando haya credenciales.
+- **Presupuesto por proveedor y costo real.** `SearchBudget` aplica el mismo límite mensual a cada proveedor, no un
+  límite global. Definir si el límite es por proveedor, global o por costo; registrar reservas, fallos y latencia, y
+  ofrecer un diagnóstico del saldo disponible.
+- **Privacidad antes de enviar consultas.** Agregar clasificación/redacción de datos sensibles, modo `local_only` y
+  confirmación configurable para consultas con información personal. Auditar proveedor y consulta con redacción.
+- **Pruebas deterministas de búsqueda.** Cubrir fallback Google→Brave→DuckDuckGo, CAPTCHA, respuestas vacías,
+  errores HTTP, límites agotados, parseo HTML y credenciales ausentes con fixtures y mocks; CI no debe depender de red.
+- **Credenciales y configuración homogéneas.** Las claves de Google/Brave deben usar el mismo credential store,
+  con validación al arrancar, precedencia documentada y mensajes claros cuando falten.
+- **Digest de calendario idempotente.** Persistir una clave de ejecución por destino, fecha y ventana temporal para
+  no enviar duplicados tras reinicios o reintentos. Respetar la zona horaria y probar días sin eventos, autenticación
+  fallida y destino ausente.
+- **Evidencia de uso de herramientas.** Los reportes muestran respuestas que anuncian consultas de Calendar/Drive o
+  web sin ejecutarlas o sin incluir sus resultados. Exigir evidencia estructurada (`tool`, `ok`, `provider`, `items`,
+  `source`) antes de redactar; ante un fallo, decirlo claramente y no completar con ejemplos inventados.
+- **Prompt vs. política de herramientas.** La regla de usar `web_search.search` ante datos inciertos o cambiantes debe
+  vivir también en router/policy, con detección de temporalidad y restricciones de privacidad. Añadir evals para
+  actualidad, fuentes y negativa a inventar.
+
+Estas mejoras son complementarias a lo ya implementado: el calendario tiene un job y tests básicos, y la búsqueda ya
+cuenta con fallback y presupuesto local. Antes de habilitarla como comportamiento autónomo conviene completar pruebas,
+idempotencia y trazabilidad de fuentes.
+
+### 15.7 Referencia Andén y transporte público: consulta del tren Sarmiento
+
+`anden.app` es una referencia útil para ADA por su diseño de producto y de datos, no necesariamente para copiar su
+implementación. La aplicación presenta transporte cercano del AMBA, distingue datos en vivo de horarios programados y
+mantiene explícita la incertidumbre cuando la fuente no permite confirmar el estado. Su repositorio público funciona
+principalmente como documentación y contratos; no ofrece una API pública propia. La superficie técnica pública valida
+esquemas con `ajv` y la app visible usa una PWA web con Leaflet y módulos JavaScript pequeños.
+
+Ideas para incorporar en ADA:
+
+- **Contrato de observación temporal.** Toda respuesta de transporte debe incluir `realtime`, `scheduled` o `unknown`,
+  `observed_at`, `source`, `freshness` y `confidence`. Nunca transformar ausencia de datos en “servicio normal”.
+- **Fuente con autoridad y fallback transparente.** Separar adaptadores de SOFSE/Trenes Argentinos, la API de Transporte
+  de Buenos Aires y fuentes de alertas. El texto debe explicar si informa una alerta oficial, un horario previsto o una
+  inferencia, sin mezclarlo.
+- **No acoplar el agente al proveedor.** Crear una capability `transport_status` y un `TransportProvider`/`Protocol`.
+  La intención del usuario (“¿cómo está el Sarmiento?”) no debería conocer URLs, tokens ni formatos GTFS.
+- **Privacidad y ubicación opcional.** Consultar la línea Sarmiento sin pedir ubicación. Sólo solicitar estación/ramal
+  cuando el usuario quiera próximos arribos o demoras en un punto específico; no enviar ubicación automáticamente.
+- **PWA/alertas como experiencia futura.** La respuesta puede tener una tarjeta breve y permitir suscribirse a alertas,
+  pero cualquier notificación recurrente debe ser opt-in, cancelable y deduplicada.
+
+#### Función prioritaria: estado del tren Sarmiento
+
+Primera versión propuesta para ADA:
+
+1. `transport_status(line="sarmiento")` consulta alertas oficiales y el feed disponible.
+2. Responde estado general, ramales afectados (por ejemplo Once–Moreno), dirección, última actualización y fuente.
+3. Si hay horarios pero no tiempo real, dice explícitamente “horario programado; no pude confirmar la operación en
+   vivo”.
+4. Si el usuario indica estación y dirección, agrega próximos servicios sólo cuando exista una fuente vigente.
+5. Si la fuente falla, conserva el último dato sólo como histórico y lo etiqueta como desactualizado; nunca lo presenta
+   como estado actual.
+
+Fuentes a evaluar, en este orden: alertas y app/canales oficiales de Trenes Argentinos; API oficial de Transporte BA
+  (GTFS estático y, cuando corresponda, `tripUpdates`, `vehiclePositions` y `serviceAlerts`); y como último recurso,
+  horarios oficiales cacheados. La API de Transporte BA requiere registro/token, mientras que la propia documentación de
+  Andén advierte que no existe una API pública propia. Por eso esta capability debe degradar con claridad y no depender
+  de scraping frágil.
+
+Casos de prueba mínimos: servicio normal, demora, interrupción, alerta programada, feed vencido, respuesta vacía,
+token ausente, estación inexistente, ramal ambiguo y diferencia entre “no hay información” y “no hay servicio”.
+
+### 15.8 Mapa de los borradores recientes recuperados del proyecto
+
+No quedaron disponibles en el contexto actual los mensajes originales ni sus URLs completas, pero el historial local
+permite reconstruir cinco grupos de trabajo que conviene mantener juntos:
+
+- **Healthcheck y evaluación:** ejecución de prompts, trazas de resolución, latencia, modelo usado, MCP elegido y
+  validación de respuestas grounded. Próxima mejora: convertir los casos bloqueados en regresiones permanentes.
+- **MCP genérico:** catálogo dinámico, selección semántica, timeouts, reinicios y evidencia de ejecución. Próxima mejora:
+  contrato uniforme para `tool_call`, `tool_result` y `final_answer`, incluyendo identidad del servidor y fuente.
+- **Gmail:** lectura real por OAuth, consultas de no leídos y último mensaje. Próxima mejora: scopes mínimos, redacción
+  de snippets, paginación y separación estricta entre lectura, borrador y envío.
+- **Google Calendar:** rangos reales, próximo evento, calendarios y digest de Telegram. Próxima mejora: idempotencia,
+  timezone explícita y tests de autorización, ausencia de eventos y reintentos.
+- **Búsqueda web:** fallback de proveedores, credenciales y presupuesto. Próxima mejora: fuentes verificables, tests sin
+  red y política que fuerce la herramienta cuando el dato sea actual o incierto.
+
+Como capacidades transversales también aparecen el dashboard de observabilidad, la selección de modelos por hardware y
+el runtime de escritorio. No conviene tratarlos como features aisladas: todos necesitan el mismo contrato de evidencia,
+permisos, auditoría y degradación segura.
+
+### 15.9 Hermes, OpenJarvis y Tailscale: qué reutilizar y qué no
+
+#### Hermes Agent (`NousResearch/hermes-agent`)
+
+El proyecto que probablemente aparecía en los borradores es **Hermes Agent**, un agente multiproveedor de NousResearch.
+No es sólo un router de modelos: combina providers, herramientas, contexto, memoria, fallback y ejecución de agentes.
+Sus ideas más aprovechables para ADA son:
+
+- routing configurable por precio, latencia o throughput;
+- lista blanca/negra y orden explícito de proveedores;
+- exigir que el proveedor soporte todos los parámetros necesarios (`tools`, `temperature`, etc.);
+- fallback entre proveedores cuando hay rate limit o error transitorio;
+- separación de credenciales y configuración normal;
+- compresión de contexto cuando se acerca el límite de tokens.
+
+No conviene reemplazar ADA por Hermes sin una prueba comparativa: ADA ya tiene `ModelManager`, políticas de privacidad,
+modelos locales y MCP. La opción razonable es adoptar un **ProviderRouter** inspirado en Hermes y mantener el contrato de
+ADA por encima. La frase “Claude gratis” requiere cuidado: Hermes documenta OAuth de Anthropic para Claude Max con créditos
+extra, pero no para Claude Pro; los proveedores gratuitos dependen de sus propios límites, condiciones y disponibilidad.
+
+#### OpenJarvis (`open-jarvis/OpenJarvis`)
+
+OpenJarvis es una referencia especialmente buena para el objetivo de ADA: local-first, evaluación con precisión, latencia,
+energía, FLOPs y costo, y agentes en modos on-demand, scheduled y continuous. Sus presets `scheduled-monitor` y
+`morning-digest` se parecen directamente al caso de calendario + trenes.
+
+Ideas para ADA:
+
+- medir costo, latencia, consumo y calidad por tarea, no sólo “respuesta correcta”;
+- definir agentes/presets declarativos para digest, monitor y consultas rápidas;
+- usar trazas reales para mejorar routing y prompts;
+- mantener modelos locales como primera opción y nube sólo bajo política explícita.
+
+No conviene importar todo el framework: agrega Python/Rust, su propio ciclo de agentes y requisitos de instalación. Es una
+fuente de patrones y benchmarks; ADA debería conservar su MCP, Telegram, memoria y políticas existentes.
+
+#### Tailscale como plano de acceso privado
+
+Tailscale encaja para conectar ADA con el servidor de casa, notebook y teléfono sin publicar el dashboard en Internet.
+Permite identidad por usuario/dispositivo, ACLs, tags y subnet routers para alcanzar redes que no tienen Tailscale instalado.
+La recomendación es:
+
+- exponer ADA sólo por la tailnet;
+- restringir dashboard, API y MCP con ACLs por tags (`ada-server`, `ada-phone`, `ada-admin`);
+- no usar Funnel ni abrir puertos públicos para funciones personales;
+- registrar qué dispositivo originó cada evento y aplicar confirmación para acciones sensibles;
+- usar subnet router sólo si hace falta acceder a equipos del laboratorio o de casa.
+
+Tailscale **no detecta por sí solo que la persona está físicamente en el trabajo**: saber que el teléfono está online en la
+tailnet demuestra conectividad/identidad, no ubicación. Para esa condición hace falta una señal adicional: geofence del
+teléfono, presencia en una Wi-Fi concreta, Bluetooth beacon, Home Assistant, Tasker/Shortcuts o un webhook manual. La señal
+debe ser opt-in, con TTL y posibilidad de desactivarla.
+
+#### Flujo deseado: “si estoy en el trabajo, avisame el Sarmiento a las 13:00”
+
+Diseño propuesto usando piezas que ADA ya tiene:
+
+`presence_signal(work) → event_bus → scheduler(13:00, timezone) → transport_status(sarmiento) → Telegram`
+
+Reglas importantes:
+
+- la presencia no debe activar nada sólo por una IP o por “última conexión” vencida;
+- usar una ventana de validez, por ejemplo presencia confirmada en las últimas 2 horas;
+- deduplicar por `user + location + date + schedule + line`;
+- consultar el tren sólo al momento de enviar, no horas antes;
+- incluir fuente, frescura y tipo de dato (`realtime/scheduled/unknown`);
+- si no se puede verificar presencia o el feed falla, no enviar un mensaje engañoso;
+- permitir comandos “pausar alertas”, “no avisar más hoy” y “borrar esta regla”.
+
+Esto debería implementarse como una regla de autonomía de bajo riesgo y sólo lectura. La notificación es opt-in; la
+consulta de transporte es de lectura; Tailscale aporta el canal privado, pero la señal de presencia y la política viven en
+ADA.
+
 ---
 
 ## Quick wins (alto valor / bajo esfuerzo)
@@ -738,6 +908,12 @@ Cambios chicos, de bajo riesgo, que se pueden hacer ya y rinden mucho:
 8. **Fijar/renombrar dependencias**: migrar `duckduckgo_search` → `ddgs` con versión pinneada (6/15.1).
 9. **Validar `Origin`/`Host`** en los endpoints (mitiga CSRF, 1.1) — pocas líneas, gran reducción de riesgo.
 10. **No versionar datos personales**: mover `config.json` real a ignore + `config.example.json` (1.5).
+11. **Agregar tests offline de búsqueda web**: fallback, límites, credenciales, CAPTCHA y resultados vacíos (15.6).
+12. **Hacer idempotente el digest de Calendar/Telegram**: persistir una clave de envío y probar reinicios/reintentos (15.6).
+13. **Exigir evidencia estructurada de herramientas** antes de generar la respuesta final (15.6).
+14. **Diseñar la capability `transport_status`** con contrato `realtime/scheduled/unknown` y preparar Sarmiento como primer caso (15.7).
+15. **Prototipar `ProviderRouter`** con precio, latencia, throughput, privacidad, contexto y fallback; evaluar Hermes como referencia (15.9).
+16. **Agregar reglas de presencia con TTL e idempotencia** y usar Tailscale sólo como red privada, no como GPS (15.9).
 
 ---
 
