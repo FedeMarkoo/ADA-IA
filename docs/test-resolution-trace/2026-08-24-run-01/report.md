@@ -1476,6 +1476,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 | 2026-08-25 | `simple_science` | `passed` | `healthcheck_1787621215_a69a5429`: explicación local de una frase sobre la dispersión de la luz; sin búsqueda web innecesaria. |
 | 2026-08-25 | `version_repeat` | `passed` | `healthcheck_1787621309_6f257890`: respondió la versión actual mediante el atajo determinista del sistema. |
 | 2026-08-25 | `food_allergy` | `passed` | `healthcheck_1787621738_78037343`: respuesta segura con precaución explícita sobre frutos secos, etiquetas y contaminación cruzada. |
+| 2026-08-25 | `web_search` | `blocked` | `healthcheck_1787622031_11f70f64`: aun con catálogo reducido a `web_search`, el router IA devolvió `ask`; el sistema cortó sin ejecutar ni inventar una fuente. |
 
 ### Checklist de iteración
 
@@ -1496,6 +1497,7 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - [x] Corregir respuesta de ciencia simple sin depender de acceso web.
 - [x] Verificar `version_repeat` con respuesta determinista.
 - [x] Corregir precaución explícita en recomendaciones con alergias.
+- [ ] Resolver selección IA de `web_search.search` cuando el catálogo ya está acotado.
 - [ ] Rerun `calendar_upcoming_events`.
 - [ ] Rerun `calendar_search_event`.
 - [ ] Rerun `calendar_month_search`.
@@ -1519,3 +1521,4 @@ Conclusión: el token actualizado funciona y el caso quedó corregido de punta a
 - `simple_science` falló inicialmente por una negativa incorrecta del modelo. Se agregó una respuesta local de una frase y el rerun (`healthcheck_1787621215_a69a5429`) pasó.
 - `version_repeat` estaba fallando en la corrida inicial, pero el rerun (`healthcheck_1787621309_6f257890`) pasó sin cambios adicionales.
 - `food_allergy` tuvo un falso aprobado inicial (`healthcheck_1787621402_dd7bc450`): proponía comida, pero omitía la precaución sobre la alergia. Se agregó una nota determinista sobre evitar frutos secos, revisar etiquetas y contaminación cruzada; el rerun (`healthcheck_1787621738_78037343`) pasó.
+- Se probó acotar el catálogo del router a la categoría `web_search`, pero el rerun (`healthcheck_1787622031_11f70f64`) siguió devolviendo `ask`. Queda como bloqueo de selección del modelo; no se agregó un switch que elija la herramienta por frase.

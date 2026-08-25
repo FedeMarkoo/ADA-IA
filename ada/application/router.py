@@ -76,13 +76,14 @@ class IntentRouter:
             actions.append("mcp_call (ejecutar una herramienta MCP de solo lectura seleccionada del inventario)")
         return ", ".join(actions)
 
-    def _tools_text(self):
+    def _tools_text(self, category=None):
         if not self.mcp_manager:
             return "(sin MCPs disponibles)"
         try:
             tools = [
                 tool for tool in self.mcp_manager.list_tools()
                 if tool.get("enabled") and not tool.get("requires_confirmation")
+                and (not category or tool.get("category") == category or tool.get("server") == category)
             ]
             return "\n".join(
                 f"- {tool.get('name')} [{tool.get('category') or tool.get('server')}] — {tool.get('description') or 'sin descripción'}"
@@ -133,7 +134,9 @@ class IntentRouter:
             text.lower(),
         ))
         external_hint = bool(self.mcp_manager and re.search(
-            r"\b(calendar|calendario|evento|gmail|correo|mails?|drive|internet|fuente|d[oó]lar)\b", text.lower()
+            r"\b(calendar|calendario|evento|gmail|correo|mails?|drive|internet|fuente|d[oó]lar|"
+            r"busc[aá]|investig[aá]|verific[aá]|confirm[aá]|actual|hoy|últim[oa]|noticia|precio|"
+            r"no\s+(?:sé|se)|duda|qué\s+pas[oó]|qui[eé]n\s+es)\b", text.lower()
         ))
         if fallback.get("action") == "ask" and fallback.get("confidence") == 0.0 and not contextual_reference and not external_hint:
             return fallback
@@ -334,6 +337,8 @@ class IntentRouter:
 
     def _mcp_prompt(self, text):
         """Keep external tool selection focused on the live MCP catalog."""
+        category = "web_search" if re.search(r"\b(internet|web|noticia|fuente|enlace)\b", text, re.I) else None
+        catalog = self._tools_text(category) or self._tools_text()
         return (
             "Debés elegir una herramienta MCP del inventario para responder el pedido; no respondas con texto, no pidas aclaraciones y no uses una acción local. "
             "Devolvé SOLO JSON con esta forma exacta: "
@@ -343,7 +348,7 @@ class IntentRouter:
             "Si se piden próximos eventos sin un eventId, elegí una herramienta de listado o búsqueda; "
             "no uses una herramienta de detalle que requiera un ID.\n"
             f"Fecha actual: {date.today().isoformat()}. Para eventos próximos no uses fechas pasadas.\n"
-            "Inventario MCP activo:\n" + self._tools_text() + "\nPedido: " + text
+            "Inventario MCP activo:\n" + catalog + "\nPedido: " + text
         )
 
     @staticmethod
