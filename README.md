@@ -151,7 +151,7 @@ siete días. Configurá el `chat_id` de destino y habilitá ambos niveles:
     "enabled": true,
     "calendar_weekly_digest": {
       "enabled": true,
-      "hour": 8,
+      "hour": 11,
       "minute": 0,
       "chat_id": "TU_CHAT_ID"
     }
