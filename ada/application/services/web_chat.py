@@ -578,7 +578,9 @@ class WebChatService:
             tool_name = payload.get("tool")
             definition = next((item for item in self.mcp_manager.list_tools() if item.get("name") == tool_name), {}) if self.mcp_manager else {}
             capability_details.update({"server": definition.get("server"), "tool": tool_name})
-        self._emit(progress, "capability_started", **capability_details)
+        progress_started = "mcp_started" if action == "mcp_call" else "capability_started"
+        progress_finished = "mcp_finished" if action == "mcp_call" else "capability_finished"
+        self._emit(progress, progress_started, **capability_details)
         result = self.agent.decide_and_run(task)
         output = result.get("result", result)
         finished_details = {
@@ -588,7 +590,7 @@ class WebChatService:
         }
         if action == "mcp_call":
             finished_details.update({"server": capability_details.get("server"), "tool": capability_details.get("tool")})
-        self._emit(progress, "capability_finished", **finished_details)
+        self._emit(progress, progress_finished, **finished_details)
         if isinstance(output, dict) and output.get("error") == "confirmation_required":
             state.pending_action = task
             reply = tr("confirmation_required", lang)

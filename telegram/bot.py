@@ -412,14 +412,26 @@ class TelegramListener:
             result = json.loads(response.read().decode("utf-8"))
         return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
 
-    def send_message(self, chat_id: str, text: str) -> None:
+    def send_message(self, chat_id: str, text: str) -> Optional[int]:
         # Web chat replies may contain Markdown, while Telegram is sent as
         # plain text here. Remove presentation markers so users do not see
         # literal `**bold**` or backticks in the conversation.
         text = re.sub(r"\*\*(.*?)\*\*", r"\1", str(text), flags=re.DOTALL)
         text = re.sub(r"`([^`]*)`", r"\1", text)
+        last_message_id = None
         for start in range(0, len(text), 4000):
-            self._api("sendMessage", {"chat_id": chat_id, "text": text[start : start + 4000]})
+            result = self._api("sendMessage", {"chat_id": chat_id, "text": text[start : start + 4000]})
+            if isinstance(result, dict):
+                last_message_id = result.get("message_id")
+        return last_message_id
+
+    def edit_message_text(self, chat_id: str, message_id: int, text: str) -> None:
+        """Edit an existing bot message instead of sending a second one."""
+        self._api("editMessageText", {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": str(text),
+        })
 
     def _download_photo(self, photo: Dict[str, Any]) -> str:
         file_info = self._api("getFile", {"file_id": photo["file_id"]})

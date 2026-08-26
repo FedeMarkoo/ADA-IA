@@ -34,7 +34,6 @@ def test_gestor_endpoints():
     assert "score" in data
     assert "items" in data
     assert len(data["items"]) >= 5
-    assert any(item["id"] == "metrics_scraper" for item in data["items"])
 
     res = client.post("/api/healthcheck/heal", headers=headers)
     assert res.status_code == 200
@@ -60,7 +59,7 @@ def test_gestor_endpoints():
     assert "telegram" in core["connectors"]
     assert isinstance(core["connectors"]["mcps"], list)
     assert isinstance(core["connectors"]["triggers"], list)
-    assert "scraper" in core["telemetry"]
+    assert core["telemetry"] == {"source": "prometheus", "dashboard": "grafana"}
 
     res = client.get("/api/triggers")
     assert res.status_code == 200
@@ -160,15 +159,7 @@ def test_gestor_endpoints():
     assert res.status_code == 200
     assert "running" in res.get_json()
 
-    # 8. Metrics Scraper
-    res = client.get("/api/metrics/scraper/status")
-    assert res.status_code == 200
-
-    res = client.post("/api/healthcheck/fix/start_metrics_scraper", headers=headers)
-    assert res.status_code == 200
-    assert "ok" in res.get_json()
-
-    # 9. Memory stats
+    # 8. Memory stats
     res = client.get("/api/memory/stats")
     assert res.status_code == 200
     data = res.get_json()

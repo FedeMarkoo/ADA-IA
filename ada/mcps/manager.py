@@ -215,7 +215,24 @@ class MCPManager:
             except Exception:
                 pass
 
-        # 4. System Runner tools
+        # 5. Public transport status
+        if "transport" in self._servers:
+            try:
+                from mcps.transport.server import create_transport_server
+                srv = create_transport_server()
+                for tname, tmeta in srv.tools.items():
+                    self._tools[tname] = ToolDefinition(
+                        name=tname,
+                        server="transport",
+                        category="transport",
+                        description=tmeta["description"],
+                        parameters=tmeta["inputSchema"],
+                        risk_level=tmeta.get("risk_level", "safe"),
+                    )
+            except Exception:
+                pass
+
+        # 6. System Runner tools
         if "system-runner" in self._servers or "system" in self._servers:
             s_name = "system-runner" if "system-runner" in self._servers else "system"
             try:
@@ -608,10 +625,9 @@ class MCPManager:
                     return self._execute_google_rest("calendar", parameters, name.split(".", 1)[1])
                 if name.startswith("gmail.") and name != "gmail.read_inbox":
                     operation = name.split(".", 1)[1]
-                    result = self._execute_remote("https://gmailmcp.googleapis.com/mcp/v1", operation, parameters)
-                    if result.get("ok") or operation not in {"list_labels", "search_threads", "get_message", "get_thread"}:
-                        return result
-                    return self._execute_google_rest("gmail", parameters, operation)
+                    # Gmail must remain behind the configured MCP. Never
+                    # silently bypass it through ADA's local REST adapter.
+                    return self._execute_remote("https://gmailmcp.googleapis.com/mcp/v1", operation, parameters)
                 if name.startswith("filesystem."):
                     from mcps.filesystem.server import create_filesystem_server
                     srv = create_filesystem_server()
@@ -639,6 +655,12 @@ class MCPManager:
                         res = srv.handlers[name](parameters)
                         return {"ok": "error" not in res, "result": res}
 
+                elif name == "transport.get_status":
+                    from mcps.transport.server import create_transport_server
+                    srv = create_transport_server()
+                    res = srv.handlers[name](parameters)
+                    return {"ok": not (isinstance(res, dict) and res.get("ok") is False), "result": res}
+
                 elif name == "system.run_command":
                     from mcps.system.server import create_system_server
                     srv = create_system_server()
@@ -653,23 +675,24 @@ class MCPManager:
                         return {"ok": not (isinstance(res, dict) and not res.get("ok", True)), "result": res}
 
                 elif name == "gmail.read_inbox":
-                    # Keep inbox reads grounded in the same OAuth-backed Gmail
-                    # API used by the other read-only Gmail MCP tools.  The
-                    # legacy local skill returned a simulated empty inbox.
+                    # Build the inbox view exclusively from Gmail MCP calls.
                     parameters.setdefault("pageSize", 10)
                     parameters["pageSize"] = min(int(parameters.get("pageSize") or 10), 20)
                     if re.search(r"\bno\s+le[ií]d", request_text, re.I):
                         parameters["query"] = "is:unread"
-                    listed = self._execute_google_rest("gmail", parameters, "search_threads")
+                    listed = self._execute_remote(
+                        "https://gmailmcp.googleapis.com/mcp/v1", "search_threads", parameters
+                    )
                     if not listed.get("ok"):
                         return listed
                     messages = []
-                    for item in (listed.get("result") or {}).get("messages") or []:
+                    listed_payload = listed.get("result") or {}
+                    for item in listed_payload.get("messages") or listed_payload.get("threads") or []:
                         message_id = item.get("id") if isinstance(item, dict) else item
                         if not message_id:
                             continue
-                        detail = self._execute_google_rest(
-                            "gmail", {"messageId": message_id}, "get_message"
+                        detail = self._execute_remote(
+                            "https://gmailmcp.googleapis.com/mcp/v1", "get_message", {"messageId": message_id}
                         )
                         if detail.get("ok"):
                             messages.append(detail.get("result") or {})

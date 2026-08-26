@@ -68,6 +68,8 @@ def load_capabilities(strict=False, force_reload=False):
                 if strict:
                     raise CapabilityLoadError(f"Capability rota: {path}") from exc
                 continue
+            if getattr(module, "MCP_ONLY", False):
+                continue
             if hasattr(module, "run"):
                 declared = getattr(module, "CAPABILITY_SPEC", {})
                 name = str(declared.get("name") or path.stem) if isinstance(declared, dict) else path.stem

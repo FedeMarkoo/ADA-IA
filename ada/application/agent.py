@@ -35,7 +35,10 @@ class Agent:
             encrypted=bool(self.cfg.get("memory_encryption", False)),
             encryption_key=os.environ.get("ADA_MEMORY_KEY"),
         )
-        self.skills = load_capabilities()
+        # Legacy in-process capabilities are opt-in. Normal execution goes
+        # through MCP so integrations remain independently controllable.
+        self.capabilities_enabled = bool(self.cfg.get("capabilities_enabled", False))
+        self.skills = load_capabilities() if self.capabilities_enabled else {}
         self.coordinator = MultiAgentCoordinator(self.cfg)
         self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem, mcp_manager=mcp_manager)
         self.policy = PolicyEngine(self.cfg)
@@ -66,7 +69,7 @@ class Agent:
         )
 
     def capability_catalog(self):
-        return capability_catalog()
+        return capability_catalog() if self.capabilities_enabled else {}
 
     def _load_knowledge(self):
         return self.knowledge_loader.load_files(self.cfg.get("knowledge_files", []))
@@ -90,6 +93,16 @@ class Agent:
                 parameters.setdefault("_request", task.get("prompt", ""))
                 result = self.mcp_manager.execute_tool(tool, parameters, self)
             self.mem.record_task(task, result, provider="mcp", success=not bool(result.get("error")))
+            return {"model": "mcp", "result": result}
+        if skill_name and not self.capabilities_enabled:
+            # No in-process action is allowed in the default architecture.
+            # Integrations and local tools must be selected as MCP calls.
+            result = {
+                "error": "action_requires_mcp",
+                "action": skill_name,
+                "message": "Esta acción debe ejecutarse mediante una herramienta MCP activa.",
+            }
+            self.mem.record_task(task, result, provider="mcp", success=False)
             return {"model": "mcp", "result": result}
         if skill_name == "food":
             payload = dict(task.get("payload", {}))
@@ -154,7 +167,7 @@ class Agent:
             return {"model": provider or "tool", "result": result}
 
         if not provider:
-            result = {"error": "No hay modelos disponibles. Instala/inicia Ollama o configura una API."}
+            result = {"error": "No hay modelos disponibles. Configura llama.cpp, Ollama o una API remota."}
             self.mem.record_task(task, result, success=False)
             return {"model": None, "result": result}
 
@@ -168,6 +181,8 @@ class Agent:
         }
         if provider == "ollama" and model_name:
             call_options["ollama_model"] = model_name
+        elif provider == "llama_cpp" and model_name:
+            call_options["llama_cpp_model"] = model_name
         try:
             result = self.model_manager.call(provider, prompt, complexity=task["complexity"], **call_options)
             self.mem.record_task(task, result, provider=provider, success=True)
@@ -181,14 +196,16 @@ class Agent:
             self.mem.record_audit(skill_name or "agent", request=task, result={"error": str(exc)}, success=False)
             # A remote provider can be temporarily unavailable. Fall back to
             # the local model before returning an error to the user.
-            if provider != "ollama" and self.model_manager.available().get("ollama"):
+            local_provider = self.model_manager.provider if self.model_manager.provider in {"ollama", "llama_cpp", "local"} else "ollama"
+            if provider not in {"ollama", "llama_cpp", "local"} and self.model_manager.available().get(local_provider):
                 try:
                     result = self.model_manager.call(
-                        "ollama", prompt, complexity=task["complexity"], ollama_model=model_name or None,
+                        local_provider, prompt, complexity=task["complexity"],
+                        **({"ollama_model": model_name} if local_provider == "ollama" else {"llama_cpp_model": model_name}),
                         timeout=self.cfg.get("model_timeout", 300),
                     )
-                    self.mem.record_task(task, result, provider="ollama", success=True)
-                    return {"model": "ollama (fallback)", "result": result}
+                    self.mem.record_task(task, result, provider=local_provider, success=True)
+                    return {"model": f"{local_provider} (fallback)", "result": result}
                 except Exception as fallback_exc:
                     logger.warning("provider_fallback_failed provider=ollama error=%s", fallback_exc)
                     pass
@@ -313,6 +330,11 @@ class Agent:
             return None
 
     def run_skill(self, name, args, confirm=None):
+        if not self.capabilities_enabled:
+            return {
+                "error": "capabilities_disabled",
+                "message": "Las capabilities están deshabilitadas; usá una herramienta MCP activa.",
+            }
         if name not in self.skills:
             return {"error": f"Skill no disponible: {name}"}
         if name == "mcp" and "servers" not in args:

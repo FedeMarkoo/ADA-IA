@@ -70,7 +70,6 @@ export const api = {
 
   getStatus() { return this.request('/api/status'); },
   getCoreState() { return this.request('/api/core/state'); },
-  getTimeSeries() { return this.request('/api/metrics/timeseries?hours=24'); },
   getDebug() { return this.request('/api/debug'); },
   setDebug(enabled) { return this.request('/api/debug', { method: 'POST', body: JSON.stringify({ enabled }) }); },
 
@@ -109,12 +108,6 @@ export const api = {
   testTelegram(body = {}) { return this.request('/api/telegram/test', { method: 'POST', body: JSON.stringify(body) }); },
   getTelegramHistory() { return this.request('/api/telegram/history'); },
   saveTelegramConfig(data) { return this.request('/api/telegram/config', { method: 'POST', body: JSON.stringify(data) }); },
-
-  // Metrics Scraper Lifecycle
-  getMetricsScraperStatus() { return this.request('/api/metrics/scraper/status'); },
-  startMetricsScraper() { return this.request('/api/metrics/scraper/start', { method: 'POST' }); },
-  stopMetricsScraper() { return this.request('/api/metrics/scraper/stop', { method: 'POST' }); },
-  restartMetricsScraper() { return this.request('/api/metrics/scraper/restart', { method: 'POST' }); },
 
   // Event sources and entry points
   getTriggers() { return this.request('/api/triggers'); },
@@ -386,13 +379,6 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   const isAgentRunning = statusData?.agent_enabled !== false;
   const mcpServers = statusData?.mcp_servers || [];
   const areMCPsRunning = mcpServers.some(server => server.status === 'active');
-  const scraperState = statusData?.metrics_scraper || {};
-  const isScraperRunning = scraperState.status === 'active' && scraperState.ok === true;
-  const scraperBadge = isScraperRunning ? 'badge-success' : scraperState.status === 'stale' ? 'badge-warning' : 'badge-danger';
-  const scraperLabel = isScraperRunning ? 'Activo' : scraperState.status === 'stale' ? 'Vencido' : 'Sin datos';
-  const scraperDetail = isScraperRunning
-    ? `Última muestra hace ${scraperState.age_seconds ?? '—'} s.`
-    : (scraperState.message || 'No hay muestras válidas del scraper.');
 
   const loadHealth = useCallback(async () => {
     try {
@@ -634,19 +620,6 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
             h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('mcps') }, 'Ver herramientas'),
           ]),
         ]),
-        h('article', { className: 'service-card', key: 'metrics-scraper' }, [
-          h('div', { className: 'service-card-top' }, [
-            h('span', { className: 'service-icon' }, h(Icon, { name: 'activity' })),
-            h('span', { className: `badge ${scraperBadge}` }, scraperLabel),
-          ]),
-          h('h3', null, 'Scraper de métricas'),
-          h('p', null, scraperDetail),
-          h('div', { className: 'service-card-actions' }, [
-            !isScraperRunning ? h('button', { className: 'btn btn-primary', onClick: async () => { try { const res = await api.startMetricsScraper(); showToast(res.message || 'Scraper iniciado', res.ok ? 'success' : 'danger'); onRefresh(); } catch (err) { showToast('Error al iniciar scraper: ' + err.message, 'danger'); } } }, 'Iniciar scraper') : null,
-            isScraperRunning ? h('button', { className: 'btn btn-ghost', onClick: async () => { try { const res = await api.restartMetricsScraper(); showToast(res.message || 'Scraper reiniciado', res.ok ? 'success' : 'danger'); onRefresh(); } catch (err) { showToast('Error al reiniciar scraper: ' + err.message, 'danger'); } } }, 'Reiniciar scraper') : null,
-            h('button', { className: 'btn btn-ghost', onClick: () => onSwitchTab('metrics') }, 'Ver telemetría'),
-          ]),
-        ]),
       ]),
     ]),
 
@@ -688,72 +661,16 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   ]);
 }
 
-function MetricsView({ showToast }) {
-  const [data, setData] = useState({ samples: [] });
-  const [scraperBusy, setScraperBusy] = useState(false);
-  useEffect(() => { let live = true; const load = () => api.getTimeSeries().then(v => live && setData(v)).catch(() => {}); load(); const id = setInterval(load, 10000); return () => { live = false; clearInterval(id); }; }, []);
-  const samples = data.samples || [];
-  const byMetric = samples.reduce((a, s) => { (a[s.metric] ||= []).push(s); return a; }, {});
-  const counterNames = new Set(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations']);
-  const samplesForMetric = (name) => Object.entries(byMetric).flatMap(([metric, values]) => (
-    metric === name || (counterNames.has(name) && metric.startsWith(`${name}_`)) ? values : []
-  ));
-  const latest = (name) => samplesForMetric(name).slice().sort((a, b) => a.ts - b.ts).at(-1)?.value;
-  const max = (name) => Math.max(...samplesForMetric(name).map(s => Number(s.value)), 0);
-  const counterDelta = (name) => {
-    const groups = new Map();
-    samplesForMetric(name).forEach(sample => {
-      const key = `${sample.metric}:${sample.tags || 'default'}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(sample);
-    });
-    return [...groups.values()].reduce((total, series) => {
-      series.sort((a, b) => a.ts - b.ts);
-      if (series.length < 2) return total;
-      return total + Math.max(0, Number(series.at(-1).value) - Number(series[0].value));
-    }, 0);
-  };
-  const scraper = data.scraper || {};
-  const scraperOnline = scraper.status === 'active' && data.stale !== true;
-  const scraperLabel = scraperOnline
-    ? `Scraper activo · última muestra hace ${scraper.age_seconds ?? '—'} s`
-    : scraper.status === 'stale'
-      ? `Telemetría vencida · última muestra hace ${scraper.age_seconds ?? '—'} s`
-      : scraper.message || 'Scraper sin muestras válidas';
-  const controlScraper = async (action) => {
-    setScraperBusy(true);
-    try {
-      const result = action === 'restart' ? await api.restartMetricsScraper() : await api.startMetricsScraper();
-      showToast(result.message || 'Scraper actualizado', result.ok ? 'success' : 'danger');
-      const refreshed = await api.getTimeSeries();
-      setData(refreshed);
-    } catch (error) {
-      showToast(`Error al ${action === 'restart' ? 'reiniciar' : 'iniciar'} el scraper: ${error.message}`, 'danger');
-    } finally {
-      setScraperBusy(false);
-    }
-  };
-  const names = { ada: 'ADA', telegram: 'Telegram', ollama: 'Ollama' };
-  const servicePanel = (service) => h('article', { className: 'metrics-panel service-panel', key: service }, [
-    h('div', { className: 'metrics-panel-title' }, [h('span', { className: 'status-dot online' }), h('div', null, [h('h3', null, names[service]), h('small', null, 'Proceso local')])]),
-    h('div', { className: 'resource-values' }, [h('div', null, [h('strong', null, `${(latest(`${service}_process_cpu_percent`) || 0).toFixed(1)}%`), h('span', null, 'CPU actual')]), h('div', null, [h('strong', null, `${(latest(`${service}_process_rss_mb`) || 0).toFixed(0)} MB`), h('span', null, 'Memoria RAM')])]),
-    h('div', { className: 'metric-spark' }, samplesForMetric(`${service}_process_rss_mb`).slice(-36).map((v, i) => h('i', { key: i, style: { height: `${Math.max(6, Math.min(100, Number(v.value) / Math.max(1, max(`${service}_process_rss_mb`)) * 100))}%` } }))),
-  ]);
+function MetricsView() {
+  const grafanaBaseUrl = (window.__ADA_GRAFANA_URL__ || `${window.location.protocol}//${window.location.hostname}:3000`).replace(/\/$/, '');
+  const grafanaDashboardUrl = `${grafanaBaseUrl}/d/ada-overview/ada-operaciones?orgId=1&kiosk=tv&refresh=10s`;
   return h('section', { className: 'tab-view active metrics-view' }, [
-    h('div', { className: 'metrics-hero' }, [h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Centro de métricas'), h('p', null, 'Estado operativo y rendimiento de los servicios de ADA')]), h('div', { className: 'metrics-freshness' }, [h('span', { className: `status-dot ${scraperOnline ? 'online' : 'offline'}` }), h('span', null, scraperLabel), h('div', { className: 'metrics-scraper-actions' }, [!scraperOnline ? h('button', { className: 'btn btn-primary btn-sm', onClick: () => controlScraper('start'), disabled: scraperBusy }, scraperBusy ? 'Iniciando…' : 'Iniciar scraper') : null, h('button', { className: 'btn btn-ghost btn-sm', onClick: () => controlScraper('restart'), disabled: scraperBusy }, scraperBusy ? 'Procesando…' : 'Reiniciar scraper')])])]),
-    h('div', { className: 'metrics-kpis' }, [h('article', { className: 'metric-kpi' }, [h('span', null, 'Estado del sistema'), h('strong', null, latest('ada_up') === 1 ? 'Operativo' : 'Sin datos'), h('small', null, 'Última lectura confirmada')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Eventos en la ventana'), h('strong', null, String(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations'].reduce((sum, name) => sum + counterDelta(name), 0))), h('small', null, 'Deltas observados en 24 horas')]), h('article', { className: 'metric-kpi' }, [h('span', null, 'Retención'), h('strong', null, `${data.retention_days || 7} días`), h('small', null, 'Almacenamiento temporal')])]),
-    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Recursos en tiempo real'), h('p', null, 'Consumo de los procesos que mantienen ADA funcionando')]),
-    h('div', { className: 'metrics-service-grid' }, ['ada', 'ollama', 'telegram'].map(servicePanel)),
-    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Uso de ADA'), h('p', null, 'Invocaciones, mensajes y resultados observados por el scraper')]),
-    h('div', { className: 'metrics-usage-grid' }, [['messages_received', 'Mensajes recibidos'], ['chat_invocations', 'Conversaciones'], ['router_invocations', 'Clasificaciones del router'], ['model_invocations', 'Llamadas a modelos'], ['capability_invocations', 'Herramientas ejecutadas']].map(([metric, title]) => h('article', { className: 'metric-kpi metric-usage', key: metric }, [h('span', null, title), h('strong', null, String(counterDelta(metric))), h('small', null, 'Eventos nuevos en la ventana')]))) ,
-    h('div', { className: 'metrics-section-heading' }, [h('h2', null, 'Cobertura de telemetría'), h('p', null, 'Las invocaciones de modelos, router, MCPs y tools aparecerán aquí cuando registren actividad real')]),
-    h('div', { className: 'metrics-empty-panel' }, [h('strong', null, 'Esperando actividad de componentes'), h('span', null, 'No se muestran valores inventados: cada serie aparece sólo cuando ADA registra una invocación real.')]),
+    h('div', { className: 'grafana-embed' }, [h('iframe', { src: grafanaDashboardUrl, title: 'Dashboard de métricas de ADA en Grafana', loading: 'eager', allowFullScreen: true })]),
   ]);
 }
 
 function CoreView({ onSwitchTab }) {
   const [coreData, setCoreData] = useState(null);
-  const [metricsData, setMetricsData] = useState({ samples: [] });
   const [loadError, setLoadError] = useState('');
   const networkRef = useRef(null);
   const sphereRef = useRef(null);
@@ -776,19 +693,6 @@ function CoreView({ onSwitchTab }) {
     };
     load();
     const interval = setInterval(load, 1000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadMetrics = () => api.getTimeSeries().then(data => {
-      if (mounted) setMetricsData(data || { samples: [] });
-    }).catch(() => {});
-    loadMetrics();
-    const interval = setInterval(loadMetrics, 10000);
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -850,43 +754,6 @@ function CoreView({ onSwitchTab }) {
     chat: 'Chat', router: 'Router', reasoning: 'Razonamiento', coding: 'Código', tools: 'Herramientas', vision: 'Visión',
   };
   const statusText = activity.status === 'working' ? 'Trabajando' : activity.status === 'error' ? 'Requiere atención' : activity.status === 'complete' ? 'Completado' : 'En espera';
-  const samples = metricsData.samples || [];
-  const counterNames = new Set(['messages_received', 'chat_invocations', 'router_invocations', 'model_invocations', 'capability_invocations']);
-  const byMetric = samples.reduce((groups, sample) => {
-    (groups[sample.metric] ||= []).push(sample);
-    return groups;
-  }, {});
-  const samplesForMetric = (name) => Object.entries(byMetric).flatMap(([metric, values]) => (
-    metric === name || (counterNames.has(name) && metric.startsWith(`${name}_`)) ? values : []
-  ));
-  const metricSeries = (name) => {
-    const groups = new Map();
-    samplesForMetric(name).forEach(sample => {
-      const key = `${sample.metric}:${sample.tags || 'default'}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(sample);
-    });
-    return [...groups.values()].map(series => series.sort((a, b) => a.ts - b.ts));
-  };
-  const latestMetric = (name) => {
-    const values = samplesForMetric(name).slice().sort((a, b) => a.ts - b.ts);
-    return values.at(-1)?.value;
-  };
-  const metricDelta = (name) => metricSeries(name).reduce((total, series) => {
-    if (series.length < 2) return total;
-    const first = Number(series[0].value) || 0;
-    const last = Number(series.at(-1).value) || 0;
-    return total + Math.max(0, last - first);
-  }, 0);
-  const windowActivity = [...counterNames].reduce((total, name) => total + metricDelta(name), 0);
-  const sparkValues = (name) => {
-    if (!counterNames.has(name)) return samplesForMetric(name).slice(-28).map(sample => Number(sample.value) || 0);
-    return metricSeries(name).flatMap(series => series.slice(1).map((sample, index) => Math.max(0, Number(sample.value) - Number(series[index].value)))).slice(-28);
-  };
-  const formatMetric = (name, suffix = '') => {
-    const value = latestMetric(name);
-    return value == null ? '—' : `${Number(value).toFixed(name.includes('percent') ? 1 : 0)}${suffix}`;
-  };
   const activeConnections = connectors.filter(connector => connector.online).length;
   const inputGeometryKey = inputNodes.map(node => node.id).join('|');
   const outputGeometryKey = outputNodes.map(node => node.id).join('|');
@@ -979,13 +846,6 @@ function CoreView({ onSwitchTab }) {
       window.removeEventListener('resize', measure);
     };
   }, [inputGeometryKey, outputGeometryKey]);
-  const renderSpark = (name, tone = 'cyan') => {
-    const values = sparkValues(name);
-    const peak = Math.max(...values, 1);
-    return h('div', { className: `core-spark core-spark-${tone}`, 'aria-hidden': 'true' }, values.length
-      ? values.map((value, index) => h('i', { key: `${name}-${index}`, style: { height: `${Math.max(9, Math.round((value / peak) * 100))}%` } }))
-      : [h('i', { key: 'empty', style: { height: '12%' } })]);
-  };
   return h('section', { className: `tab-view active core-view core-status-${activity.status}`, id: 'tab-core' }, [
     h('div', { className: 'core-toolbar', key: 'toolbar' }, [
       h('div', { className: 'core-live-state', role: 'status', 'aria-live': 'polite' }, [
@@ -1008,16 +868,6 @@ function CoreView({ onSwitchTab }) {
         h('small', null, activity.label),
       ]),
       h('article', { className: 'core-kpi' }, [
-        h('span', { className: 'core-kpi-label' }, 'CPU DEL PROCESO'),
-        h('strong', null, formatMetric('ada_process_cpu_percent', '%')),
-        renderSpark('ada_process_cpu_percent', 'violet'),
-      ]),
-      h('article', { className: 'core-kpi' }, [
-        h('span', { className: 'core-kpi-label' }, 'MEMORIA ADA'),
-        h('strong', null, formatMetric('ada_process_rss_mb', ' MB')),
-        renderSpark('ada_process_rss_mb', 'cyan'),
-      ]),
-      h('article', { className: 'core-kpi' }, [
         h('span', { className: 'core-kpi-label' }, 'CONEXIONES'),
         h('strong', null, `${activeConnections}/${connectors.length}`),
         h('small', null, 'canales y herramientas activas'),
@@ -1030,12 +880,6 @@ function CoreView({ onSwitchTab }) {
           h('span', { className: 'core-rail-label' }, 'ESTADO'),
           h('strong', { className: 'core-rail-value core-rail-value-ring' }, statusText),
           h('span', { className: 'core-rail-meta' }, activity.label),
-        ]),
-        h('div', { className: 'core-rail-section' }, [
-          h('span', { className: 'core-rail-label' }, 'MEMORIA'),
-          h('strong', { className: 'core-rail-value' }, formatMetric('ada_process_rss_mb', ' MB')),
-          h('span', { className: 'core-rail-meta' }, 'Proceso ADA'),
-          renderSpark('ada_process_rss_mb', 'cyan'),
         ]),
         h('div', { className: 'core-rail-section' }, [
           h('span', { className: 'core-rail-label' }, 'MODELOS'),
@@ -1237,42 +1081,6 @@ function CoreView({ onSwitchTab }) {
               });
             })()
           ) : null,
-        ]),
-      ]),
-    ]),
-    h('div', { className: 'core-telemetry-grid', key: 'telemetry' }, [
-      h('section', { className: 'core-telemetry-card core-telemetry-wide' }, [
-        h('div', { className: 'core-telemetry-heading' }, [
-          h('div', null, [
-            h('span', { className: 'core-activity-eyebrow' }, 'OBSERVABILIDAD EN TIEMPO REAL'),
-            h('h3', null, 'Pulso operativo'),
-          ]),
-          h('span', { className: 'core-live-badge' }, [h('span', { className: 'core-live-dot' }), 'LIVE']),
-        ]),
-        h('div', { className: 'core-telemetry-charts' }, [
-          h('div', { className: 'core-chart-block' }, [
-            h('div', { className: 'core-chart-label' }, [h('span', null, 'ADA / CPU'), h('strong', null, formatMetric('ada_process_cpu_percent', '%'))]),
-            renderSpark('ada_process_cpu_percent', 'cyan'),
-          ]),
-          h('div', { className: 'core-chart-block' }, [
-            h('div', { className: 'core-chart-label' }, [h('span', null, 'OLLAMA / MEMORIA'), h('strong', null, formatMetric('ollama_process_rss_mb', ' MB'))]),
-            renderSpark('ollama_process_rss_mb', 'violet'),
-          ]),
-          h('div', { className: 'core-chart-block' }, [
-            h('div', { className: 'core-chart-label' }, [h('span', null, 'EVENTOS EN LA VENTANA'), h('strong', null, String(windowActivity))]),
-            renderSpark('messages_received', 'green'),
-          ]),
-        ]),
-      ]),
-      h('section', { className: 'core-telemetry-card core-signal-card' }, [
-        h('div', { className: 'core-telemetry-heading' }, [
-          h('div', null, [h('span', { className: 'core-activity-eyebrow' }, 'SEÑALES DEL SISTEMA'), h('h3', null, 'Estado de la red')]),
-        ]),
-        h('div', { className: 'core-signal-grid' }, [
-          h('div', null, [h('strong', null, String(modelGroups.length)), h('span', null, 'modelos activos')]),
-          h('div', null, [h('strong', null, String(connectors.filter(connector => connector.kind === 'MCP' && connector.online).length)), h('span', null, 'MCP conectados')]),
-          h('div', null, [h('strong', null, String(connectors.filter(connector => connector.kind === 'Entrada' && connector.online).length)), h('span', null, 'entradas listas')]),
-          h('div', null, [h('strong', null, String(metricDelta('messages_received'))), h('span', null, 'mensajes en la ventana')]),
         ]),
       ]),
     ]),
@@ -4582,8 +4390,8 @@ export function App() {
       isOpen: navigationOpen,
       onClose: () => setNavigationOpen(false),
     }),
-    h('main', { className: 'main-wrapper', key: 'main' }, [
-      h(Header, {
+    h('main', { className: `main-wrapper ${activeTab === 'metrics' ? 'metrics-only-wrapper' : ''}`, key: 'main' }, [
+      activeTab === 'metrics' ? null : h(Header, {
         key: 'header',
         title: currentTitle[0],
         subtitle: currentTitle[1],
@@ -4597,7 +4405,7 @@ export function App() {
         onToggleDebug: toggleDebug,
         onOpenNavigation: () => setNavigationOpen(true),
       }),
-      h('div', { className: 'content-container', key: 'content' }, [
+      h('div', { className: `content-container ${activeTab === 'metrics' ? 'metrics-only-content' : ''}`, key: 'content' }, [
         activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: selectTab, showToast, onRefresh: refreshAll }) : null,
         activeTab === 'core' ? h(CoreView, { onSwitchTab: selectTab }) : null,
         activeTab === 'benchmark' ? h(HealthcheckView, { showToast }) : null,

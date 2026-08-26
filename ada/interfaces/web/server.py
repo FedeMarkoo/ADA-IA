@@ -20,7 +20,6 @@ from ada.models.benchmark import ModelBenchmark
 from ada.mcps.manager import MCPManager
 from ada.interfaces.web.doctor import HealthDoctor
 from ada.infrastructure.runtime.duplicates import detect_duplicates
-from ada.infrastructure.observability_timeseries import TimeSeriesStore, metrics_scraper_status
 from ada.infrastructure.prometheus_metrics import REQUESTS, REQUEST_LATENCY, RESPONSES, exposition, operation_finished, operation_started
 from ada.infrastructure.persistence.debug_log import DebugLog
 from ada.application.services.memory_refiner import MemoryRefiner
@@ -257,6 +256,18 @@ def _activity_descriptor(phase, details):
             f"{details.get('tool') or details.get('capability') or 'Herramienta'} finalizada",
             "OK" if details.get("ok", True) else (details.get("error") or "error"),
             str(details.get("server") or details.get("capability") or "tools"),
+        ),
+        "mcp_started": (
+            "working",
+            f"Ejecutando MCP {details.get('server') or 'remoto'}",
+            str(details.get("tool") or "herramienta MCP"),
+            str(details.get("server") or "mcp"),
+        ),
+        "mcp_finished": (
+            "working",
+            f"MCP {details.get('tool') or 'herramienta'} finalizado",
+            "OK" if details.get("ok", True) else (details.get("error") or "error"),
+            str(details.get("server") or "mcp"),
         ),
         "folder_index_updated": ("working", "Actualizando memoria de carpetas", str(details.get("parent") or ""), "sqlite-memory"),
         "completed": ("complete", "Tarea completada", str(details.get("detail") or "Resultado entregado"), None),
@@ -524,7 +535,6 @@ def status():
                 "agent": active_agent.metrics.snapshot(),
                 "models": active_agent.model_manager.metrics.snapshot(),
             },
-            "metrics_scraper": metrics_scraper_status(),
             "duplicates": detect_duplicates(),
         }
     )
@@ -543,33 +553,15 @@ def core_state_api():
             "mcps": runtime.get("mcp_manager", MCPManager()).list_servers(),
             "triggers": runtime.get("trigger_manager", trigger_manager).list_triggers(),
         },
-        "telemetry": {"scraper": metrics_scraper_status()},
+        "telemetry": {"source": "prometheus", "dashboard": "grafana"},
         "server_time": time.time(),
     })
 
-
-@app.route("/api/metrics")
-def metrics_api():
-    active_agent = _runtime()["agent"]
-    return jsonify({"agent": active_agent.metrics.snapshot(), "models": active_agent.model_manager.metrics.snapshot()})
 
 @app.route("/metrics")
 def prometheus_metrics():
     """Prometheus scrape endpoint. Grafana reads the Prometheus server."""
     return Response(exposition(), mimetype="text/plain; version=0.0.4")
-
-@app.route("/api/metrics/timeseries")
-def metrics_timeseries_api():
-    # Compatibility response for the legacy ADA dashboard. Historical data is
-    # intentionally no longer read from SQLite; Prometheus owns the range
-    # query and Grafana is the canonical historical UI.
-    now = time.time()
-    runtime = _runtime()
-    samples = []
-    for component, snapshot in (("ada", runtime["agent"].metrics.snapshot()), ("models", runtime["agent"].model_manager.metrics.snapshot())):
-        for name, value in snapshot.get("counters", {}).items():
-            samples.append({"ts": now, "metric": name, "tags": "", "value": value, "component": component})
-    return jsonify({"retention_days": 15, "source": "prometheus", "last_sample_at": now, "stale": False, "scraper": {"status": "migrated", "ok": True, "message": "Histórico disponible en Grafana"}, "samples": samples})
 
 
 # ==============================================================================
@@ -1459,63 +1451,6 @@ def restart_telegram_service() -> Dict[str, Any]:
     return _runtime().get("trigger_manager", trigger_manager).restart("telegram")
 
 
-_metrics_scraper_process = None
-_metrics_scraper_lock = threading.RLock()
-
-
-def start_metrics_scraper_service() -> Dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "migrated",
-        "message": "El scraper SQLite fue reemplazado por Prometheus. Configurá Prometheus para /metrics y abrí Grafana.",
-    }
-
-
-def stop_metrics_scraper_service() -> Dict[str, Any]:
-    global _metrics_scraper_process
-    with _metrics_scraper_lock:
-        if _metrics_scraper_process and _metrics_scraper_process.poll() is None:
-            _metrics_scraper_process.terminate()
-            try:
-                _metrics_scraper_process.wait(timeout=3)
-            except Exception:
-                _metrics_scraper_process.kill()
-            _metrics_scraper_process = None
-        else:
-            # fallback kill if started elsewhere
-            import subprocess
-            try:
-                subprocess.run(["pkill", "-f", "tools/metrics_scraper.py"], capture_output=True, timeout=3)
-            except Exception:
-                pass
-        return {"ok": True, "message": "Scraper de métricas detenido"}
-
-
-def restart_metrics_scraper_service() -> Dict[str, Any]:
-    """Compatibility endpoint retained while clients migrate to Grafana."""
-    return start_metrics_scraper_service()
-
-
-@app.route("/api/metrics/scraper/status")
-def metrics_scraper_status_api():
-    return jsonify(metrics_scraper_status())
-
-
-@app.route("/api/metrics/scraper/start", methods=["POST"])
-def metrics_scraper_start_api():
-    return jsonify(start_metrics_scraper_service())
-
-
-@app.route("/api/metrics/scraper/stop", methods=["POST"])
-def metrics_scraper_stop_api():
-    return jsonify(stop_metrics_scraper_service())
-
-
-@app.route("/api/metrics/scraper/restart", methods=["POST"])
-def metrics_scraper_restart_api():
-    return jsonify(restart_metrics_scraper_service())
-
-
 @app.route("/api/triggers")
 def triggers_api():
     manager = _runtime().get("trigger_manager", trigger_manager)
@@ -2005,10 +1940,16 @@ def _progress_text(event):
         target = payload.get("dir") or payload.get("path") or payload.get("query") or payload.get("time_min") or ""
         target_txt = f" en {target}" if target else ""
         return f"[herramienta] ejecutando {action_or_tool}{server_txt}{target_txt}..."
+    if phase == "mcp_started":
+        return f"[mcp] ejecutando {event.get('tool') or 'herramienta'} ({event.get('server') or 'servidor'})..."
     if phase == "capability_finished":
         action_or_tool = event.get("tool") or event.get("capability") or "Herramienta"
         status_txt = "completada con éxito" if event.get("ok") else f"error ({event.get('error') or 'falló'})"
         return f"[herramienta] {action_or_tool} {status_txt}"
+    if phase == "mcp_finished":
+        action_or_tool = event.get("tool") or "Herramienta MCP"
+        status_txt = "completada con éxito" if event.get("ok") else f"error ({event.get('error') or 'falló'})"
+        return f"[mcp] {action_or_tool} {status_txt}"
     if phase == "folder_index_updated":
         return f"[memory] índice actualizado: {event.get('indexed', 0)} carpetas aprendidas en {event.get('parent')}"
     return f"[runtime] {phase}"
