@@ -89,10 +89,14 @@ class LlamaCppRuntime:
                 return self.status()
             command = [
                 self.binary,
-                "-m", self.model_path,
-                "--alias", self.model_alias,
-                "--host", self.host,
-                "--port", str(self.port),
+                "-m",
+                self.model_path,
+                "--alias",
+                self.model_alias,
+                "--host",
+                self.host,
+                "--port",
+                str(self.port),
                 "--metrics",
                 "--slots",
             ]
@@ -156,4 +160,3 @@ class LlamaCppRuntime:
 
     def pull_model(self, model):
         return False
-

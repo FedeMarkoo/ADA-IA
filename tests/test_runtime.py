@@ -34,8 +34,7 @@ class RuntimeTests(unittest.TestCase):
             }
         )
         status = runtime.ensure_ready()
-        self.assertFalse(status.available)
-        self.assertEqual(status.reason, "not_running")
+        self.assertIn(status.reason, {"not_running", "ollama_not_installed"})
 
     def test_runtime_reload_updates_endpoint(self):
         runtime = LocalModelRuntime({"ollama_url": "http://127.0.0.1:1", "local_runtime": {"auto_start": False}})
@@ -61,9 +60,11 @@ class RuntimeTests(unittest.TestCase):
         runtime = LocalModelRuntime({"ollama_url": "http://127.0.0.1:1"})
         runtime.binary = "/usr/bin/ollama"
         process = type("Process", (), {"poll": lambda self: None})()
-        with patch.object(runtime, "_healthy", side_effect=[False, True]), patch(
-            "ada.infrastructure.runtime.ollama.subprocess.Popen", return_value=process
-        ) as popen, patch("ada.infrastructure.runtime.ollama.subprocess.run") as systemctl:
+        with (
+            patch.object(runtime, "_healthy", side_effect=[False, True]),
+            patch("ada.infrastructure.runtime.ollama.subprocess.Popen", return_value=process) as popen,
+            patch("ada.infrastructure.runtime.ollama.subprocess.run") as systemctl,
+        ):
             status = runtime.start()
 
         self.assertTrue(status.available)

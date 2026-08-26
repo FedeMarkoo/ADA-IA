@@ -21,9 +21,7 @@ def create_system_server() -> StdioMCPServer:
         description="Ejecuta un script o comando de sistema autorizado en la allowlist.",
         parameters={
             "type": "object",
-            "properties": {
-                "command": {"type": "string", "description": "Comando seguro a ejecutar"}
-            },
+            "properties": {"command": {"type": "string", "description": "Comando seguro a ejecutar"}},
             "required": ["command"],
         },
         handler=runner.run_command,

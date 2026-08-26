@@ -323,18 +323,20 @@ class ModelBenchmark:
                     data = json.load(f)
                     history = data.get("history", [])
 
-            history.append({
-                "model": result.get("model"),
-                "prompt_key": result.get("prompt_key"),
-                "prompt_title": result.get("prompt_title"),
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "tokens_per_second": result.get("tokens_per_second"),
-                "ttft_ms": result.get("ttft_ms"),
-                "total_tokens": result.get("eval_count"),
-                "duration_seconds": result.get("total_time_seconds"),
-                "cpu_percent": result.get("resources", {}).get("cpu_percent"),
-                "ram_used_gb": result.get("resources", {}).get("ram_used_gb"),
-            })
+            history.append(
+                {
+                    "model": result.get("model"),
+                    "prompt_key": result.get("prompt_key"),
+                    "prompt_title": result.get("prompt_title"),
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "tokens_per_second": result.get("tokens_per_second"),
+                    "ttft_ms": result.get("ttft_ms"),
+                    "total_tokens": result.get("eval_count"),
+                    "duration_seconds": result.get("total_time_seconds"),
+                    "cpu_percent": result.get("resources", {}).get("cpu_percent"),
+                    "ram_used_gb": result.get("resources", {}).get("ram_used_gb"),
+                }
+            )
 
             BENCHMARK_PATH.parent.mkdir(parents=True, exist_ok=True)
             with open(BENCHMARK_PATH, "w", encoding="utf-8") as f:

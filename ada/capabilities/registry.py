@@ -104,7 +104,9 @@ def capability_specs(force_reload=False):
                 permissions = (permissions,)
             result[name] = CapabilitySpec(
                 name=name,
-                description=declared.get("description") or getattr(function, "__doc__", None) or f"Capability ADA: {name}",
+                description=declared.get("description")
+                or getattr(function, "__doc__", None)
+                or f"Capability ADA: {name}",
                 risk_level=risk,
                 permissions=tuple(permissions),
                 argument_schema=schema,

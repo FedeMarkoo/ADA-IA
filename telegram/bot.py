@@ -39,6 +39,7 @@ def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
 
     try:
         from utils.credentials import SecureVault
+
         token = SecureVault().get("telegram_bot_token") or SecureVault().get("telegram_token")
         if token:
             return str(token).strip()
@@ -275,7 +276,9 @@ class TelegramListener:
             path = self._download_photo(photos[-1])
             text = f"{text}\nAnalizá la imagen descargada: {path}".strip()
         if not text:
-            self.send_message(chat_id, "Puedo procesar texto y fotos. Enviame un mensaje o una imagen con una consulta.")
+            self.send_message(
+                chat_id, "Puedo procesar texto y fotos. Enviame un mensaje o una imagen con una consulta."
+            )
             return
 
         typing_stop = threading.Event()
@@ -298,7 +301,9 @@ class TelegramListener:
         else:
             self.send_message(chat_id, reply)
 
-    def _start_typing_and_status(self, chat_id: str, stop_event: threading.Event, status_msg_id: Optional[int] = None) -> Optional[threading.Thread]:
+    def _start_typing_and_status(
+        self, chat_id: str, stop_event: threading.Event, status_msg_id: Optional[int] = None
+    ) -> Optional[threading.Thread]:
         """Keep Telegram typing alive and update the status message with real-time phase description."""
         if not self.typing_enabled or not chat_id:
             return None
@@ -382,23 +387,25 @@ class TelegramListener:
         username = sender.get("username", "")
         first_name = sender.get("first_name", "") or sender.get("last_name", "") or username or f"User_{chat_id}"
         conversation_id = f"telegram_{chat_id}" if chat_id else "telegram_default"
-        payload = json.dumps({
-            "message": text,
-            "lang": "es",
-            "source": "telegram",
-            "session_id": conversation_id,
-            "conversation_id": conversation_id,
-            "chat_id": str(chat_id),
-            "username": f"@{username}" if username and not username.startswith("@") else username,
-            "first_name": first_name,
-            "user_id": str(sender.get("id", chat_id)),
-            "metadata": {
+        payload = json.dumps(
+            {
+                "message": text,
+                "lang": "es",
+                "source": "telegram",
+                "session_id": conversation_id,
+                "conversation_id": conversation_id,
                 "chat_id": str(chat_id),
                 "username": f"@{username}" if username and not username.startswith("@") else username,
                 "first_name": first_name,
-                "channel": "telegram",
+                "user_id": str(sender.get("id", chat_id)),
+                "metadata": {
+                    "chat_id": str(chat_id),
+                    "username": f"@{username}" if username and not username.startswith("@") else username,
+                    "first_name": first_name,
+                    "channel": "telegram",
+                },
             }
-        }).encode("utf-8")
+        ).encode("utf-8")
         request = urllib.request.Request(
             f"{self.base_url}/api/chat",
             data=payload,
@@ -426,11 +433,14 @@ class TelegramListener:
 
     def edit_message_text(self, chat_id: str, message_id: int, text: str) -> None:
         """Edit an existing bot message instead of sending a second one."""
-        self._api("editMessageText", {
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "text": str(text),
-        })
+        self._api(
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": str(text),
+            },
+        )
 
     def _download_photo(self, photo: Dict[str, Any]) -> str:
         file_info = self._api("getFile", {"file_id": photo["file_id"]})
@@ -459,7 +469,9 @@ def main():
 
     bot = TelegramListener(cfg)
     if not bot.enabled:
-        print("⚠️ Telegram bot no configurado. Configuralo en la Bóveda de Credenciales (vault.db) desde el Gestor Web.")
+        print(
+            "⚠️ Telegram bot no configurado. Configuralo en la Bóveda de Credenciales (vault.db) desde el Gestor Web."
+        )
         sys.exit(1)
 
     print("🚀 Servidor Telegram Bot iniciando...")

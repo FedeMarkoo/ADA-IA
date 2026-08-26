@@ -39,7 +39,9 @@ class HealthCheckItem:
 class HealthDoctor:
     """Diagnoses system-wide components and provides automated remediation actions."""
 
-    def __init__(self, agent: Any, config: Optional[Dict[str, Any]] = None, mcp_manager: Any = None, ollama_client: Any = None):
+    def __init__(
+        self, agent: Any, config: Optional[Dict[str, Any]] = None, mcp_manager: Any = None, ollama_client: Any = None
+    ):
         self.agent = agent
         self.config = config or getattr(agent, "cfg", {})
         self.mcp_manager = mcp_manager
@@ -81,12 +83,15 @@ class HealthDoctor:
         err_count = sum(1 for i in items if i.status == "error")
 
         score = int((ok_count + warn_count * 0.5) / total * 100) if total > 0 else 100
-        overall_status = "healthy" if err_count == 0 and warn_count == 0 else "degraded" if err_count == 0 else "unhealthy"
+        overall_status = (
+            "healthy" if err_count == 0 and warn_count == 0 else "degraded" if err_count == 0 else "unhealthy"
+        )
 
         # Actionable fixes
         available_fixes = [
             {"id": i.fix_action_id, "label": i.fix_label, "target": i.id}
-            for i in items if i.can_auto_fix and i.fix_action_id and i.status in {"warning", "error"}
+            for i in items
+            if i.can_auto_fix and i.fix_action_id and i.status in {"warning", "error"}
         ]
 
         return {
@@ -106,15 +111,22 @@ class HealthDoctor:
         if report["ok"]:
             total = sum(len(items) for items in report["instances"].values())
             return HealthCheckItem(
-                id="duplicate_runtimes", name="Instancias duplicadas", category="runtime",
-                status="ok", message=f"No hay runtimes duplicados ({total} instancia(s) detectada(s))",
+                id="duplicate_runtimes",
+                name="Instancias duplicadas",
+                category="runtime",
+                status="ok",
+                message=f"No hay runtimes duplicados ({total} instancia(s) detectada(s))",
                 details=report,
             )
         labels = ", ".join(f"{kind}: {len(items)}" for kind, items in report["duplicates"].items())
         return HealthCheckItem(
-            id="duplicate_runtimes", name="Instancias duplicadas", category="runtime",
-            status="error", message=f"Hay más de una instancia activa ({labels})",
-            details=report, can_auto_fix=False,
+            id="duplicate_runtimes",
+            name="Instancias duplicadas",
+            category="runtime",
+            status="error",
+            message=f"Hay más de una instancia activa ({labels})",
+            details=report,
+            can_auto_fix=False,
         )
 
     def _check_ollama(self) -> HealthCheckItem:
@@ -131,7 +143,12 @@ class HealthDoctor:
                 fix_label="Iniciar Ollama",
             )
         health = client.health()
-        if health.get("online") or health.get("status") == "healthy" or health.get("available") or health.get("status_code") == 200:
+        if (
+            health.get("online")
+            or health.get("status") == "healthy"
+            or health.get("available")
+            or health.get("status_code") == 200
+        ):
             latency = health.get("latency_ms", 0)
             return HealthCheckItem(
                 id="ollama_daemon",
@@ -168,7 +185,12 @@ class HealthDoctor:
                 fix_label=None,
             )
         health = client.health()
-        is_online = health.get("online") or health.get("status") == "healthy" or health.get("available") or health.get("status_code") == 200
+        is_online = (
+            health.get("online")
+            or health.get("status") == "healthy"
+            or health.get("available")
+            or health.get("status_code") == 200
+        )
         if not is_online:
             return HealthCheckItem(
                 id="models_installed",
@@ -290,6 +312,7 @@ class HealthDoctor:
     def _check_hardware(self) -> HealthCheckItem:
         try:
             import psutil
+
             ram = psutil.virtual_memory()
             if ram.percent >= 92:
                 return HealthCheckItem(
@@ -322,6 +345,7 @@ class HealthDoctor:
 
     def _check_telegram(self) -> HealthCheckItem:
         from ada.interfaces.web.server import get_telegram_service_status
+
         status = get_telegram_service_status()
 
         if status.get("running") and status.get("status") != "degraded":
@@ -372,13 +396,19 @@ class HealthDoctor:
         if action_id == "start_ollama":
             if self.agent and hasattr(self.agent, "model_manager"):
                 status = self.agent.model_manager.local_runtime.start()
-                return {"ok": status.available, "message": "Ollama iniciado" if status.available else "No se pudo iniciar Ollama"}
+                return {
+                    "ok": status.available,
+                    "message": "Ollama iniciado" if status.available else "No se pudo iniciar Ollama",
+                }
             return {"ok": False, "error": "No runtime available"}
 
         elif action_id == "pull_default_model":
             if self.agent and hasattr(self.agent, "model_manager"):
                 success = self.agent.model_manager.local_runtime.pull_model("llama3.2:3b")
-                return {"ok": success, "message": "Descarga de llama3.2:3b completada" if success else "Error al descargar modelo"}
+                return {
+                    "ok": success,
+                    "message": "Descarga de llama3.2:3b completada" if success else "Error al descargar modelo",
+                }
             return {"ok": False, "error": "No model runtime available"}
 
         elif action_id == "restart_agent":
@@ -408,10 +438,12 @@ class HealthDoctor:
 
         elif action_id == "start_telegram":
             from ada.interfaces.web.server import start_telegram_service
+
             return start_telegram_service()
 
         elif action_id == "restart_telegram":
             from ada.interfaces.web.server import restart_telegram_service
+
             return restart_telegram_service()
 
         return {"ok": False, "error": f"Acción desconocida: {action_id}"}

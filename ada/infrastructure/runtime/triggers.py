@@ -267,9 +267,11 @@ class TriggerManager:
             environment["ADA_INTERNAL_URL"] = self.internal_url
             environment["ADA_TRIGGER_HEALTH_PATH"] = str(self.telegram_health_path)
             environment["PYTHONUNBUFFERED"] = "1"
-            popen_options: Dict[str, Any] = {"start_new_session": True} if os.name != "nt" else {
-                "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-            }
+            popen_options: Dict[str, Any] = (
+                {"start_new_session": True}
+                if os.name != "nt"
+                else {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
+            )
             try:
                 process = subprocess.Popen(
                     self.telegram_command,
@@ -362,19 +364,23 @@ class TriggerManager:
             else:
                 configured = trigger_config.get(item["id"], {}) if isinstance(trigger_config, dict) else {}
                 enabled = bool(configured.get("enabled", False)) if isinstance(configured, dict) else False
-                item.update({
-                    "configured": bool(configured),
-                    "running": False,
-                    "desired_state": "running" if enabled else "stopped",
-                    "status": "ready" if not enabled else "needs_adapter",
-                    "controllable": False,
-                    "summary": "Contrato de eventos preparado; falta conectar el adaptador",
-                })
+                item.update(
+                    {
+                        "configured": bool(configured),
+                        "running": False,
+                        "desired_state": "running" if enabled else "stopped",
+                        "status": "ready" if not enabled else "needs_adapter",
+                        "controllable": False,
+                        "summary": "Contrato de eventos preparado; falta conectar el adaptador",
+                    }
+                )
                 if item["id"] == "webhook":
                     item["endpoint"] = "/api/events"
                     item["configured"] = self._event_token_is_configured()
                     item["status"] = "ready" if item["configured"] else "needs_config"
-                    item["summary"] = "Endpoint disponible" if item["configured"] else "Falta configurar ADA_EVENT_TOKEN"
+                    item["summary"] = (
+                        "Endpoint disponible" if item["configured"] else "Falta configurar ADA_EVENT_TOKEN"
+                    )
             results.append(item)
         return results
 
@@ -387,6 +393,10 @@ class TriggerManager:
                 "total": len(triggers),
                 "running": sum(1 for item in triggers if item.get("running")),
                 "ready": sum(1 for item in triggers if item.get("status") in {"ready", "running"}),
-                "needs_attention": sum(1 for item in triggers if item.get("status") in {"recovering", "degraded", "needs_config", "needs_adapter"}),
+                "needs_attention": sum(
+                    1
+                    for item in triggers
+                    if item.get("status") in {"recovering", "degraded", "needs_config", "needs_adapter"}
+                ),
             },
         }

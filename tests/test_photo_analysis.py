@@ -48,6 +48,7 @@ class PhotoAnalysisTests(unittest.TestCase):
 
     def test_all_skills_are_loaded_recursively(self):
         from ada.mcps.manager import MCPManager
+
         tools = [t["name"] for t in MCPManager().list_tools()]
         self.assertIn("photography.analyze_photo", tools)
 

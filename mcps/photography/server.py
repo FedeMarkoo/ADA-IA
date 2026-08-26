@@ -27,8 +27,15 @@ def create_photography_server() -> StdioMCPServer:
         parameters={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Ruta de la imagen o archivo RAW (JPG, CR2, NEF, ARW, DNG, etc.)"},
-                "vision": {"type": "boolean", "description": "Habilitar análisis semántico con VLM local", "default": False},
+                "path": {
+                    "type": "string",
+                    "description": "Ruta de la imagen o archivo RAW (JPG, CR2, NEF, ARW, DNG, etc.)",
+                },
+                "vision": {
+                    "type": "boolean",
+                    "description": "Habilitar análisis semántico con VLM local",
+                    "default": False,
+                },
             },
             "required": ["path"],
         },
@@ -66,12 +73,21 @@ def create_photography_server() -> StdioMCPServer:
                     "items": {"type": "string"},
                     "description": "Lista de rutas de fotos a analizar para ráfagas",
                 },
-                "time_threshold": {"type": "number", "description": "Ventana máxima en segundos entre disparos de ráfaga", "default": 2.0},
+                "time_threshold": {
+                    "type": "number",
+                    "description": "Ventana máxima en segundos entre disparos de ráfaga",
+                    "default": 2.0,
+                },
             },
             "required": ["files"],
         },
         handler=lambda args: {
-            "groups": [[str(p) for p in grp] for grp in BurstDetector.detect_burst_groups(args.get("files", []), float(args.get("time_threshold", 2.0)))[0]],
+            "groups": [
+                [str(p) for p in grp]
+                for grp in BurstDetector.detect_burst_groups(
+                    args.get("files", []), float(args.get("time_threshold", 2.0))
+                )[0]
+            ],
             "ok": True,
         },
         risk_level="safe",
@@ -85,7 +101,11 @@ def create_photography_server() -> StdioMCPServer:
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Ruta de la foto"},
-                "status": {"type": "string", "enum": ["Seleccionada", "Rechazada"], "description": "Estado de selección"},
+                "status": {
+                    "type": "string",
+                    "enum": ["Seleccionada", "Rechazada"],
+                    "description": "Estado de selección",
+                },
                 "rating": {"type": "integer", "description": "Estrellas (0 a 5)"},
                 "score": {"type": "number", "description": "Puntaje numérico (0.0 a 10.0)"},
                 "reason": {"type": "string", "description": "Motivo de la calificación"},
@@ -113,9 +133,7 @@ def create_photography_server() -> StdioMCPServer:
         description="Repara los flags de Pick/Reject de Lightroom en los sidecars XMP existentes.",
         parameters={
             "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Ruta del archivo a reparar"}
-            },
+            "properties": {"path": {"type": "string", "description": "Ruta del archivo a reparar"}},
             "required": ["path"],
         },
         handler=lambda args: {"xmp_path": XmpManager.repair_photo_xmp(args["path"]), "ok": True},

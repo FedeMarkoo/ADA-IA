@@ -97,7 +97,12 @@ def run(config=None):
         if update_manager is not None and time.monotonic() >= next_update_check:
             try:
                 update_result = update_manager.run_once()
-                logger.info("update_check status=%s local=%s remote=%s", update_result.get("status"), update_result.get("local_sha"), update_result.get("remote_sha"))
+                logger.info(
+                    "update_check status=%s local=%s remote=%s",
+                    update_result.get("status"),
+                    update_result.get("local_sha"),
+                    update_result.get("remote_sha"),
+                )
             except Exception:
                 logger.exception("update_check_failed")
             next_update_check = time.monotonic() + update_interval
@@ -113,7 +118,11 @@ def run(config=None):
                 result = digest.run_once(now)
                 last_digest_date = now.date().isoformat()
                 if result.get("ok"):
-                    logger.info("calendar_weekly_digest_sent chat_id=%s events=%s", result.get("chat_id"), result.get("event_count"))
+                    logger.info(
+                        "calendar_weekly_digest_sent chat_id=%s events=%s",
+                        result.get("chat_id"),
+                        result.get("event_count"),
+                    )
                 else:
                     logger.error("calendar_weekly_digest_failed error=%s", result.get("error"))
 
@@ -143,12 +152,14 @@ def run(config=None):
                 Path(health_path).parent.mkdir(parents=True, exist_ok=True)
                 tmp_health = Path(health_path).with_suffix(".tmp")
                 tmp_health.write_text(
-                    json.dumps({
-                        "status": "running",
-                        "updated_at": time.time(),
-                        "watchers": len(watchers),
-                    }),
-                    encoding="utf-8"
+                    json.dumps(
+                        {
+                            "status": "running",
+                            "updated_at": time.time(),
+                            "watchers": len(watchers),
+                        }
+                    ),
+                    encoding="utf-8",
                 )
                 tmp_health.replace(health_path)
             except Exception:

@@ -14,7 +14,15 @@ class StdioMCPServer:
         self.tools: Dict[str, Dict[str, Any]] = {}
         self.handlers: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
 
-    def register_tool(self, name: str, description: str, parameters: Dict[str, Any], handler: Callable[[Dict[str, Any]], Any], risk_level: str = "safe", requires_confirmation: bool = False):
+    def register_tool(
+        self,
+        name: str,
+        description: str,
+        parameters: Dict[str, Any],
+        handler: Callable[[Dict[str, Any]], Any],
+        risk_level: str = "safe",
+        requires_confirmation: bool = False,
+    ):
         """Register a tool with its schema and handler."""
         self.tools[name] = {
             "name": name,
@@ -76,7 +84,9 @@ class StdioMCPServer:
 
             try:
                 result = self.handlers[tool_name](arguments)
-                text_output = json.dumps(result, ensure_ascii=False) if isinstance(result, (dict, list)) else str(result)
+                text_output = (
+                    json.dumps(result, ensure_ascii=False) if isinstance(result, (dict, list)) else str(result)
+                )
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,

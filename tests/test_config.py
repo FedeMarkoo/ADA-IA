@@ -27,13 +27,15 @@ class ConfigTests(unittest.TestCase):
             validate_config({"chat_workers": 0})
 
     def test_validation_accepts_patient_agent_timeouts(self):
-        config = validate_config({
-            "timeout_profile": "patient",
-            "router_timeout": 30,
-            "model_timeout": 300,
-            "chat_timeout_seconds": 900,
-            "food_advisor_timeout": 180,
-        })
+        config = validate_config(
+            {
+                "timeout_profile": "patient",
+                "router_timeout": 30,
+                "model_timeout": 300,
+                "chat_timeout_seconds": 900,
+                "food_advisor_timeout": 180,
+            }
+        )
         self.assertEqual(config["chat_timeout_seconds"], 900)
 
     def test_validation_rejects_incoherent_or_excessive_timeouts(self):

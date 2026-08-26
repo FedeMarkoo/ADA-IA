@@ -27,7 +27,11 @@ class FilesystemHandlers:
         """Return the event-photo format breakdown used by all filesystem clients."""
         return {
             "xml": sum(1 for p in paths if Path(p).suffix.casefold() == ".xml"),
-            "raw": sum(1 for p in paths if Path(p).suffix.casefold() in {".raw", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"}),
+            "raw": sum(
+                1
+                for p in paths
+                if Path(p).suffix.casefold() in {".raw", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"}
+            ),
             "jpg": sum(1 for p in paths if Path(p).suffix.casefold() in {".jpg", ".jpeg"}),
         }
 
@@ -50,17 +54,23 @@ class FilesystemHandlers:
         children = target.rglob("*") if recursive else target.iterdir()
         items = []
         for child in sorted(children):
-            items.append({
-                "name": str(child.relative_to(target)) if recursive else child.name,
-                "is_dir": child.is_dir(),
-                "size_bytes": child.stat().st_size if child.is_file() else None,
-            })
+            items.append(
+                {
+                    "name": str(child.relative_to(target)) if recursive else child.name,
+                    "is_dir": child.is_dir(),
+                    "size_bytes": child.stat().st_size if child.is_file() else None,
+                }
+            )
         return {
             "path": str(target),
             "recursive": recursive,
             "total_items": len(items),
             "items": items,
-            "photo_counts": self.photo_counts([child for child in target.rglob("*") if child.is_file()] if recursive else [child for child in target.iterdir() if child.is_file()]),
+            "photo_counts": self.photo_counts(
+                [child for child in target.rglob("*") if child.is_file()]
+                if recursive
+                else [child for child in target.iterdir() if child.is_file()]
+            ),
         }
 
     def read_file(self, args: Dict[str, Any]) -> Dict[str, Any]:

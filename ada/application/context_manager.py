@@ -32,9 +32,10 @@ class ContextPacket:
         if self.summary:
             chunks.append("RESUMEN:\n" + self.summary)
         if self.recent_messages:
-            chunks.append("CONVERSACIÓN RECIENTE:\n" + "\n".join(
-                f"{item.get('role', 'assistant')}: {item.get('text', '')}" for item in self.recent_messages
-            ))
+            chunks.append(
+                "CONVERSACIÓN RECIENTE:\n"
+                + "\n".join(f"{item.get('role', 'assistant')}: {item.get('text', '')}" for item in self.recent_messages)
+            )
         if self.memories:
             chunks.append("MEMORIA RELEVANTE:\n" + "\n".join(f"- {item}" for item in self.memories))
         if self.profile:
@@ -54,7 +55,9 @@ class ContextManager:
         role_policy = policy.get(role) or policy.get("chat") or {}
         configured = role_policy.get("token_budget") if isinstance(role_policy, dict) else role_policy
         if configured is None:
-            configured = {"router": 4096, "chat": 8192, "coding": 16384, "reasoning": 24576, "tools": 8192}.get(role, 8192)
+            configured = {"router": 4096, "chat": 8192, "coding": 16384, "reasoning": 24576, "tools": 8192}.get(
+                role, 8192
+            )
         budget = int(configured)
         if int(complexity or 3) <= 2:
             budget = min(budget, 4096)
@@ -74,14 +77,24 @@ class ContextManager:
             used += cost
         return result
 
-    def build(self, conversation_id="main", query="", messages=None, role="chat", complexity=3, task_state=None) -> ContextPacket:
+    def build(
+        self, conversation_id="main", query="", messages=None, role="chat", complexity=3, task_state=None
+    ) -> ContextPacket:
         budget = self.budget_for(role, complexity)
         source = list(messages or [])
         if not source and self.memory and hasattr(self.memory, "conversation"):
             source = self.memory.conversation(conversation_id, limit=100)
-        summary = self.memory.get_conversation_summary(conversation_id) if self.memory and hasattr(self.memory, "get_conversation_summary") else ""
-        memories = self.memory.search_text(query, k=5) if query and self.memory and hasattr(self.memory, "search_text") else []
-        profile = self.memory.knowledge(query, limit=3) if query and self.memory and hasattr(self.memory, "knowledge") else []
+        summary = (
+            self.memory.get_conversation_summary(conversation_id)
+            if self.memory and hasattr(self.memory, "get_conversation_summary")
+            else ""
+        )
+        memories = (
+            self.memory.search_text(query, k=5) if query and self.memory and hasattr(self.memory, "search_text") else []
+        )
+        profile = (
+            self.memory.knowledge(query, limit=3) if query and self.memory and hasattr(self.memory, "knowledge") else []
+        )
         packet = ContextPacket(
             conversation_id=str(conversation_id),
             summary=str(summary or ""),

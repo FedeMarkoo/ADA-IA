@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ada-local"
 version = "0.1.0"
 description = "Local multi-agent assistant"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "Flask>=2.3,<4",
     "numpy>=1.24,<3",
@@ -43,12 +43,12 @@ ada-mcp = "ada.interfaces.mcp_server:main"
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py311"
 exclude = [".venv", "logs"]
 
 [tool.black]
 line-length = 120
-target-version = ["py39"]
+target-version = ["py311"]
 extend-exclude = '/(\\.venv|logs)/'
 
 [tool.ruff.lint]
@@ -56,9 +56,11 @@ select = ["E", "F", "W"]
 ignore = ["E501", "E402"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 ignore_missing_imports = true
 check_untyped_defs = true
+explicit_package_bases = true
+mypy_path = "."
 
 [tool.setuptools.packages.find]
 where = ["."]

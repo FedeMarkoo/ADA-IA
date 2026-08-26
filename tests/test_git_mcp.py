@@ -11,7 +11,9 @@ class TestGitMCP(unittest.TestCase):
     def test_git_manager_status_success(self):
         mgr = GitManager()
         fake_porcelain = "## main...origin/main\n M ada/config.py\n?? new_file.py\nM  staged.py\n"
-        with patch.object(mgr, "_run_git", return_value={"ok": True, "exit_code": 0, "stdout": fake_porcelain, "stderr": ""}):
+        with patch.object(
+            mgr, "_run_git", return_value={"ok": True, "exit_code": 0, "stdout": fake_porcelain, "stderr": ""}
+        ):
             res = mgr.status()
             self.assertTrue(res["ok"])
             self.assertEqual(res["branch"], "main")
@@ -42,7 +44,16 @@ class TestGitMCP(unittest.TestCase):
 
     def test_git_server_tools_registered(self):
         server = create_git_server()
-        for tool in ("git.status", "git.log", "git.diff", "git.add", "git.commit", "git.branch", "git.push", "git.pull"):
+        for tool in (
+            "git.status",
+            "git.log",
+            "git.diff",
+            "git.add",
+            "git.commit",
+            "git.branch",
+            "git.push",
+            "git.pull",
+        ):
             self.assertIn(tool, server.tools)
 
     def test_mcp_manager_discovers_git_tools(self):

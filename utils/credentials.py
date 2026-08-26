@@ -102,8 +102,7 @@ class SecureVault:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             with sqlite3.connect(str(self.path), timeout=15) as conn:
-                conn.execute(
-                    """
+                conn.execute("""
                     CREATE TABLE IF NOT EXISTS secrets (
                         name TEXT PRIMARY KEY,
                         ciphertext BLOB NOT NULL,
@@ -111,8 +110,7 @@ class SecureVault:
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
-                    """
-                )
+                    """)
                 conn.commit()
             try:
                 os.chmod(self.path, 0o600)

@@ -18,6 +18,7 @@ from mcps.food.inventory import InventoryManager
 
 def _resolve_default_db() -> str:
     from ada.config import load_config
+
     try:
         return load_config().get("db_path", str(Path.home() / "Desktop" / "ADA_Data" / "memory.db"))
     except Exception:
@@ -80,7 +81,11 @@ def create_food_server(db_path: Optional[str] = None) -> StdioMCPServer:
         parameters={
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["add", "list", "complete", "remove", "clear_completed"], "default": "list"},
+                "action": {
+                    "type": "string",
+                    "enum": ["add", "list", "complete", "remove", "clear_completed"],
+                    "default": "list",
+                },
                 "item": {"type": "string", "description": "Nombre del producto"},
                 "quantity": {"type": "string", "description": "Cantidad"},
                 "unit": {"type": "string", "description": "Unidad de medida (kg, gr, lts, un)"},

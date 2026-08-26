@@ -54,7 +54,10 @@ class InventoryManager:
             if not row:
                 return {"error": "item_not_found", "item": item}
             new_qty = max(0.0, row[0] - qty)
-            conn.execute("UPDATE food_inventory SET quantity=?, updated_at=CURRENT_TIMESTAMP WHERE lower(item)=lower(?)", (new_qty, item))
+            conn.execute(
+                "UPDATE food_inventory SET quantity=?, updated_at=CURRENT_TIMESTAMP WHERE lower(item)=lower(?)",
+                (new_qty, item),
+            )
             conn.commit()
             return {"ok": True, "action": "use", "item": item, "quantity": new_qty}
 
@@ -62,7 +65,10 @@ class InventoryManager:
             rows = conn.execute(
                 "SELECT id, item, quantity, unit, minimum, category FROM food_inventory WHERE quantity <= minimum ORDER BY item"
             ).fetchall()
-            items = [{"id": r[0], "item": r[1], "quantity": r[2], "unit": r[3], "minimum": r[4], "category": r[5]} for r in rows]
+            items = [
+                {"id": r[0], "item": r[1], "quantity": r[2], "unit": r[3], "minimum": r[4], "category": r[5]}
+                for r in rows
+            ]
             return {"ok": True, "action": "low_stock", "total": len(items), "items": items}
 
         elif action == "delete":

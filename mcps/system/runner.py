@@ -5,7 +5,16 @@ import subprocess
 from typing import Any, Dict, List, Optional
 
 DEFAULT_ALLOWED_PREFIXES = [
-    "echo", "ls", "dir", "git status", "git log", "uptime", "whoami", "date", "pytest", "python --version"
+    "echo",
+    "ls",
+    "dir",
+    "git status",
+    "git log",
+    "uptime",
+    "whoami",
+    "date",
+    "pytest",
+    "python --version",
 ]
 
 

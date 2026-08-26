@@ -1,4 +1,5 @@
 """Core base and telemetry routes for ADA web interface."""
+
 from __future__ import annotations
 
 import os
@@ -56,7 +57,12 @@ def status():
         models = active_agent.model_manager.model_catalog()
         recommendations = active_agent.model_manager.model_recommendations()
     else:
-        runtime_info = {"provider": "ollama", "endpoint": ollama.endpoint, "available": False, "reason": "ollama_offline"}
+        runtime_info = {
+            "provider": "ollama",
+            "endpoint": ollama.endpoint,
+            "available": False,
+            "reason": "ollama_offline",
+        }
         engines = {"local": False, "ollama": False, "openai": False, "anthropic": False, "gpt4all": False}
         models = []
         recommendations = {"adaptive": False, "roles": {}, "model_stats": {}, "telemetry": {}}
@@ -70,7 +76,16 @@ def status():
 
     return jsonify(
         {
-            "identity": runtime.get("identity", {"version": ADA_VERSION, "started_at": PROCESS_STARTED_AT, "reloaded_at": None, "hot_reload": False, "pid": os.getpid()}),
+            "identity": runtime.get(
+                "identity",
+                {
+                    "version": ADA_VERSION,
+                    "started_at": PROCESS_STARTED_AT,
+                    "reloaded_at": None,
+                    "hot_reload": False,
+                    "pid": os.getpid(),
+                },
+            ),
             "agent_enabled": runtime.get("agent_enabled", True),
             "debug_enabled": runtime.get("debug_enabled", False),
             "mcp_servers": runtime.get("mcp_manager", MCPManager()).list_servers(),
@@ -95,17 +110,19 @@ def core_state_api():
     """Return the live topology and current execution phase for the core view."""
     runtime = get_runtime()
     summary = runtime["agent"].model_manager.selection_summary()
-    return jsonify({
-        "activity": activity_snapshot(runtime),
-        "models": {"mode": summary.get("mode", "manual"), "active": summary.get("active", {})},
-        "connectors": {
-            "telegram": get_telegram_service_status(),
-            "mcps": runtime.get("mcp_manager", MCPManager()).list_servers(),
-            "triggers": runtime.get("trigger_manager").list_triggers() if runtime.get("trigger_manager") else [],
-        },
-        "telemetry": {"source": "prometheus", "dashboard": "grafana"},
-        "server_time": time.time(),
-    })
+    return jsonify(
+        {
+            "activity": activity_snapshot(runtime),
+            "models": {"mode": summary.get("mode", "manual"), "active": summary.get("active", {})},
+            "connectors": {
+                "telegram": get_telegram_service_status(),
+                "mcps": runtime.get("mcp_manager", MCPManager()).list_servers(),
+                "triggers": runtime.get("trigger_manager").list_triggers() if runtime.get("trigger_manager") else [],
+            },
+            "telemetry": {"source": "prometheus", "dashboard": "grafana"},
+            "server_time": time.time(),
+        }
+    )
 
 
 @core_bp.route("/metrics")

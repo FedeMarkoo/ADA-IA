@@ -154,7 +154,9 @@ class LocalModelRuntime:
                     pass
             time.sleep(0.5)
             healthy = self._healthy()
-            return RuntimeStatus(self.provider, self.endpoint, healthy, False, "stopped" if not healthy else "still_running")
+            return RuntimeStatus(
+                self.provider, self.endpoint, healthy, False, "stopped" if not healthy else "still_running"
+            )
 
     def restart(self):
         if self.provider == "llama_cpp":

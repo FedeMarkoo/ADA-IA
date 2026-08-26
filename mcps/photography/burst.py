@@ -5,8 +5,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-
-
 SEQUENCE_KEYS = ("SequenceNumber", "SequenceFileNumber", "ContinuousNumber", "ShotOrder")
 BURST_KEYS = ("ReleaseMode", "DriveMode", "BurstMode", "ContinuousShooting", "ShootingMode")
 
@@ -56,7 +54,9 @@ class BurstDetector:
         return None
 
     @classmethod
-    def detect_burst_groups(cls, files: List[Path | str], time_threshold_seconds: float = 2.0) -> Tuple[List[List[Path]], Dict[str, Any]]:
+    def detect_burst_groups(
+        cls, files: List[Path | str], time_threshold_seconds: float = 2.0
+    ) -> Tuple[List[List[Path]], Dict[str, Any]]:
         path_list = [Path(p) for p in files if Path(p).is_file()]
         if len(path_list) < 2:
             return [], {"total_groups": 0, "grouped_photos": 0}

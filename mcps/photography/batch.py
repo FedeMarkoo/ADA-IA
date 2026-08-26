@@ -23,20 +23,37 @@ class BatchProcessor:
     """Orchestrates multi-photo evaluation, ranking, repair, and burst culling."""
 
     @classmethod
-    def analyze_single(cls, path: Path, root: Path, folder_ctx: Dict[str, Any], config: Optional[Dict[str, Any]] = None, vision: bool = False, write_xmp: bool = False) -> Dict[str, Any]:
+    def analyze_single(
+        cls,
+        path: Path,
+        root: Path,
+        folder_ctx: Dict[str, Any],
+        config: Optional[Dict[str, Any]] = None,
+        vision: bool = False,
+        write_xmp: bool = False,
+    ) -> Dict[str, Any]:
         """Worker for single photo analysis with review grading."""
         from ada.agents.coordinator import MultiAgentCoordinator
-        res = MultiAgentCoordinator(config).analyze_photo({
-            "path": str(path),
-            "folder": str(root),
-            "folder_context": folder_ctx,
-            "vision": vision,
-            "write_xmp": write_xmp,
-        })
+
+        res = MultiAgentCoordinator(config).analyze_photo(
+            {
+                "path": str(path),
+                "folder": str(root),
+                "folder_context": folder_ctx,
+                "vision": vision,
+                "write_xmp": write_xmp,
+            }
+        )
         return res
 
     @classmethod
-    def demote_burst_duplicates(cls, burst_groups: List[List[Path]], records: List[Dict[str, Any]], write_xmp: bool = False, accept_threshold: float = 5.0) -> List[str]:
+    def demote_burst_duplicates(
+        cls,
+        burst_groups: List[List[Path]],
+        records: List[Dict[str, Any]],
+        write_xmp: bool = False,
+        accept_threshold: float = 5.0,
+    ) -> List[str]:
         duplicates = []
         stored_cache = {}
 
@@ -147,7 +164,9 @@ class BatchProcessor:
             files = sorted([p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS])
             burst_groups, _ = BurstDetector.detect_burst_groups(files)
             records = [{"path": str(f)} for f in files]
-            duplicates = cls.demote_burst_duplicates(burst_groups, records, write_xmp=True) if args.get("mark_bursts") else []
+            duplicates = (
+                cls.demote_burst_duplicates(burst_groups, records, write_xmp=True) if args.get("mark_bursts") else []
+            )
 
             return {
                 "ok": True,
@@ -161,7 +180,7 @@ class BatchProcessor:
 
         limit = args.get("limit")
         if limit:
-            files = files[:int(limit)]
+            files = files[: int(limit)]
 
         vision = bool(args.get("vision", False))
         write_xmp = bool(args.get("write_xmp", False))

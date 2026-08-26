@@ -16,11 +16,15 @@ class SearchBudget:
     def __init__(self, path: Optional[Union[str, Path]] = None, monthly_limit: Optional[int] = None):
         default_path = Path.home() / "Desktop" / "ADA_Data" / "web-search-usage.db"
         self.path = Path(path or os.environ.get("ADA_WEB_SEARCH_USAGE_PATH", default_path)).expanduser()
-        self.monthly_limit = int(monthly_limit if monthly_limit is not None else os.environ.get("ADA_WEB_SEARCH_MONTHLY_LIMIT", "900"))
+        self.monthly_limit = int(
+            monthly_limit if monthly_limit is not None else os.environ.get("ADA_WEB_SEARCH_MONTHLY_LIMIT", "900")
+        )
         self._lock = threading.RLock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.path, timeout=15) as conn:
-            conn.execute("CREATE TABLE IF NOT EXISTS usage (provider TEXT NOT NULL, month TEXT NOT NULL, requests INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(provider, month))")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS usage (provider TEXT NOT NULL, month TEXT NOT NULL, requests INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(provider, month))"
+            )
             conn.commit()
 
     def reserve(self, provider: str, count: int = 1) -> bool:

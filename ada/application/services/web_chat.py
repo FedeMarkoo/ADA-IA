@@ -113,9 +113,11 @@ class WebChatService:
         # Requests for a general explanation of permissions are not directory
         # listings.  The explicit no-access wording is a strong signal that
         # the user wants concepts, not a filesystem operation.
-        if re.search(r"\b(explic(?:á|a|ame|ar)|qu[eé]\s+significa|c[oó]mo\s+funcionan)\b", lowered) and re.search(
-            r"\b(permisos?|acceso)\b", lowered
-        ) and re.search(r"\b(sin\s+(?:acceder|cambiar)|general|conceptual)\b", lowered):
+        if (
+            re.search(r"\b(explic(?:á|a|ame|ar)|qu[eé]\s+significa|c[oó]mo\s+funcionan)\b", lowered)
+            and re.search(r"\b(permisos?|acceso)\b", lowered)
+            and re.search(r"\b(sin\s+(?:acceder|cambiar)|general|conceptual)\b", lowered)
+        ):
             return None
         location_words = (
             r"\b(ruta|ubicaci[oó]n|d[oó]nde\s+(?:est[aá]|est[aá]n|tengo|guard[eé])|"
@@ -178,7 +180,31 @@ class WebChatService:
         # the generic word “fotos” must not short-circuit it to ~/Pictures.
         if clean in _PATH_ALIASES or re.match(r"^[~/]", text.strip()):
             return _resolve_path_alias(text)
-        generic = {"las", "los", "la", "el", "de", "del", "en", "que", "qué", "hay", "listar", "listame", "lista", "mostrame", "mostrar", "ver", "fotos", "foto", "archivos", "archivo", "carpeta", "carpetas", *(_PATH_ALIASES.keys())}
+        generic = {
+            "las",
+            "los",
+            "la",
+            "el",
+            "de",
+            "del",
+            "en",
+            "que",
+            "qué",
+            "hay",
+            "listar",
+            "listame",
+            "lista",
+            "mostrame",
+            "mostrar",
+            "ver",
+            "fotos",
+            "foto",
+            "archivos",
+            "archivo",
+            "carpeta",
+            "carpetas",
+            *(_PATH_ALIASES.keys()),
+        }
         meaningful = [term for term in re.findall(r"[\wáéíóúüñ]+", clean) if term not in generic and len(term) > 1]
         if not meaningful or not re.search(r"\b(de|del|en|fotos?|carpetas?)\b", clean):
             return _resolve_path_alias(text)
@@ -280,7 +306,24 @@ class WebChatService:
                 if re.search(r"\b(subcarpetas?|adentro|dentro|recursiv[oa])\b", lowered):
                     payload["recursive"] = True
             elif filesystem_action == "list_photos":
-                payload.update({"action": "list_files", "extensions": [".jpg", ".jpeg", ".png", ".webp", ".xml", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"]})
+                payload.update(
+                    {
+                        "action": "list_files",
+                        "extensions": [
+                            ".jpg",
+                            ".jpeg",
+                            ".png",
+                            ".webp",
+                            ".xml",
+                            ".nef",
+                            ".arw",
+                            ".cr2",
+                            ".dng",
+                            ".raf",
+                            ".orf",
+                        ],
+                    }
+                )
             elif filesystem_action == "group_files":
                 payload.update({"action": "move_files", "name": parsed.get("name") or "Agrupadas"})
             if not (payload.get("path") or payload.get("dir")):
@@ -320,6 +363,7 @@ class WebChatService:
         if re.fullmatch(r"/(?:v|version|versi[oó]n)", text, re.I):
             try:
                 import importlib.metadata
+
                 pkg_ver = importlib.metadata.version("ada-local")
             except Exception:
                 pkg_ver = "0.1.0"
@@ -346,6 +390,7 @@ class WebChatService:
         ):
             try:
                 import importlib.metadata
+
                 pkg_ver = importlib.metadata.version("ada-local")
             except Exception:
                 pkg_ver = "0.1.0"
@@ -353,9 +398,15 @@ class WebChatService:
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · sistema"}, 200
 
-        if re.search(r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes|herramientas tenes|MCPs? tenes|capacidades tenes)\b", text, re.I) or \
-           re.search(r"\b(en que|en qué)\s+(me podes|me puedes|ayudas|me ayudas)\b", text, re.I) or \
-           re.search(r"\b(quien|quién)\s+(sos|eres)\b", text, re.I):
+        if (
+            re.search(
+                r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes|herramientas tenes|MCPs? tenes|capacidades tenes)\b",
+                text,
+                re.I,
+            )
+            or re.search(r"\b(en que|en qué)\s+(me podes|me puedes|ayudas|me ayudas)\b", text, re.I)
+            or re.search(r"\b(quien|quién)\s+(sos|eres)\b", text, re.I)
+        ):
             reply = self._capability_summary()
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · asistente"}, 200
@@ -484,9 +535,15 @@ class WebChatService:
                 if "unexpected keyword argument 'history'" not in str(exc):
                     raise
                 parsed = self.agent.parse_prompt(text)
-            self._emit(progress, "router_model_finished", action=parsed.get("action"), confidence=parsed.get("confidence"))
+            self._emit(
+                progress, "router_model_finished", action=parsed.get("action"), confidence=parsed.get("confidence")
+            )
 
-        if parsed.get("routing_error") in {"mcp_router_failed", "external_request_not_grounded", "mcp_router_unavailable"}:
+        if parsed.get("routing_error") in {
+            "mcp_router_failed",
+            "external_request_not_grounded",
+            "mcp_router_unavailable",
+        }:
             reply = "No pude seleccionar una herramienta MCP para esta consulta, así que no consulté datos externos."
             self._emit(progress, "router_failed", error=parsed.get("routing_error"))
             self._remember(state, text, reply)
@@ -496,19 +553,40 @@ class WebChatService:
             choices = "\n".join(f"{i + 1}. {path}" for i, path in enumerate(folder["candidates"]))
             reply = f"Encontré varias carpetas posibles:\n{choices}\nDecime cuál querés usar."
             self._remember(state, text, reply)
-            return {"reply": reply, "model": "ADA · resolver de carpetas", "folder_candidates": folder["candidates"]}, 200
+            return {
+                "reply": reply,
+                "model": "ADA · resolver de carpetas",
+                "folder_candidates": folder["candidates"],
+            }, 200
         if local_action == "resolve_path" and folder["status"] == "resolved":
             self._remember_context(state, folder["path"])
             reply = f"La ruta es {folder['path']}."
             self._remember(state, text, reply)
-            return {"reply": reply, "model": "ADA · resolver de carpetas", "path": folder["path"], "resolver": folder}, 200
+            return {
+                "reply": reply,
+                "model": "ADA · resolver de carpetas",
+                "path": folder["path"],
+                "resolver": folder,
+            }, 200
         if folder["status"] == "resolved" and local_action:
             parsed = dict(parsed or {})
             parsed["action"] = local_action
             parsed["path"] = folder["path"]
             parsed["dir"] = folder["path"]
             if local_action == "list_files" and re.search(r"\b(fotos?|im[aá]genes?)\b", lowered):
-                parsed["extensions"] = [".jpg", ".jpeg", ".png", ".webp", ".xml", ".nef", ".arw", ".cr2", ".dng", ".raf", ".orf"]
+                parsed["extensions"] = [
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".webp",
+                    ".xml",
+                    ".nef",
+                    ".arw",
+                    ".cr2",
+                    ".dng",
+                    ".raf",
+                    ".orf",
+                ]
         elif local_action and folder["status"] == "none" and folder.get("reason") != "no_folder_terms":
             if folder.get("reason") == "stale_index":
                 reply = (
@@ -547,7 +625,11 @@ class WebChatService:
             }
             manager = getattr(self.agent, "model_manager", None)
             model_role = manager.role_for_task(model_task) if manager and hasattr(manager, "role_for_task") else "chat"
-            model_name = manager.select_model(model_role, role=model_role) if manager and hasattr(manager, "select_model") else None
+            model_name = (
+                manager.select_model(model_role, role=model_role)
+                if manager and hasattr(manager, "select_model")
+                else None
+            )
             self._emit(progress, "model_started", model=model_name, role=model_role)
             result = self.agent.decide_and_run(model_task)
             self._emit(progress, "model_finished", model=model_name, role=model_role)
@@ -576,7 +658,11 @@ class WebChatService:
         capability_details = {"capability": action, "payload": payload}
         if action == "mcp_call":
             tool_name = payload.get("tool")
-            definition = next((item for item in self.mcp_manager.list_tools() if item.get("name") == tool_name), {}) if self.mcp_manager else {}
+            definition = (
+                next((item for item in self.mcp_manager.list_tools() if item.get("name") == tool_name), {})
+                if self.mcp_manager
+                else {}
+            )
             capability_details.update({"server": definition.get("server"), "tool": tool_name})
         progress_started = "mcp_started" if action == "mcp_call" else "capability_started"
         progress_finished = "mcp_finished" if action == "mcp_call" else "capability_finished"
@@ -589,7 +675,9 @@ class WebChatService:
             "error": output.get("error") if isinstance(output, dict) else None,
         }
         if action == "mcp_call":
-            finished_details.update({"server": capability_details.get("server"), "tool": capability_details.get("tool")})
+            finished_details.update(
+                {"server": capability_details.get("server"), "tool": capability_details.get("tool")}
+            )
         self._emit(progress, progress_finished, **finished_details)
         if isinstance(output, dict) and output.get("error") == "confirmation_required":
             state.pending_action = task
@@ -606,7 +694,11 @@ class WebChatService:
                     (path for path in output.get("dirs", []) if Path(path).name.casefold() == "fotos"),
                     None,
                 )
-                reply = f"Sí, hay una carpeta Fotos en {photos}." if photos else f"No encontré una carpeta Fotos en {output.get('dir')}."
+                reply = (
+                    f"Sí, hay una carpeta Fotos en {photos}."
+                    if photos
+                    else f"No encontré una carpeta Fotos en {output.get('dir')}."
+                )
             elif (
                 isinstance(output, dict)
                 and output.get("action") == "list_files"
@@ -641,6 +733,7 @@ class WebChatService:
         """Compact, non-invasive machine summary for the /i command."""
         try:
             import psutil
+
             memory = psutil.virtual_memory()
             cpu = psutil.cpu_percent(interval=0.15)
             battery = psutil.sensors_battery()

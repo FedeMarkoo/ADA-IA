@@ -81,14 +81,19 @@ class IntentRouter:
             return "(sin MCPs disponibles)"
         try:
             tools = [
-                tool for tool in self.mcp_manager.list_tools()
-                if tool.get("enabled") and not tool.get("requires_confirmation")
+                tool
+                for tool in self.mcp_manager.list_tools()
+                if tool.get("enabled")
+                and not tool.get("requires_confirmation")
                 and (not category or tool.get("category") == category or tool.get("server") == category)
             ]
-            return "\n".join(
-                f"- {tool.get('name')} [{tool.get('category') or tool.get('server')}] — {tool.get('description') or 'sin descripción'}"
-                for tool in tools
-            ) or "(sin herramientas MCP activas)"
+            return (
+                "\n".join(
+                    f"- {tool.get('name')} [{tool.get('category') or tool.get('server')}] — {tool.get('description') or 'sin descripción'}"
+                    for tool in tools
+                )
+                or "(sin herramientas MCP activas)"
+            )
         except Exception:
             return "(inventario MCP no disponible)"
 
@@ -103,10 +108,12 @@ class IntentRouter:
             values = action.setdefault("enum", [])
             if self.mcp_manager and "mcp_call" not in values:
                 values.append("mcp_call")
-            schema["properties"].update({
-                "tool": {"type": "string"},
-                "parameters": {"type": "object", "additionalProperties": True},
-            })
+            schema["properties"].update(
+                {
+                    "tool": {"type": "string"},
+                    "parameters": {"type": "object", "additionalProperties": True},
+                }
+            )
         return schema
 
     @staticmethod
@@ -129,16 +136,28 @@ class IntentRouter:
         # A plain conversational question with no capability keyword does not
         # need a model call just to be classified as chat. This removes an
         # entire cold start from the most common path.
-        contextual_reference = bool(history and re.search(
-            r"\b(eso|esto|esa|ese|ah[ií]|adentro|anterior|antes|lo\s+que|me\s+refiero|resumen|listar)\b|^(?:y|tamb[ié]n)\b",
-            text.lower(),
-        ))
-        external_hint = bool(self.mcp_manager and re.search(
-            r"\b(calendar|calendario|evento|gmail|correo|mails?|drive|internet|fuente|d[oó]lar|"
-            r"busc[aá]|investig[aá]|verific[aá]|confirm[aá]|actual|hoy|últim[oa]|noticia|precio|"
-            r"no\s+(?:sé|se)|duda|qué\s+pas[oó]|qui[eé]n\s+es)\b", text.lower()
-        ))
-        if fallback.get("action") == "ask" and fallback.get("confidence") == 0.0 and not contextual_reference and not external_hint:
+        contextual_reference = bool(
+            history
+            and re.search(
+                r"\b(eso|esto|esa|ese|ah[ií]|adentro|anterior|antes|lo\s+que|me\s+refiero|resumen|listar)\b|^(?:y|tamb[ié]n)\b",
+                text.lower(),
+            )
+        )
+        external_hint = bool(
+            self.mcp_manager
+            and re.search(
+                r"\b(calendar|calendario|evento|gmail|correo|mails?|drive|internet|fuente|d[oó]lar|"
+                r"busc[aá]|investig[aá]|verific[aá]|confirm[aá]|actual|hoy|últim[oa]|noticia|precio|"
+                r"no\s+(?:sé|se)|duda|qué\s+pas[oó]|qui[eé]n\s+es)\b",
+                text.lower(),
+            )
+        )
+        if (
+            fallback.get("action") == "ask"
+            and fallback.get("confidence") == 0.0
+            and not contextual_reference
+            and not external_hint
+        ):
             return fallback
         provider = self.model_manager.choose(
             {
@@ -164,7 +183,11 @@ class IntentRouter:
                 ollama_model=self.model_manager.select_model("router", role="router"),
                 temperature=0,
                 max_tokens=180 if external_hint else 180,
-                timeout=max(self.config.get("router_timeout", 30), 60) if external_hint else self.config.get("router_timeout", 30),
+                timeout=(
+                    max(self.config.get("router_timeout", 30), 60)
+                    if external_hint
+                    else self.config.get("router_timeout", 30)
+                ),
                 format=self._mcp_schema() if external_hint else self._schema("router"),
             )
             logger.info("router raw=%s", str(raw)[:1000])
@@ -189,9 +212,26 @@ class IntentRouter:
                     }
             if normalized.get("action") in {"ask", "suggest"}:
                 food_clues = (
-                    "comida", "comidas", "receta", "recetas", "cocinar", "cocina", "compras",
-                    "supermercado", "ingredientes", "comer", "cena", "almuerzo", "desayuno",
-                    "heladera", "alacena", "despensa", "plato", "menú", "menu", "vianda"
+                    "comida",
+                    "comidas",
+                    "receta",
+                    "recetas",
+                    "cocinar",
+                    "cocina",
+                    "compras",
+                    "supermercado",
+                    "ingredientes",
+                    "comer",
+                    "cena",
+                    "almuerzo",
+                    "desayuno",
+                    "heladera",
+                    "alacena",
+                    "despensa",
+                    "plato",
+                    "menú",
+                    "menu",
+                    "vianda",
                 )
                 if any(clue in text.lower() for clue in food_clues):
                     food = self._route_food(provider, text, history)
@@ -329,7 +369,8 @@ class IntentRouter:
             .replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))
             .replace("{history}", history[-2500:])
             .replace("{text}", text)
-            + "\nHerramientas MCP activas:\n" + self._tools_text()
+            + "\nHerramientas MCP activas:\n"
+            + self._tools_text()
             + "\nSi corresponde a una consulta externa, elegí mcp_call con esta forma exacta: "
             + '{"action":"mcp_call","tool":"nombre.del.inventario","parameters":{}}. '
             + "No uses method, params ni nombres inventados; no inventes resultados."
@@ -398,7 +439,14 @@ class IntentRouter:
             if not definition or not definition.get("enabled") or definition.get("requires_confirmation"):
                 return fallback
             result = dict(fallback)
-            result.update({"action": "mcp_call", "tool": tool, "parameters": candidate.get("parameters") or {}, "confidence": self._confidence(candidate.get("confidence"))})
+            result.update(
+                {
+                    "action": "mcp_call",
+                    "tool": tool,
+                    "parameters": candidate.get("parameters") or {},
+                    "confidence": self._confidence(candidate.get("confidence")),
+                }
+            )
             return result
         if action not in self._allowed_actions():
             return fallback
@@ -427,9 +475,11 @@ class IntentRouter:
 
     def _fallback(self, text):
         value = text.lower()
-        if re.search(r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes)\b", value) or \
-           re.search(r"\b(quien|quién)\s+(sos|eres)\b", value) or \
-           value.strip() in {"ayuda", "help", "hola"}:
+        if (
+            re.search(r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes)\b", value)
+            or re.search(r"\b(quien|quién)\s+(sos|eres)\b", value)
+            or value.strip() in {"ayuda", "help", "hola"}
+        ):
             return {"action": "ask", "complexity": 3, "confidence": 0.95}
         scores = {
             "analyze_photo": ("foto", "imagen", "raw", "jpg", "nef", "arw", "enfoque", "exposición", "iso"),

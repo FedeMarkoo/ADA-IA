@@ -151,8 +151,7 @@ class ModelCatalog:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             with sqlite3.connect(str(self.db_path), check_same_thread=False) as conn:
                 conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute(
-                    """
+                conn.execute("""
                     CREATE TABLE IF NOT EXISTS model_catalog (
                         name TEXT PRIMARY KEY,
                         roles TEXT NOT NULL,
@@ -164,8 +163,7 @@ class ModelCatalog:
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """
-                )
+                    """)
                 conn.commit()
 
                 # Check if catalog table is empty

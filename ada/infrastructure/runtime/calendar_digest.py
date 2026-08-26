@@ -10,7 +10,9 @@ from typing import Any, Callable, Dict, Optional
 class CalendarTelegramDigest:
     """Build and deliver a read-only seven-day Calendar summary."""
 
-    def __init__(self, mcp_manager, telegram_sender: Callable[[str, str], Any], config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, mcp_manager, telegram_sender: Callable[[str, str], Any], config: Optional[Dict[str, Any]] = None
+    ):
         self.mcp_manager = mcp_manager
         self.telegram_sender = telegram_sender
         self.config = config or {}

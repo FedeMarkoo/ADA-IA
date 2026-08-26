@@ -69,6 +69,7 @@ def run(args):
         if extensions:
             items = [p for p in items if p.suffix.lower() in extensions]
         from mcps.filesystem.handlers import FilesystemHandlers
+
         photo_counts = FilesystemHandlers.photo_counts(items)
         return {
             "ok": True,

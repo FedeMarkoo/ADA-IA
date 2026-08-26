@@ -14,10 +14,16 @@ class TestMemoryRefiner(unittest.TestCase):
         self.refiner = MemoryRefiner(self.mem, config=self.config)
 
     def test_extract_knowledge_from_preference(self):
-        self.mem.append_conversation([
-            {"role": "user", "text": "Mi correo es usuario@ejemplo.com y recordá que guardo siempre las fotos en /home/fotos"},
-            {"role": "assistant", "text": "Entendido, recordaré que guardas tus fotos allí."},
-        ], session="test_pref")
+        self.mem.append_conversation(
+            [
+                {
+                    "role": "user",
+                    "text": "Mi correo es usuario@ejemplo.com y recordá que guardo siempre las fotos en /home/fotos",
+                },
+                {"role": "assistant", "text": "Entendido, recordaré que guardas tus fotos allí."},
+            ],
+            session="test_pref",
+        )
 
         res = self.refiner.refine_cycle()
         self.assertGreaterEqual(res["extracted_facts"], 1)
@@ -26,24 +32,39 @@ class TestMemoryRefiner(unittest.TestCase):
         self.assertTrue(any("guardo siempre las fotos en /home/fotos" in k for k in knowledge))
 
     def test_deduplicate_known_facts(self):
-        self.mem.append_conversation([
-            {"role": "user", "text": "Mi correo es usuario@ejemplo.com y recordá que guardo siempre las fotos en /home/fotos"},
-            {"role": "assistant", "text": "Entendido."},
-        ], session="test_pref_1")
+        self.mem.append_conversation(
+            [
+                {
+                    "role": "user",
+                    "text": "Mi correo es usuario@ejemplo.com y recordá que guardo siempre las fotos en /home/fotos",
+                },
+                {"role": "assistant", "text": "Entendido."},
+            ],
+            session="test_pref_1",
+        )
         self.refiner.refine_cycle()
 
-        self.mem.append_conversation([
-            {"role": "user", "text": "Mi correo es usuario@ejemplo.com y recordá que guardo siempre las fotos en /home/fotos"},
-            {"role": "assistant", "text": "Entendido de nuevo."},
-        ], session="test_pref_2")
+        self.mem.append_conversation(
+            [
+                {
+                    "role": "user",
+                    "text": "Mi correo es usuario@ejemplo.com y recordá que guardo siempre las fotos en /home/fotos",
+                },
+                {"role": "assistant", "text": "Entendido de nuevo."},
+            ],
+            session="test_pref_2",
+        )
         res2 = self.refiner.refine_cycle()
         self.assertEqual(res2["extracted_facts"], 0)
 
     def test_extract_knowledge_from_user_correction(self):
-        self.mem.append_conversation([
-            {"role": "user", "text": "No, en realidad la reunión de planeamiento es siempre los martes a las 10"},
-            {"role": "assistant", "text": "Perfecto, lo tengo presente."},
-        ], session="test_corr")
+        self.mem.append_conversation(
+            [
+                {"role": "user", "text": "No, en realidad la reunión de planeamiento es siempre los martes a las 10"},
+                {"role": "assistant", "text": "Perfecto, lo tengo presente."},
+            ],
+            session="test_corr",
+        )
 
         res = self.refiner.refine_cycle()
         self.assertGreaterEqual(res["extracted_facts"], 1)

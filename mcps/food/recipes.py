@@ -25,7 +25,9 @@ class RecipeManager:
             if not ingredient_block:
                 continue
             ingredients = [
-                line.strip()[2:].strip() for line in ingredient_block.group(1).splitlines() if line.strip().startswith("-")
+                line.strip()[2:].strip()
+                for line in ingredient_block.group(1).splitlines()
+                if line.strip().startswith("-")
             ]
             if ingredients:
                 conn.execute(
@@ -105,7 +107,10 @@ class RecipeManager:
                     "SELECT id FROM food_shopping WHERE lower(item)=lower(?) AND status='pending'", (ing,)
                 )
                 if not cur.fetchone():
-                    conn.execute("INSERT INTO food_shopping(item, category, priority) VALUES (?, ?, ?)", (ing, "Receta", "normal"))
+                    conn.execute(
+                        "INSERT INTO food_shopping(item, category, priority) VALUES (?, ?, ?)",
+                        (ing, "Receta", "normal"),
+                    )
                     added_count += 1
             conn.commit()
             return {"ok": True, "action": "recipe_to_shopping", "recipe": name, "added": added_count}

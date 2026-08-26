@@ -16,6 +16,7 @@ from ada.infrastructure.integrations.gmail import authenticate
 from ada.application.fine_tuning import prepare_dataset, train_lora, validate_dataset
 from ada.application.services.responses import text_from_result
 
+
 def _find_project_root() -> Path:
     p = Path(__file__).resolve().parent
     for parent in [p, *p.parents]:
@@ -23,11 +24,16 @@ def _find_project_root() -> Path:
             return parent
     return Path(__file__).resolve().parents[3]
 
+
 PROJECT_ROOT = _find_project_root()
 
 
 def load_config():
-    cfg_path = PROJECT_ROOT / "ada" / "config.json" if (PROJECT_ROOT / "ada" / "config.json").exists() else PROJECT_ROOT / "config.json"
+    cfg_path = (
+        PROJECT_ROOT / "ada" / "config.json"
+        if (PROJECT_ROOT / "ada" / "config.json").exists()
+        else PROJECT_ROOT / "config.json"
+    )
     default_db = str(Path.home() / "Desktop" / "ADA_Data" / "memory.db")
     try:
         return load_validated_config(cfg_path, PROJECT_ROOT)

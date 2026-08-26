@@ -21,7 +21,11 @@ def _processes() -> List[Dict[str, Any]]:
             # Ignore shells/diagnostic commands whose search text happens to
             # contain a runtime name (for example `pgrep telegram/bot.py`).
             name = str(proc.info.get("name") or "").casefold()
-            if name in {"bash", "sh", "zsh", "fish"} or command.startswith(("/bin/", "/usr/bin/")) and name in {"bash", "sh", "zsh", "fish"}:
+            if (
+                name in {"bash", "sh", "zsh", "fish"}
+                or command.startswith(("/bin/", "/usr/bin/"))
+                and name in {"bash", "sh", "zsh", "fish"}
+            ):
                 continue
             found.append({"pid": proc.info["pid"], "name": proc.info.get("name"), "command": command})
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -50,9 +54,7 @@ def detect_duplicates() -> Dict[str, Any]:
         if kind:
             item["current_process"] = item["pid"] == os.getpid()
             groups[kind].append(item)
-    duplicates = {
-        kind: items for kind, items in groups.items() if len(items) > 1
-    }
+    duplicates = {kind: items for kind, items in groups.items() if len(items) > 1}
     return {
         "ok": not bool(duplicates),
         "duplicates": duplicates,

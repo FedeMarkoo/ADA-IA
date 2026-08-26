@@ -75,9 +75,10 @@ class ChatPathRegressionTests(unittest.TestCase):
 
             def decide_and_run(self, task):
                 payload = task.get("payload", {})
-                return {"model": "mcp", "result": fake_mcp.execute_tool(
-                    payload["tool"], payload.get("parameters", {}), self
-                )}
+                return {
+                    "model": "mcp",
+                    "result": fake_mcp.execute_tool(payload["tool"], payload.get("parameters", {}), self),
+                }
 
         state = SimpleNamespace(conversation=[], pending_action=None)
         response, status = WebChatService(FakeAgent(), {}, mcp_manager=fake_mcp).handle(
@@ -112,14 +113,16 @@ class ChatPathRegressionTests(unittest.TestCase):
     def test_google_calendar_rest_payload_lists_real_calendar_names(self):
         from ada.application.services.responses import text_from_result
 
-        reply = text_from_result({
-            "ok": True,
-            "result": {
-                "fallback": "google-rest",
-                "kind": "calendar#calendarList",
-                "items": [{"summary": "Eventos"}, {"summary": "Compartido"}],
-            },
-        })
+        reply = text_from_result(
+            {
+                "ok": True,
+                "result": {
+                    "fallback": "google-rest",
+                    "kind": "calendar#calendarList",
+                    "items": [{"summary": "Eventos"}, {"summary": "Compartido"}],
+                },
+            }
+        )
         self.assertIn("Eventos", reply)
         self.assertIn("Compartido", reply)
 

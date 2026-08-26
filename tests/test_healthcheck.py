@@ -3,7 +3,13 @@ import concurrent.futures
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 
-from ada.application.services.healthcheck import HEALTHCHECK_PROMPTS, HealthcheckStore, evaluate, llm_judge, requires_mcp
+from ada.application.services.healthcheck import (
+    HEALTHCHECK_PROMPTS,
+    HealthcheckStore,
+    evaluate,
+    llm_judge,
+    requires_mcp,
+)
 from ada.infrastructure.persistence.sqlite import Memory
 
 
@@ -16,17 +22,26 @@ def test_healthcheck_prompts_are_persisted_in_sqlite():
     assert memory.conn.execute("SELECT COUNT(*) FROM healthcheck_prompts").fetchone()[0] == len(prompts)
     assert len({item["category"] for item in prompts}) >= 6
     assert sum(item["category"] == "gmail" for item in prompts) == 3
-    source_ids = {item["id"] for item in json.loads((Path(__file__).parents[1] / "ai_testing" / "prompts.json").read_text())}
+    source_ids = {
+        item["id"] for item in json.loads((Path(__file__).parents[1] / "ai_testing" / "prompts.json").read_text())
+    }
     assert source_ids.issubset({item["id"] for item in prompts})
 
 
 def test_cases_can_be_added_to_an_existing_category():
     memory = Memory(":memory:")
     store = HealthcheckStore(memory)
-    store.add_prompt({
-        "id": "web_custom", "category": "web", "name": "Caso propio", "capability": "web",
-        "tags": ["web", "readonly"], "prompt": "Consultá una fuente y resumila.", "must_match": ["fuente"],
-    })
+    store.add_prompt(
+        {
+            "id": "web_custom",
+            "category": "web",
+            "name": "Caso propio",
+            "capability": "web",
+            "tags": ["web", "readonly"],
+            "prompt": "Consultá una fuente y resumila.",
+            "must_match": ["fuente"],
+        }
+    )
     case = next(item for item in store.prompts() if item["id"] == "web_custom")
     assert case["category"] == "web"
     assert case["tags"] == ["web", "readonly"]
@@ -50,7 +65,19 @@ def test_external_healthchecks_require_mcp_grounding():
 def test_healthcheck_run_history_is_json_safe():
     memory = Memory(":memory:")
     store = HealthcheckStore(memory)
-    store.save_run("run-1", "web_search", "fuente IA", {"passed": True}, 0.2, request="Buscá una fuente", status="passed", status_code=200, model="judge:test", mcps=[{"server": "web", "tool": "search"}], trace=[{"phase": "completed", "at_seconds": 0.2}])
+    store.save_run(
+        "run-1",
+        "web_search",
+        "fuente IA",
+        {"passed": True},
+        0.2,
+        request="Buscá una fuente",
+        status="passed",
+        status_code=200,
+        model="judge:test",
+        mcps=[{"server": "web", "tool": "search"}],
+        trace=[{"phase": "completed", "at_seconds": 0.2}],
+    )
     history = store.history()
     assert history[0]["run_id"] == "run-1"
     assert history[0]["status"] == "passed"
@@ -90,7 +117,9 @@ def test_concurrent_catalog_reads_do_not_break_shared_sqlite_connection():
 
 
 def test_llm_judge_never_approves_explicit_access_failure():
-    result = llm_judge({"name": "fotos", "prompt": "Buscá fotos", "must_match": ["foto"]}, "No pude acceder a Google Drive.")
+    result = llm_judge(
+        {"name": "fotos", "prompt": "Buscá fotos", "must_match": ["foto"]}, "No pude acceder a Google Drive."
+    )
     assert result["passed"] is False
     assert result["source"] == "guard"
 
@@ -98,9 +127,23 @@ def test_llm_judge_never_approves_explicit_access_failure():
 @patch("urllib.request.urlopen")
 def test_llm_judge_uses_semantic_verdict_and_score(mock_urlopen):
     response = MagicMock()
-    response.__enter__.return_value.read.return_value = json.dumps({"response": json.dumps({"passed": False, "score": 0.2, "issues": ["No aporta datos reales"], "rationale": "Solo explica una limitación."})}).encode()
+    response.__enter__.return_value.read.return_value = json.dumps(
+        {
+            "response": json.dumps(
+                {
+                    "passed": False,
+                    "score": 0.2,
+                    "issues": ["No aporta datos reales"],
+                    "rationale": "Solo explica una limitación.",
+                }
+            )
+        }
+    ).encode()
     mock_urlopen.return_value = response
-    result = llm_judge({"name": "calendario", "prompt": "Decime mi próximo evento", "must_match": ["evento"]}, "Podés consultar el calendario desde la configuración.")
+    result = llm_judge(
+        {"name": "calendario", "prompt": "Decime mi próximo evento", "must_match": ["evento"]},
+        "Podés consultar el calendario desde la configuración.",
+    )
     assert result["passed"] is False
     assert result["source"] == "llm"
     assert result["issues"] == ["No aporta datos reales"]
@@ -109,10 +152,17 @@ def test_llm_judge_uses_semantic_verdict_and_score(mock_urlopen):
 @patch("urllib.request.urlopen")
 def test_llm_judge_does_not_require_mcp_for_conceptual_cases(mock_urlopen):
     response = MagicMock()
-    response.__enter__.return_value.read.return_value = json.dumps({"response": json.dumps({"passed": True, "score": 0.9, "issues": [], "rationale": "Explicación completa."})}).encode()
+    response.__enter__.return_value.read.return_value = json.dumps(
+        {"response": json.dumps({"passed": True, "score": 0.9, "issues": [], "rationale": "Explicación completa."})}
+    ).encode()
     mock_urlopen.return_value = response
     llm_judge(
-        {"category": "reasoning", "name": "timeout", "prompt": "Explicá qué significa un timeout", "must_match": ["tiempo"]},
+        {
+            "category": "reasoning",
+            "name": "timeout",
+            "prompt": "Explicá qué significa un timeout",
+            "must_match": ["tiempo"],
+        },
         "Un timeout es un límite de tiempo para completar una tarea.",
     )
     request_body = mock_urlopen.call_args.args[0].data.decode()

@@ -12,13 +12,15 @@ def test_gestor_endpoints():
     if create_app is None:
         raise unittest.SkipTest("Flask is not installed (optional web extra)")
     trigger_state = tempfile.TemporaryDirectory()
-    app = create_app({
-        "allowed_roots": ["/tmp"],
-        "db_path": ":memory:",
-        "trigger_state_dir": trigger_state.name,
-        "discover_external_triggers": False,
-        "telegram": {"enabled": False, "token": ""},
-    })
+    app = create_app(
+        {
+            "allowed_roots": ["/tmp"],
+            "db_path": ":memory:",
+            "trigger_state_dir": trigger_state.name,
+            "discover_external_triggers": False,
+            "telegram": {"enabled": False, "token": ""},
+        }
+    )
     client = app.test_client()
 
     # Get CSRF token
@@ -65,7 +67,11 @@ def test_gestor_endpoints():
     assert res.status_code == 200
     triggers = res.get_json()
     assert [item["id"] for item in triggers["triggers"]] == [
-        "telegram", "removable-device", "calendar", "cron", "webhook"
+        "telegram",
+        "removable-device",
+        "calendar",
+        "cron",
+        "webhook",
     ]
     assert triggers["triggers"][0]["managed_externally"] is True
     assert triggers["triggers"][1]["status"] == "ready"
@@ -84,13 +90,19 @@ def test_gestor_endpoints():
     assert timeout_data["chat_timeout_seconds"] == 900
     assert "patient" in timeout_data["timeout_presets"]
 
-    res = client.post("/api/ollama/config", headers=headers, data=json.dumps({
-        "timeout_profile": "custom",
-        "router_timeout": 42,
-        "model_timeout": 240,
-        "chat_timeout_seconds": 1200,
-        "food_advisor_timeout": 180,
-    }))
+    res = client.post(
+        "/api/ollama/config",
+        headers=headers,
+        data=json.dumps(
+            {
+                "timeout_profile": "custom",
+                "router_timeout": 42,
+                "model_timeout": 240,
+                "chat_timeout_seconds": 1200,
+                "food_advisor_timeout": 180,
+            }
+        ),
+    )
     assert res.status_code == 200
     assert res.get_json()["config"]["chat_timeout_seconds"] == 1200
 

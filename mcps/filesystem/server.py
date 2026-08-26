@@ -32,7 +32,11 @@ def create_filesystem_server(allowed_dirs: Optional[List[str]] = None) -> StdioM
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Ruta del directorio"},
-                "recursive": {"type": "boolean", "description": "Si es true, incluye elementos de todos los subdirectorios. Por defecto false.", "default": False},
+                "recursive": {
+                    "type": "boolean",
+                    "description": "Si es true, incluye elementos de todos los subdirectorios. Por defecto false.",
+                    "default": False,
+                },
             },
             "required": ["path"],
             "additionalProperties": False,
@@ -44,7 +48,11 @@ def create_filesystem_server(allowed_dirs: Optional[List[str]] = None) -> StdioM
     server.register_tool(
         name="filesystem.photo_counts",
         description="Cuenta fotos de un evento por formato: XML, RAW y JPG. Puede incluir subcarpetas.",
-        parameters={"type": "object", "properties": {"path": {"type": "string"}, "recursive": {"type": "boolean", "default": True}}, "required": ["path"]},
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string"}, "recursive": {"type": "boolean", "default": True}},
+            "required": ["path"],
+        },
         handler=lambda args: _photo_result(handlers, args),
         risk_level="safe",
     )
@@ -103,7 +111,11 @@ def create_filesystem_server(allowed_dirs: Optional[List[str]] = None) -> StdioM
             "properties": {
                 "source": {"type": "string", "description": "Carpeta origen con archivos"},
                 "name": {"type": "string", "description": "Nombre de la subcarpeta destino"},
-                "allowed_roots": {"type": "array", "items": {"type": "string"}, "description": "Carpetas raíz permitidas"},
+                "allowed_roots": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Carpetas raíz permitidas",
+                },
                 "confirm": {"type": "boolean", "description": "Confirmación de ejecución"},
             },
             "required": ["source", "name"],

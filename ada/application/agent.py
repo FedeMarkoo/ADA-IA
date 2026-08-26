@@ -194,12 +194,22 @@ class Agent:
             self.mem.record_audit(skill_name or "agent", request=task, result={"error": str(exc)}, success=False)
             # A remote provider can be temporarily unavailable. Fall back to
             # the local model before returning an error to the user.
-            local_provider = self.model_manager.provider if self.model_manager.provider in {"ollama", "llama_cpp", "local"} else "ollama"
+            local_provider = (
+                self.model_manager.provider
+                if self.model_manager.provider in {"ollama", "llama_cpp", "local"}
+                else "ollama"
+            )
             if provider not in {"ollama", "llama_cpp", "local"} and self.model_manager.available().get(local_provider):
                 try:
                     result = self.model_manager.call(
-                        local_provider, prompt, complexity=task["complexity"],
-                        **({"ollama_model": model_name} if local_provider == "ollama" else {"llama_cpp_model": model_name}),
+                        local_provider,
+                        prompt,
+                        complexity=task["complexity"],
+                        **(
+                            {"ollama_model": model_name}
+                            if local_provider == "ollama"
+                            else {"llama_cpp_model": model_name}
+                        ),
                         timeout=self.cfg.get("model_timeout", 300),
                     )
                     self.mem.record_task(task, result, provider=local_provider, success=True)
@@ -307,7 +317,8 @@ class Agent:
                 complexity=4,
                 temperature=0.25,
                 max_tokens=900,
-                timeout=self.cfg.get("food_advisor_timeout") or min(
+                timeout=self.cfg.get("food_advisor_timeout")
+                or min(
                     180,
                     max(5, int(self.cfg.get("chat_timeout_seconds", 900)) - 5),
                 ),

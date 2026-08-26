@@ -1,4 +1,5 @@
 """Chat, streaming, pending actions and activity routes for ADA web interface."""
+
 from __future__ import annotations
 
 import json
@@ -126,12 +127,14 @@ def chat_stream():
                 lang=lang,
                 progress=progress,
             )
-            event_queue.put({
-                "type": "result",
-                **res,
-                "session_id": state.session_id,
-                "messages": list(state.conversation)[-10:],
-            })
+            event_queue.put(
+                {
+                    "type": "result",
+                    **res,
+                    "session_id": state.session_id,
+                    "messages": list(state.conversation)[-10:],
+                }
+            )
         except Exception as exc:
             activity_update(runtime, "error", {"error": str(exc)}, session_id=state.session_id)
             event_queue.put({"type": "error", "error": str(exc), "message": "Error al procesar el mensaje."})
@@ -213,7 +216,9 @@ def debug_events_api():
     limit = min(500, max(1, request.args.get("limit", default=100, type=int)))
     session_id = request.args.get("session_id")
     events = runtime["debug_log"].read(limit=limit, session_id=session_id)
-    return jsonify({"ok": True, "events": events, "count": len(events), "debug_enabled": runtime.get("debug_enabled", False)})
+    return jsonify(
+        {"ok": True, "events": events, "count": len(events), "debug_enabled": runtime.get("debug_enabled", False)}
+    )
 
 
 @chat_bp.route("/api/debug/events/stream")

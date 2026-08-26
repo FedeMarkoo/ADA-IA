@@ -904,6 +904,54 @@
       "duration_seconds": 0.0,
       "cpu_percent": 100.0,
       "ram_used_gb": 8.38
+    },
+    {
+      "model": "qwen2.5:7b",
+      "prompt_key": "quick",
+      "prompt_title": "Prompt Personalizado",
+      "timestamp": "2026-08-26T04:35:00Z",
+      "tokens_per_second": 40.0,
+      "ttft_ms": null,
+      "total_tokens": 20,
+      "duration_seconds": 0.0,
+      "cpu_percent": 0.0,
+      "ram_used_gb": 8.37
+    },
+    {
+      "model": "llama3:8b",
+      "prompt_key": "quick",
+      "prompt_title": "Respuesta Rápida",
+      "timestamp": "2026-08-26T04:35:00Z",
+      "tokens_per_second": 37.5,
+      "ttft_ms": 150.0,
+      "total_tokens": 45,
+      "duration_seconds": 0.0,
+      "cpu_percent": 0.0,
+      "ram_used_gb": 8.38
+    },
+    {
+      "model": "qwen2.5:7b",
+      "prompt_key": "quick",
+      "prompt_title": "Prompt Personalizado",
+      "timestamp": "2026-08-26T04:37:07Z",
+      "tokens_per_second": 40.0,
+      "ttft_ms": null,
+      "total_tokens": 20,
+      "duration_seconds": 0.0,
+      "cpu_percent": 0.0,
+      "ram_used_gb": 8.5
+    },
+    {
+      "model": "llama3:8b",
+      "prompt_key": "quick",
+      "prompt_title": "Respuesta Rápida",
+      "timestamp": "2026-08-26T04:37:07Z",
+      "tokens_per_second": 37.5,
+      "ttft_ms": 150.0,
+      "total_tokens": 45,
+      "duration_seconds": 0.0,
+      "cpu_percent": 100.0,
+      "ram_used_gb": 8.5
     }
   ]
 }

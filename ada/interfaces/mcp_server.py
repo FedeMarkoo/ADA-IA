@@ -10,9 +10,7 @@ def main():
     config = load_config()
     agent = Agent(config)
     if not agent.capabilities_enabled:
-        raise RuntimeError(
-            "El MCP legacy de capabilities está deshabilitado; usá servidores MCP dedicados."
-        )
+        raise RuntimeError("El MCP legacy de capabilities está deshabilitado; usá servidores MCP dedicados.")
     specs = capability_specs()
     descriptions = {name: spec.description for name, spec in specs.items()}
     schemas = {name: spec.argument_schema for name, spec in specs.items() if spec.argument_schema}

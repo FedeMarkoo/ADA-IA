@@ -9,7 +9,9 @@ class XmpManager:
     """Manages Lightroom XMP sidecars, ratings, color labels, and pick flags."""
 
     @staticmethod
-    def write_photo_xmp(path: Path | str, status: str, rating: int, score: float, reason: str, label: Optional[str] = None) -> str:
+    def write_photo_xmp(
+        path: Path | str, status: str, rating: int, score: float, reason: str, label: Optional[str] = None
+    ) -> str:
         """Create or update ADA fields while preserving all existing XMP metadata."""
         sidecar = Path(path).with_suffix(".xmp")
         content = (
@@ -27,7 +29,9 @@ class XmpManager:
         if "xmlns:ada=" not in content:
             content = content.replace("<rdf:Description", '<rdf:Description xmlns:ada="https://ada.local/ns/1.0/"', 1)
         if "xmlns:xmp=" not in content:
-            content = content.replace("<rdf:Description", '<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/"', 1)
+            content = content.replace(
+                "<rdf:Description", '<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/"', 1
+            )
         if "xmlns:xmpDM=" not in content:
             content = content.replace(
                 "<rdf:Description", '<rdf:Description xmlns:xmpDM="http://ns.adobe.com/xmp/1.0/DynamicMedia/"', 1

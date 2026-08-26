@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Dict
 
 
-
 class LightroomManager:
     """Manages Lightroom catalogs, sidecar verification, and cleaning plans."""
 
@@ -25,7 +24,9 @@ class LightroomManager:
                 elif ext == ".xmp":
                     xmp_files.append(p)
 
-        orphan_xmps = [str(x) for x in xmp_files if not x.with_suffix("").exists() and not any(x.parent.glob(f"{x.stem}.*"))]
+        orphan_xmps = [
+            str(x) for x in xmp_files if not x.with_suffix("").exists() and not any(x.parent.glob(f"{x.stem}.*"))
+        ]
 
         return {
             "ok": True,

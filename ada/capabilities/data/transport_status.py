@@ -14,7 +14,6 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-
 CAPABILITY_SPEC = {
     "name": "transport_status",
     "description": "Consulta el estado y alertas de una línea de transporte, inicialmente Sarmiento.",
@@ -70,12 +69,14 @@ def _normalize_alerts(payload: Any) -> list[Dict[str, Any]]:
         text = item.get("header_text") or item.get("description") or item.get("title") or item.get("summary")
         if isinstance(text, dict):
             text = next(iter(text.values()), "")
-        result.append({
-            "title": str(item.get("title") or item.get("header") or "Alerta de servicio"),
-            "description": str(text or ""),
-            "active": item.get("active", True),
-            "source": item.get("source") or "Buenos Aires Transporte API",
-        })
+        result.append(
+            {
+                "title": str(item.get("title") or item.get("header") or "Alerta de servicio"),
+                "description": str(text or ""),
+                "active": item.get("active", True),
+                "source": item.get("source") or "Buenos Aires Transporte API",
+            }
+        )
     return result
 
 
@@ -85,7 +86,10 @@ def run(args: Dict[str, Any]) -> Dict[str, Any]:
     if line != "sarmiento":
         return {"ok": False, "error": "line_not_supported", "line": line}
     config = _config(args)
-    base_url = str(config.get("api_base_url") or os.environ.get("ADA_TRANSPORT_API_BASE_URL", "https://api-transporte.buenosaires.gob.ar")).rstrip("/")
+    base_url = str(
+        config.get("api_base_url")
+        or os.environ.get("ADA_TRANSPORT_API_BASE_URL", "https://api-transporte.buenosaires.gob.ar")
+    ).rstrip("/")
     token = str(config.get("api_token") or os.environ.get("ADA_TRANSPORT_API_TOKEN", "")).strip()
     timeout = max(1.0, float(config.get("timeout_seconds", 8)))
     observed_at = datetime.now(timezone.utc).isoformat()

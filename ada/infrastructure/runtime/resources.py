@@ -84,6 +84,7 @@ def hardware_profile():
     if vram_gb == 0.0:
         try:
             import subprocess
+
             smi = subprocess.run(
                 ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
                 capture_output=True,

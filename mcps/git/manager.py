@@ -96,13 +96,15 @@ class GitManager:
         for line in res["stdout"].splitlines():
             parts = line.split("|", 4)
             if len(parts) == 5:
-                commits.append({
-                    "hash": parts[0],
-                    "author": parts[1],
-                    "email": parts[2],
-                    "date": parts[3],
-                    "message": parts[4],
-                })
+                commits.append(
+                    {
+                        "hash": parts[0],
+                        "author": parts[1],
+                        "email": parts[2],
+                        "date": parts[3],
+                        "message": parts[4],
+                    }
+                )
 
         return {"ok": True, "count": len(commits), "commits": commits}
 

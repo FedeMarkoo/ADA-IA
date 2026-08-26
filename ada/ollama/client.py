@@ -33,12 +33,16 @@ class OllamaModelInfo:
             "size_formatted": self.size_formatted or _format_bytes(self.size),
             "digest": self.digest,
             "modified_at": self.modified_at,
-            "details": {
-                "format": self.details.format if self.details else "",
-                "family": self.details.family if self.details else "",
-                "parameter_size": self.details.parameter_size if self.details else "",
-                "quantization_level": self.details.quantization_level if self.details else "",
-            } if self.details else {},
+            "details": (
+                {
+                    "format": self.details.format if self.details else "",
+                    "family": self.details.family if self.details else "",
+                    "parameter_size": self.details.parameter_size if self.details else "",
+                    "quantization_level": self.details.quantization_level if self.details else "",
+                }
+                if self.details
+                else {}
+            ),
         }
 
 

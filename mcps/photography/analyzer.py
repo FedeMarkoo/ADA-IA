@@ -34,8 +34,15 @@ class PhotoAnalyzer:
             for key, value in raw.items():
                 name = ExifTags.TAGS.get(key, str(key))
                 if name in {
-                    "DateTime", "DateTimeOriginal", "Make", "Model",
-                    "LensModel", "FNumber", "ExposureTime", "ISOSpeedRatings", "FocalLength",
+                    "DateTime",
+                    "DateTimeOriginal",
+                    "Make",
+                    "Model",
+                    "LensModel",
+                    "FNumber",
+                    "ExposureTime",
+                    "ISOSpeedRatings",
+                    "FocalLength",
                 }:
                     exif[name] = str(value)
         except Exception:
@@ -43,7 +50,9 @@ class PhotoAnalyzer:
         return exif
 
     @classmethod
-    def capture_metadata(cls, path: Path | str, image: Image.Image, raw_metadata: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    def capture_metadata(
+        cls, path: Path | str, image: Image.Image, raw_metadata: Optional[Dict[str, str]] = None
+    ) -> Dict[str, str]:
         """Collect capture data from EXIF, RAW headers, and adjacent XMP sidecar."""
         metadata = cls.extract_exif(image)
         raw_path = Path(path)
@@ -52,6 +61,7 @@ class PhotoAnalyzer:
         elif RawEngine.is_raw(raw_path):
             try:
                 import rawpy
+
                 with rawpy.imread(str(raw_path)) as raw:
                     other = raw.other
                     if getattr(other, "iso_speed", None):
@@ -210,6 +220,7 @@ class PhotoAnalyzer:
 
         if args.get("vision", False):
             from mcps.photography.vision import VisionAnalyzer
+
             try:
                 result["semantic"] = VisionAnalyzer.analyze(str(path), context, args.get("config"))
             except Exception as exc:

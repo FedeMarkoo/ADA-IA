@@ -34,9 +34,7 @@ def create_git_server(repo_path: Optional[str] = None) -> StdioMCPServer:
         description="Obtiene el historial de commits recientes del repositorio Git.",
         parameters={
             "type": "object",
-            "properties": {
-                "limit": {"type": "integer", "description": "Número de commits a obtener", "default": 10}
-            },
+            "properties": {"limit": {"type": "integer", "description": "Número de commits a obtener", "default": 10}},
         },
         handler=manager.log,
         risk_level="safe",
@@ -49,8 +47,12 @@ def create_git_server(repo_path: Optional[str] = None) -> StdioMCPServer:
         parameters={
             "type": "object",
             "properties": {
-                "staged": {"type": "boolean", "description": "Si es True, compara los cambios en stage", "default": False},
-                "file": {"type": "string", "description": "Ruta específica de un archivo opcional"}
+                "staged": {
+                    "type": "boolean",
+                    "description": "Si es True, compara los cambios en stage",
+                    "default": False,
+                },
+                "file": {"type": "string", "description": "Ruta específica de un archivo opcional"},
             },
         },
         handler=manager.diff,
@@ -68,7 +70,7 @@ def create_git_server(repo_path: Optional[str] = None) -> StdioMCPServer:
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Lista de rutas de archivos a agregar, o ['.'] para todos",
-                    "default": ["."]
+                    "default": ["."],
                 }
             },
         },
@@ -82,9 +84,7 @@ def create_git_server(repo_path: Optional[str] = None) -> StdioMCPServer:
         description="Realiza un commit de los cambios actualmente en stage con el mensaje provisto.",
         parameters={
             "type": "object",
-            "properties": {
-                "message": {"type": "string", "description": "Mensaje descriptivo del commit"}
-            },
+            "properties": {"message": {"type": "string", "description": "Mensaje descriptivo del commit"}},
             "required": ["message"],
         },
         handler=manager.commit,
@@ -97,9 +97,7 @@ def create_git_server(repo_path: Optional[str] = None) -> StdioMCPServer:
         description="Lista las ramas disponibles o crea una nueva rama en el repositorio.",
         parameters={
             "type": "object",
-            "properties": {
-                "create": {"type": "string", "description": "Nombre de una nueva rama a crear (opcional)"}
-            },
+            "properties": {"create": {"type": "string", "description": "Nombre de una nueva rama a crear (opcional)"}},
         },
         handler=manager.branch,
         risk_level="safe",
@@ -114,7 +112,7 @@ def create_git_server(repo_path: Optional[str] = None) -> StdioMCPServer:
             "properties": {
                 "remote": {"type": "string", "description": "Nombre del remoto", "default": "origin"},
                 "branch": {"type": "string", "description": "Rama a subir", "default": "main"},
-                "set_upstream": {"type": "boolean", "description": "Establecer upstream (-u)", "default": False}
+                "set_upstream": {"type": "boolean", "description": "Establecer upstream (-u)", "default": False},
             },
         },
         handler=manager.push,
@@ -129,7 +127,7 @@ def create_git_server(repo_path: Optional[str] = None) -> StdioMCPServer:
             "type": "object",
             "properties": {
                 "remote": {"type": "string", "description": "Nombre del remoto", "default": "origin"},
-                "branch": {"type": "string", "description": "Rama a descargar", "default": "main"}
+                "branch": {"type": "string", "description": "Rama a descargar", "default": "main"},
             },
         },
         handler=manager.pull,

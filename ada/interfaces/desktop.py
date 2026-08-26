@@ -14,7 +14,6 @@ from typing import Any
 
 from werkzeug.serving import make_server
 
-
 LOGGER = logging.getLogger("ada.desktop")
 
 

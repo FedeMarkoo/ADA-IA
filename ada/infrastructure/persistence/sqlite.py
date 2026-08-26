@@ -581,8 +581,8 @@ class Memory:
         """Return distinct session names ordered by recent activity."""
         with self._lock:
             rows = self.conn.execute(
-            "SELECT session FROM conversation_messages GROUP BY session ORDER BY MAX(id) DESC LIMIT ?",
-            (max(1, int(limit)),)
+                "SELECT session FROM conversation_messages GROUP BY session ORDER BY MAX(id) DESC LIMIT ?",
+                (max(1, int(limit)),),
             ).fetchall()
         return [row[0] for row in rows if row[0]]
 
@@ -592,7 +592,7 @@ class Memory:
             placeholders = ",".join("?" for _ in kinds)
             cursor = self.conn.execute(
                 f"DELETE FROM memories WHERE kind IN ({placeholders}) AND created_at < datetime('now', ?)",
-                (*kinds, f"-{max(1, int(days))} days")
+                (*kinds, f"-{max(1, int(days))} days"),
             )
             self.conn.commit()
             return cursor.rowcount
@@ -799,9 +799,7 @@ class Memory:
 
     def get_conversation_summary(self, session="main"):
         with self._lock:
-            row = self.conn.execute(
-                "SELECT summary FROM conversation_summaries WHERE session=?", (session,)
-            ).fetchone()
+            row = self.conn.execute("SELECT summary FROM conversation_summaries WHERE session=?", (session,)).fetchone()
         return self._open(row[0]) if row else ""
 
     def save_conversation_summary(self, session, summary):
@@ -864,7 +862,14 @@ class Memory:
         rows = []
         for value in paths:
             path = Path(value).expanduser().absolute()
-            rows.append((str(path), path.name, self._normalize_folder_name(path.name), str(Path(parent_path).expanduser().absolute())))
+            rows.append(
+                (
+                    str(path),
+                    path.name,
+                    self._normalize_folder_name(path.name),
+                    str(Path(parent_path).expanduser().absolute()),
+                )
+            )
         if not rows:
             return 0
         with self._lock:

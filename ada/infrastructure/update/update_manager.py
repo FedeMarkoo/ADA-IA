@@ -15,7 +15,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-
 logger = logging.getLogger("ada.update")
 
 
@@ -36,8 +35,12 @@ class UpdateManager:
     @staticmethod
     def _run(args, cwd):
         return subprocess.run(
-            ["git", *args], cwd=str(cwd), text=True, capture_output=True,
-            check=False, timeout=30,
+            ["git", *args],
+            cwd=str(cwd),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=30,
         )
 
     def _git(self, *args):
@@ -69,8 +72,12 @@ class UpdateManager:
                     ancestor = self.runner(["merge-base", "--is-ancestor", local, remote], self.root)
                     status = "update_available" if ancestor.returncode == 0 else "diverged"
                 result = {
-                    "status": status, "branch": self.branch, "local_sha": local,
-                    "remote_sha": remote, "clean": self._clean(), "checked_at": time.time(),
+                    "status": status,
+                    "branch": self.branch,
+                    "local_sha": local,
+                    "remote_sha": remote,
+                    "clean": self._clean(),
+                    "checked_at": time.time(),
                 }
             except Exception as exc:
                 result = {"status": "error", "branch": self.branch, "error": str(exc), "checked_at": time.time()}
@@ -93,7 +100,8 @@ class UpdateManager:
                 commit_message = self._git("log", "-1", "--format=%s", target_sha)
                 restart_required = bool(policy.get("restart_on_update", False))
                 payload = {
-                    "status": "updated", "branch": self.branch,
+                    "status": "updated",
+                    "branch": self.branch,
                     "commit_sha": target_sha,
                     "commit_message": commit_message,
                     "restart_required": restart_required,
@@ -144,10 +152,12 @@ class UpdateManager:
             return None
         try:
             from telegram.bot import TelegramListener
+
             listener = TelegramListener(self.config)
             if not listener.enabled:
                 logger.warning("update_restart_notification_skipped reason=telegram_token_missing")
                 return None
+
             def notify(text):
                 return listener.send_message(str(chat_id), text)
 

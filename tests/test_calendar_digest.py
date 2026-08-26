@@ -21,12 +21,17 @@ def config(chat_id="12345"):
 
 
 def test_digest_queries_real_calendar_before_sending_weekly_summary():
-    mcp = FakeMCP({
-        "ok": True,
-        "result": {"kind": "calendar#events", "items": [
-            {"summary": "Sesión", "start": {"dateTime": "2026-08-25T10:00:00-03:00"}, "calendar": "Trabajo"},
-        ]},
-    })
+    mcp = FakeMCP(
+        {
+            "ok": True,
+            "result": {
+                "kind": "calendar#events",
+                "items": [
+                    {"summary": "Sesión", "start": {"dateTime": "2026-08-25T10:00:00-03:00"}, "calendar": "Trabajo"},
+                ],
+            },
+        }
+    )
     sent = []
     digest = CalendarTelegramDigest(mcp, lambda chat_id, text: sent.append((chat_id, text)), config())
 

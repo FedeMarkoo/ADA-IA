@@ -14,9 +14,7 @@ class ShoppingManager:
             item = args.get("item", "").strip()
             if not item:
                 return {"error": "item_required"}
-            cur = conn.execute(
-                "SELECT id FROM food_shopping WHERE lower(item)=lower(?) AND status='pending'", (item,)
-            )
+            cur = conn.execute("SELECT id FROM food_shopping WHERE lower(item)=lower(?) AND status='pending'", (item,))
             row = cur.fetchone()
             if row:
                 conn.execute(

@@ -1,4 +1,5 @@
 """Models, Ollama and benchmark routes for ADA web interface."""
+
 from __future__ import annotations
 
 import json
@@ -32,29 +33,35 @@ def ollama_status():
     else:
         runtime_dict["available"] = health.get("online", False)
 
-    return jsonify({
-        "health": health,
-        "runtime": runtime_dict,
-    })
+    return jsonify(
+        {
+            "health": health,
+            "runtime": runtime_dict,
+        }
+    )
 
 
 @models_bp.route("/api/ollama/models")
 def ollama_models():
     runtime = get_runtime()
     client = runtime.get("ollama_client") or OllamaClient()
-    return jsonify({
-        "models": client.list_models(),
-        "running": client.running_models(),
-    })
+    return jsonify(
+        {
+            "models": client.list_models(),
+            "running": client.running_models(),
+        }
+    )
 
 
 @models_bp.route("/api/ollama/running")
 def ollama_running():
     runtime = get_runtime()
     client = runtime.get("ollama_client") or OllamaClient()
-    return jsonify({
-        "running": client.running_models(),
-    })
+    return jsonify(
+        {
+            "running": client.running_models(),
+        }
+    )
 
 
 @models_bp.route("/api/ollama/unload", methods=["POST"])
@@ -112,12 +119,14 @@ def ollama_preload_all():
     for m_name in models_to_load:
         results[m_name] = client.load_model(m_name, keep_alive=keep_alive)
 
-    return jsonify({
-        "ok": any(results.values()) if results else False,
-        "loaded": [m for m, ok in results.items() if ok],
-        "failed": [m for m, ok in results.items() if not ok],
-        "running": client.running_models(),
-    })
+    return jsonify(
+        {
+            "ok": any(results.values()) if results else False,
+            "loaded": [m for m, ok in results.items() if ok],
+            "failed": [m for m, ok in results.items() if not ok],
+            "running": client.running_models(),
+        }
+    )
 
 
 @models_bp.route("/api/ollama/delete", methods=["POST", "DELETE"])
@@ -255,10 +264,12 @@ def models_catalog_api():
         deleted = catalog_mgr.delete_model_from_catalog(name)
         return jsonify({"ok": deleted, "name": name, "catalog": catalog_mgr.get_catalog()})
 
-    return jsonify({
-        "catalog": catalog_mgr.get_catalog(),
-        "roles": catalog_mgr.get_roles(),
-    })
+    return jsonify(
+        {
+            "catalog": catalog_mgr.get_catalog(),
+            "roles": catalog_mgr.get_roles(),
+        }
+    )
 
 
 @models_bp.route("/api/models/policy", methods=["GET", "POST"])
@@ -300,12 +311,14 @@ def models_policy_api():
         return jsonify({"ok": True, **summary, "manual_policy": cfg_data.get("model_policy", {})})
 
     summary = active_agent.model_manager.selection_summary()
-    return jsonify({
-        "models": cfg_data.get("models", {}),
-        "model_policy": summary["policy"],
-        "manual_policy": cfg_data.get("model_policy", {}),
-        **summary,
-    })
+    return jsonify(
+        {
+            "models": cfg_data.get("models", {}),
+            "model_policy": summary["policy"],
+            "manual_policy": cfg_data.get("model_policy", {}),
+            **summary,
+        }
+    )
 
 
 @models_bp.route("/api/models/benchmark/prompts", methods=["GET"])
@@ -361,9 +374,15 @@ def models_reload_api():
     active_agent.router.config = candidate
     active_agent.policy.config = candidate
     active_agent.cfg = candidate
-    return jsonify({
-        "ok": True,
-        "adaptive": candidate.get("adaptive_models", False),
-        "models": candidate.get("models", {}),
-        "status": active_agent.model_manager.runtime_status() if hasattr(active_agent.model_manager, "runtime_status") else {},
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "adaptive": candidate.get("adaptive_models", False),
+            "models": candidate.get("models", {}),
+            "status": (
+                active_agent.model_manager.runtime_status()
+                if hasattr(active_agent.model_manager, "runtime_status")
+                else {}
+            ),
+        }
+    )

@@ -45,13 +45,14 @@ class BudgetManager:
                 new_spent = amount
             else:
                 new_spent = row[1] + amount
-                conn.execute("UPDATE food_budgets SET spent=?, updated_at=CURRENT_TIMESTAMP WHERE period=?", (new_spent, period))
+                conn.execute(
+                    "UPDATE food_budgets SET spent=?, updated_at=CURRENT_TIMESTAMP WHERE period=?", (new_spent, period)
+                )
             conn.commit()
             return {"ok": True, "action": "spend", "period": period, "spent": new_spent}
 
-        rows = conn.execute("SELECT period, amount, spent, currency, notes FROM food_budgets ORDER BY period DESC").fetchall()
-        budgets = [
-            {"period": r[0], "amount": r[1], "spent": r[2], "currency": r[3], "notes": r[4]}
-            for r in rows
-        ]
+        rows = conn.execute(
+            "SELECT period, amount, spent, currency, notes FROM food_budgets ORDER BY period DESC"
+        ).fetchall()
+        budgets = [{"period": r[0], "amount": r[1], "spent": r[2], "currency": r[3], "notes": r[4]} for r in rows]
         return {"ok": True, "action": "list", "total": len(budgets), "budgets": budgets}

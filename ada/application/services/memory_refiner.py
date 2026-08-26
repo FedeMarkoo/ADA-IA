@@ -108,7 +108,8 @@ class MemoryRefiner:
         elif hasattr(self.memory, "conn") and self.memory.conn:
             try:
                 sessions = [
-                    row[0] for row in self.memory.conn.execute(
+                    row[0]
+                    for row in self.memory.conn.execute(
                         "SELECT DISTINCT session FROM conversation_messages ORDER BY id DESC LIMIT 20"
                     ).fetchall()
                 ]
@@ -218,8 +219,7 @@ class MemoryRefiner:
             with self.memory._lock:
                 cutoff_days = self.max_memory_age_days
                 cursor = self.memory.conn.execute(
-                    "DELETE FROM memories WHERE kind IN ('note', 'task_result') "
-                    "AND created_at < datetime('now', ?)",
+                    "DELETE FROM memories WHERE kind IN ('note', 'task_result') " "AND created_at < datetime('now', ?)",
                     (f"-{cutoff_days} days",),
                 )
                 self.memory.conn.commit()

@@ -1,4 +1,5 @@
 """Separate SQLite execution log used only when ADA debug mode is enabled."""
+
 import json
 import sqlite3
 import threading
@@ -36,8 +37,10 @@ class DebugLog:
 
     def write(self, event, payload=None, level="DEBUG", session_id=None):
         with self.lock:
-            self.conn.execute("INSERT INTO execution_log(created_at,level,event,session_id,payload) VALUES(?,?,?,?,?)",
-                              (time.time(), level, event, session_id, json.dumps(payload or {}, ensure_ascii=False, default=str)))
+            self.conn.execute(
+                "INSERT INTO execution_log(created_at,level,event,session_id,payload) VALUES(?,?,?,?,?)",
+                (time.time(), level, event, session_id, json.dumps(payload or {}, ensure_ascii=False, default=str)),
+            )
             self.conn.commit()
 
     def close(self):

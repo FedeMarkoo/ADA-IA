@@ -58,6 +58,7 @@ class MemoryCredentialTests(unittest.TestCase):
     def test_utils_credentials_reexport_and_compatibility(self):
         from utils.credentials import SecureVault as UtilsVault, CredentialStore as UtilsStore
         from ada.infrastructure.credentials import SecureVault as AdaVault, CredentialStore as AdaStore
+
         self.assertIs(UtilsVault, AdaVault)
         self.assertIs(UtilsStore, AdaStore)
 

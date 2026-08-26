@@ -1,4 +1,5 @@
 """Secure Vault management and credentials routes for ADA web interface."""
+
 from __future__ import annotations
 
 import json
@@ -42,7 +43,16 @@ def vault_keys_api():
 @vault_bp.route("/api/vault/set", methods=["POST"])
 def vault_set_api():
     if not _check_rate_limit(30):
-        return jsonify({"ok": False, "error": "rate_limit_exceeded", "message": "Demasiadas operaciones en poco tiempo. Reintentá en un minuto."}), 429
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "rate_limit_exceeded",
+                    "message": "Demasiadas operaciones en poco tiempo. Reintentá en un minuto.",
+                }
+            ),
+            429,
+        )
 
     body = request.get_json(silent=True) or {}
     name = str(body.get("name", "")).strip()
@@ -63,7 +73,10 @@ def vault_set_api():
 @vault_bp.route("/api/vault/<name>", methods=["DELETE"])
 def vault_delete_api(name):
     if not _check_rate_limit(30):
-        return jsonify({"ok": False, "error": "rate_limit_exceeded", "message": "Demasiadas operaciones en poco tiempo."}), 429
+        return (
+            jsonify({"ok": False, "error": "rate_limit_exceeded", "message": "Demasiadas operaciones en poco tiempo."}),
+            429,
+        )
 
     try:
         vault = SecureVault()
@@ -87,7 +100,13 @@ def telegram_test_api():
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if data.get("ok"):
-                return jsonify({"ok": True, "bot": data.get("result"), "token_masked": token[:6] + "..." + token[-4:] if len(token) > 10 else "***"})
+                return jsonify(
+                    {
+                        "ok": True,
+                        "bot": data.get("result"),
+                        "token_masked": token[:6] + "..." + token[-4:] if len(token) > 10 else "***",
+                    }
+                )
             return jsonify({"ok": False, "error": data.get("description", "Error de Telegram")})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})

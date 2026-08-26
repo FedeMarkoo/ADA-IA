@@ -63,7 +63,11 @@ class MultiAgentCoordinator:
             results["photo_reviewer"] = review.data
         except Exception as exc:
             failures["photo_reviewer"] = str(exc)
-            results["photo_reviewer"] = {"available": False, "error": str(exc), "recommendation": "evaluación manual requerida"}
+            results["photo_reviewer"] = {
+                "available": False,
+                "error": str(exc),
+                "recommendation": "evaluación manual requerida",
+            }
         technical = results.get("technical_photo", {})
         semantic = results.get("context_photo", {})
         context = semantic.get("context") or {

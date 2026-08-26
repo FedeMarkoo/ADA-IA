@@ -16,7 +16,11 @@ def test_trigger_catalog_exposes_future_entry_points_without_starting_them():
         summary = manager.summary()
 
     assert [item["id"] for item in summary["triggers"]] == [
-        "telegram", "removable-device", "calendar", "cron", "webhook"
+        "telegram",
+        "removable-device",
+        "calendar",
+        "cron",
+        "webhook",
     ]
     assert summary["triggers"][1]["implementation"] == "ready"
     assert summary["triggers"][1]["controllable"] is False
@@ -31,12 +35,20 @@ def test_detached_trigger_is_adopted_by_a_new_manager_instance():
         config_path = Path(directory) / "config.json"
         config_path.write_text(json.dumps(config), encoding="utf-8")
         first = TriggerManager(
-            config, project_root, config_path=config_path, state_dir=directory,
-            telegram_command=command, discover_existing=False
+            config,
+            project_root,
+            config_path=config_path,
+            state_dir=directory,
+            telegram_command=command,
+            discover_existing=False,
         )
         second = TriggerManager(
-            config, project_root, config_path=config_path, state_dir=directory,
-            telegram_command=command, discover_existing=False
+            config,
+            project_root,
+            config_path=config_path,
+            state_dir=directory,
+            telegram_command=command,
+            discover_existing=False,
         )
         try:
             started = first.start("telegram")
@@ -58,8 +70,10 @@ def test_detached_trigger_is_adopted_by_a_new_manager_instance():
 def test_telegram_timeout_follows_patient_agent_configuration():
     from telegram.bot import TelegramListener
 
-    listener = TelegramListener({
-        "chat_timeout_seconds": 900,
-        "telegram": {"enabled": False, "token": ""},
-    })
+    listener = TelegramListener(
+        {
+            "chat_timeout_seconds": 900,
+            "telegram": {"enabled": False, "token": ""},
+        }
+    )
     assert listener.request_timeout == 900

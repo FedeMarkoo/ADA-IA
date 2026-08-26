@@ -1,4 +1,5 @@
 """Modular Flask application server and factory for ADA."""
+
 from __future__ import annotations
 
 import json
@@ -59,7 +60,11 @@ def create_app(
     app = Flask(__name__, static_folder=str(DASHBOARD_DIR), static_url_path="/static")
 
     root = PROJECT_ROOT
-    cfg_file = Path(config_path).resolve() if config_path else (root / "ada" / "config.json" if (root / "ada" / "config.json").exists() else root / "config.json")
+    cfg_file = (
+        Path(config_path).resolve()
+        if config_path
+        else (root / "ada" / "config.json" if (root / "ada" / "config.json").exists() else root / "config.json")
+    )
     cfg = dict(config) if config is not None else load_config(cfg_file, root)
 
     mcps = mcp_manager or MCPManager(cfg)
@@ -98,7 +103,13 @@ def create_app(
         "mcp_manager": mcps,
         "trigger_manager": trigger_mgr,
         "memory_refiner": mem_refiner,
-        "identity": {"version": ADA_VERSION, "started_at": PROCESS_STARTED_AT, "reloaded_at": None, "hot_reload": False, "pid": os.getpid()},
+        "identity": {
+            "version": ADA_VERSION,
+            "started_at": PROCESS_STARTED_AT,
+            "reloaded_at": None,
+            "hot_reload": False,
+            "pid": os.getpid(),
+        },
         "agent_enabled": True,
         "debug_enabled": False,
         "debug_log": DebugLog(cfg.get("debug_log_path", str(Path.home() / "Desktop/ADA_Data/debug-log.db"))),
@@ -146,6 +157,7 @@ def create_app(
             if not expected:
                 try:
                     from ada.infrastructure.credentials import SecureVault
+
                     expected = SecureVault().get("event_token") or SecureVault().get("ada_event_token")
                 except Exception:
                     expected = None

@@ -33,9 +33,7 @@ class TransportTelegramAlert:
             text = result.get("message") or "Estado del Sarmiento disponible para revisar."
             alerts = result.get("alerts") or []
             if alerts:
-                text += "\n\n" + "\n".join(
-                    f"• {item.get('title')}: {item.get('description')}" for item in alerts
-                )
+                text += "\n\n" + "\n".join(f"• {item.get('title')}: {item.get('description')}" for item in alerts)
             status = result.get("status", "unknown")
         else:
             text, status = str(result), "unknown"

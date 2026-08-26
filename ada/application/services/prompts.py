@@ -70,7 +70,6 @@ class PromptBuilder:
         if conversation:
             prompt += (
                 "\nContexto reciente de esta conversación. Usalo para resolver referencias como "
-                "‘eso’, ‘ahí’, ‘lo que tiene’ o nombres mencionados antes; no inventes datos:\n"
-                + conversation[-3500:]
+                "‘eso’, ‘ahí’, ‘lo que tiene’ o nombres mencionados antes; no inventes datos:\n" + conversation[-3500:]
             )
         return prompt + "\nSolicitud del usuario:\n" + (query or str(task))

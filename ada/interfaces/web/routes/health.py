@@ -1,4 +1,5 @@
 """Healthcheck, diagnostics and auto-healing routes for ADA web interface."""
+
 from __future__ import annotations
 
 import logging
@@ -80,8 +81,20 @@ def healthcheck_prompt_create_api():
     """Add a read-only case without changing application code."""
     data = request.get_json(silent=True) or {}
     prompt = str(data.get("prompt") or "")
-    if re.search(r"\b(borr|elimin|mov|renombr|escrib|creá|crea|env[ií]a|ejecut)\w*\b|\b(compra|vende)\s+(acciones?|cripto|d[oó]lares?)", prompt, re.I):
-        return jsonify({"error": "healthcheck_must_be_readonly", "message": "Los casos del healthcheck solo pueden consultar o analizar."}), 400
+    if re.search(
+        r"\b(borr|elimin|mov|renombr|escrib|creá|crea|env[ií]a|ejecut)\w*\b|\b(compra|vende)\s+(acciones?|cripto|d[oó]lares?)",
+        prompt,
+        re.I,
+    ):
+        return (
+            jsonify(
+                {
+                    "error": "healthcheck_must_be_readonly",
+                    "message": "Los casos del healthcheck solo pueden consultar o analizar.",
+                }
+            ),
+            400,
+        )
     try:
         store = HealthcheckStore(get_runtime()["agent"].mem)
         store.add_prompt({**data, "prompt": prompt})
@@ -164,7 +177,11 @@ def _execute_healthcheck_batch(runtime: Dict[str, Any], prompts: List[Dict[str, 
         else:
             reply = outcome.get("reply", "")
             eval_result = evaluate_healthcheck(item, reply, duration_seconds=duration, executed_mcps=executed_mcps)
-            if not eval_result.get("ok") and str(item.get("category", "")).startswith("mcp_") and requires_mcp(item.get("prompt", "")):
+            if (
+                not eval_result.get("ok")
+                and str(item.get("category", "")).startswith("mcp_")
+                and requires_mcp(item.get("prompt", ""))
+            ):
                 eval_result["reason"] = "mcp_not_used"
             judge_explanation = None
             if not eval_result.get("ok") and (runtime.get("cfg") or {}).get("healthcheck_llm_judge"):
@@ -196,12 +213,20 @@ def healthcheck_run_api():
     if requested_ids:
         prompts = [p for p in all_prompts if p["id"] in requested_ids]
     elif requested_category:
-        prompts = [p for p in all_prompts if (p.get("functional_category") or functional_category(p.get("category"))) == requested_category or p.get("category") == requested_category]
+        prompts = [
+            p
+            for p in all_prompts
+            if (p.get("functional_category") or functional_category(p.get("category"))) == requested_category
+            or p.get("category") == requested_category
+        ]
     else:
         prompts = all_prompts
 
     if not prompts:
-        return jsonify({"error": "no_prompts_matched", "message": "No se encontraron casos de prueba para ejecutar."}), 400
+        return (
+            jsonify({"error": "no_prompts_matched", "message": "No se encontraron casos de prueba para ejecutar."}),
+            400,
+        )
 
     batch = store.create_batch(run_id, prompts, metadata={"category": requested_category})
     runtime["healthcheck_executor"].submit(_execute_healthcheck_batch, runtime, prompts, run_id)

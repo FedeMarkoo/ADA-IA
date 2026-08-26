@@ -15,14 +15,77 @@ class FolderResolver:
     """Resolve human folder references without blocking a web worker on GVFS."""
 
     STOPWORDS = {
-        "cual", "es", "la", "el", "las", "los", "de", "del", "en", "que", "hay",
-        "tenes", "tienes", "tengo", "tiene", "tienen", "tu", "tus", "fotos", "foto", "archivos",
-        "archivo", "carpeta", "carpetas", "directorios", "directorio", "ruta", "donde",
-        "quiero", "saber", "busca", "buscar", "buscame", "mostrame", "mostrar", "listame", "lista",
-        "listar", "sea", "ahi", "adentro", "dentro", "contenido", "contenidos", "una", "un",
-        "y", "por", "favor", "cuanto", "cuantos", "cuanta", "cuantas", "cantidad", "total",
-        "estan", "esta", "estaba", "estaban", "me", "acuerdo", "refiero", "exacta", "exacto",
-        "che", "ada", "no", "mis", "mi", "cumple", "cumpleanos",
+        "cual",
+        "es",
+        "la",
+        "el",
+        "las",
+        "los",
+        "de",
+        "del",
+        "en",
+        "que",
+        "hay",
+        "tenes",
+        "tienes",
+        "tengo",
+        "tiene",
+        "tienen",
+        "tu",
+        "tus",
+        "fotos",
+        "foto",
+        "archivos",
+        "archivo",
+        "carpeta",
+        "carpetas",
+        "directorios",
+        "directorio",
+        "ruta",
+        "donde",
+        "quiero",
+        "saber",
+        "busca",
+        "buscar",
+        "buscame",
+        "mostrame",
+        "mostrar",
+        "listame",
+        "lista",
+        "listar",
+        "sea",
+        "ahi",
+        "adentro",
+        "dentro",
+        "contenido",
+        "contenidos",
+        "una",
+        "un",
+        "y",
+        "por",
+        "favor",
+        "cuanto",
+        "cuantos",
+        "cuanta",
+        "cuantas",
+        "cantidad",
+        "total",
+        "estan",
+        "esta",
+        "estaba",
+        "estaban",
+        "me",
+        "acuerdo",
+        "refiero",
+        "exacta",
+        "exacto",
+        "che",
+        "ada",
+        "no",
+        "mis",
+        "mi",
+        "cumple",
+        "cumpleanos",
     }
 
     def __init__(self, config, memory=None):
@@ -141,21 +204,34 @@ class FolderResolver:
             base_children = context_children if context == base else scan(base)
             photo_root = Path(os.path.expanduser(str(self.config.get("photo_root") or base / "Fotos")))
             roots = list(base_children)
-            roots.sort(key=lambda path: (
-                0 if path == photo_root or self._normalize(path.name) == "fotos" else
-                1 if self._normalize(path.name) in {"documentos", "pictures", "photos"} else 2,
-                self._normalize(path.name),
-            ))
+            roots.sort(
+                key=lambda path: (
+                    (
+                        0
+                        if path == photo_root or self._normalize(path.name) == "fotos"
+                        else 1 if self._normalize(path.name) in {"documentos", "pictures", "photos"} else 2
+                    ),
+                    self._normalize(path.name),
+                )
+            )
             next_level = []
             for root in roots:
                 if time.monotonic() >= deadline or any(score >= 100 for score in candidates.values()):
                     break
                 next_level.extend(scan(root))
             if not any(score >= 100 for score in candidates.values()):
-                next_level.sort(key=lambda path: (
-                    0 if any(word in self._normalize(path.name) for word in ("evento", "sesion", "foto", "cobertura")) else 1,
-                    self._normalize(path.name),
-                ))
+                next_level.sort(
+                    key=lambda path: (
+                        (
+                            0
+                            if any(
+                                word in self._normalize(path.name) for word in ("evento", "sesion", "foto", "cobertura")
+                            )
+                            else 1
+                        ),
+                        self._normalize(path.name),
+                    )
+                )
                 for root in next_level:
                     if time.monotonic() >= deadline or any(score >= 100 for score in candidates.values()):
                         break
@@ -181,8 +257,14 @@ class FolderResolver:
             and re.search(r"\b(que|todas?|carpetas?|tengo|hay)\b", key)
             and not named_terms
         ):
-            return {"status": "resolved", "path": str(base), "source": "configured_base", "confidence": 1.0,
-                    "elapsed_ms": round((time.monotonic() - started) * 1000), "terms": terms}
+            return {
+                "status": "resolved",
+                "path": str(base),
+                "source": "configured_base",
+                "confidence": 1.0,
+                "elapsed_ms": round((time.monotonic() - started) * 1000),
+                "terms": terms,
+            }
 
         # "en Google Drive" describes the search root, not part of a folder
         # name. When the user also supplies a proper label (for example
@@ -216,9 +298,14 @@ class FolderResolver:
                     continue
                 alias = self.memory.get_folder_alias(alias_key)
                 if alias and self._inside_base(alias["path"]) and Path(alias["path"]).is_dir():
-                    return {"status": "resolved", "path": alias["path"], "source": "memory",
-                            "confidence": alias["confidence"], "elapsed_ms": round((time.monotonic() - started) * 1000),
-                            "terms": terms}
+                    return {
+                        "status": "resolved",
+                        "path": alias["path"],
+                        "source": "memory",
+                        "confidence": alias["confidence"],
+                        "elapsed_ms": round((time.monotonic() - started) * 1000),
+                        "terms": terms,
+                    }
                 if alias and self._inside_base(alias["path"]):
                     stale_paths.append(alias["path"])
 
@@ -233,7 +320,8 @@ class FolderResolver:
                 indexed = available
                 if context_path and self._inside_base(context_path):
                     contextual = [
-                        item for item in indexed
+                        item
+                        for item in indexed
                         if Path(item["path"]).absolute() == Path(context_path).absolute()
                         or Path(context_path).absolute() in Path(item["path"]).absolute().parents
                     ]
@@ -245,19 +333,40 @@ class FolderResolver:
                 if len(indexed) == 1:
                     path = indexed[0]["path"]
                     self.memory.save_folder_alias(canonical, path, 0.97)
-                    return {"status": "resolved", "path": path, "source": "folder_index", "confidence": 0.97,
-                            "elapsed_ms": round((time.monotonic() - started) * 1000), "terms": terms}
+                    return {
+                        "status": "resolved",
+                        "path": path,
+                        "source": "folder_index",
+                        "confidence": 0.97,
+                        "elapsed_ms": round((time.monotonic() - started) * 1000),
+                        "terms": terms,
+                    }
                 if indexed:
-                    return {"status": "ambiguous", "candidates": [item["path"] for item in indexed[:8]],
-                            "source": "folder_index", "elapsed_ms": round((time.monotonic() - started) * 1000),
-                            "terms": terms}
+                    return {
+                        "status": "ambiguous",
+                        "candidates": [item["path"] for item in indexed[:8]],
+                        "source": "folder_index",
+                        "elapsed_ms": round((time.monotonic() - started) * 1000),
+                        "terms": terms,
+                    }
 
         if not terms:
             if context_path and self._inside_base(context_path) and self._is_directory(context_path):
-                return {"status": "resolved", "path": str(Path(context_path).absolute()), "source": "session_context",
-                        "confidence": 0.9, "elapsed_ms": round((time.monotonic() - started) * 1000), "terms": []}
-            return {"status": "none", "candidates": [], "reason": "no_folder_terms",
-                    "elapsed_ms": round((time.monotonic() - started) * 1000), "terms": []}
+                return {
+                    "status": "resolved",
+                    "path": str(Path(context_path).absolute()),
+                    "source": "session_context",
+                    "confidence": 0.9,
+                    "elapsed_ms": round((time.monotonic() - started) * 1000),
+                    "terms": [],
+                }
+            return {
+                "status": "none",
+                "candidates": [],
+                "reason": "no_folder_terms",
+                "elapsed_ms": round((time.monotonic() - started) * 1000),
+                "terms": [],
+            }
 
         candidates, diagnostics = self._candidates(terms, context_path=context_path)
         exact = [path for path in candidates if self._normalize(path.name) == canonical]
@@ -268,11 +377,21 @@ class FolderResolver:
             if self.memory:
                 if canonical:
                     self.memory.save_folder_alias(canonical, path, 0.98 if exact else 0.9)
-            return {"status": "resolved", "path": path, "source": "folder_search",
-                    "confidence": 0.98 if exact else 0.9, "terms": terms, **diagnostics}
+            return {
+                "status": "resolved",
+                "path": path,
+                "source": "folder_search",
+                "confidence": 0.98 if exact else 0.9,
+                "terms": terms,
+                **diagnostics,
+            }
         if candidates:
-            return {"status": "ambiguous", "candidates": [str(path.absolute()) for path in candidates],
-                    "terms": terms, **diagnostics}
+            return {
+                "status": "ambiguous",
+                "candidates": [str(path.absolute()) for path in candidates],
+                "terms": terms,
+                **diagnostics,
+            }
         result = {"status": "none", "candidates": [], "reason": "not_found", "terms": terms, **diagnostics}
         if stale_paths:
             result["reason"] = "stale_index"
@@ -291,9 +410,19 @@ class FolderResolver:
             path = str(exact[0].absolute())
             if self.memory:
                 self.memory.save_folder_alias(canonical, path, 1.0)
-            return {"status": "resolved", "path": path, "source": "folder_label", "confidence": 1.0,
-                    "terms": terms, **diagnostics}
+            return {
+                "status": "resolved",
+                "path": path,
+                "source": "folder_label",
+                "confidence": 1.0,
+                "terms": terms,
+                **diagnostics,
+            }
         if candidates:
-            return {"status": "ambiguous", "candidates": [str(path.absolute()) for path in candidates],
-                    "terms": terms, **diagnostics}
+            return {
+                "status": "ambiguous",
+                "candidates": [str(path.absolute()) for path in candidates],
+                "terms": terms,
+                **diagnostics,
+            }
         return {"status": "none", "candidates": [], "reason": "not_found", "terms": terms, **diagnostics}

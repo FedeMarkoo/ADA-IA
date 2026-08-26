@@ -28,6 +28,7 @@ class WebSearcher:
         if not brave_key:
             try:
                 from ada.infrastructure.credentials import SecureVault
+
                 brave_key = str(SecureVault().get("brave_api_key") or "").strip()
             except Exception:
                 brave_key = ""
@@ -49,21 +50,26 @@ class WebSearcher:
             return {"query": query, "results": [], "provider": "google", "error": "Límite local de Google alcanzado"}
         # Stable public parameters from Google's AI Mode links. Session-bound
         # values such as smstk/mtid/shmd are intentionally not persisted.
-        params = urllib.parse.urlencode({
-            "q": query,
-            "udm": "50",
-            "aep": "34",
-            "csuir": "1",
-            "source": "sh/x/aim/m1/1",
-            "hl": "es",
-        })
+        params = urllib.parse.urlencode(
+            {
+                "q": query,
+                "udm": "50",
+                "aep": "34",
+                "csuir": "1",
+                "source": "sh/x/aim/m1/1",
+                "hl": "es",
+            }
+        )
         url = f"https://www.google.com/search?{params}"
         try:
-            req = urllib.request.Request(url, headers={
-                "Accept": "text/html",
-                "Accept-Language": "es-AR,es;q=0.9,en;q=0.7",
-                "User-Agent": self.user_agent,
-            })
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Accept": "text/html",
+                    "Accept-Language": "es-AR,es;q=0.9,en;q=0.7",
+                    "User-Agent": self.user_agent,
+                },
+            )
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 html = resp.read().decode("utf-8", errors="replace")
             lowered = html.lower()
@@ -73,7 +79,12 @@ class WebSearcher:
             parser.feed(html)
             results = parser.results[:limit]
             if not results:
-                return {"query": query, "results": [], "provider": "google", "error": "Google no devolvió resultados parseables"}
+                return {
+                    "query": query,
+                    "results": [],
+                    "provider": "google",
+                    "error": "Google no devolvió resultados parseables",
+                }
             return {"query": query, "total_results": len(results), "results": results, "provider": "google"}
         except Exception as exc:
             return {"query": query, "results": [], "provider": "google", "error": str(exc)}
@@ -86,6 +97,7 @@ class WebSearcher:
             return api_key, engine_id
         try:
             from ada.infrastructure.credentials import SecureVault
+
             vault = SecureVault()
             return (
                 str(vault.get("google_search_api_key") or "").strip(),
@@ -103,12 +115,15 @@ class WebSearcher:
             req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": self.user_agent})
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode())
-            results = [{
-                "title": item.get("title"),
-                "url": item.get("link"),
-                "snippet": item.get("snippet", ""),
-                "source": "google",
-            } for item in data.get("items", [])[:limit]]
+            results = [
+                {
+                    "title": item.get("title"),
+                    "url": item.get("link"),
+                    "snippet": item.get("snippet", ""),
+                    "source": "google",
+                }
+                for item in data.get("items", [])[:limit]
+            ]
             return {"query": query, "total_results": len(results), "results": results, "provider": "google"}
         except Exception as exc:
             return self._search_duckduckgo(query, limit, note=f"Google Search no disponible: {exc}")
@@ -119,19 +134,25 @@ class WebSearcher:
         params = urllib.parse.urlencode({"q": query, "count": max(1, min(limit, 20))})
         url = f"https://api.search.brave.com/res/v1/web/search?{params}"
         try:
-            req = urllib.request.Request(url, headers={
-                "Accept": "application/json",
-                "X-Subscription-Token": api_key,
-                "User-Agent": self.user_agent,
-            })
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "X-Subscription-Token": api_key,
+                    "User-Agent": self.user_agent,
+                },
+            )
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode())
-            results = [{
-                "title": item.get("title"),
-                "url": item.get("url"),
-                "snippet": item.get("description", ""),
-                "source": "brave",
-            } for item in data.get("web", {}).get("results", [])[:limit]]
+            results = [
+                {
+                    "title": item.get("title"),
+                    "url": item.get("url"),
+                    "snippet": item.get("description", ""),
+                    "source": "brave",
+                }
+                for item in data.get("web", {}).get("results", [])[:limit]
+            ]
             return {"query": query, "total_results": len(results), "results": results, "provider": "brave"}
         except Exception as exc:
             return self._search_duckduckgo(query, limit, note=f"Brave no disponible: {exc}")
@@ -145,10 +166,24 @@ class WebSearcher:
             results = []
             abstract = data.get("AbstractText")
             if abstract:
-                results.append({"title": data.get("Heading"), "url": data.get("AbstractURL"), "snippet": abstract, "source": "duckduckgo"})
+                results.append(
+                    {
+                        "title": data.get("Heading"),
+                        "url": data.get("AbstractURL"),
+                        "snippet": abstract,
+                        "source": "duckduckgo",
+                    }
+                )
             for topic in data.get("RelatedTopics", [])[:limit]:
                 if "Text" in topic:
-                    results.append({"title": topic.get("FirstURL", "").split("/")[-1].replace("_", " "), "url": topic.get("FirstURL"), "snippet": topic.get("Text"), "source": "duckduckgo"})
+                    results.append(
+                        {
+                            "title": topic.get("FirstURL", "").split("/")[-1].replace("_", " "),
+                            "url": topic.get("FirstURL"),
+                            "snippet": topic.get("Text"),
+                            "source": "duckduckgo",
+                        }
+                    )
             result = {"query": query, "total_results": len(results), "results": results, "provider": "duckduckgo"}
             if note:
                 result["note"] = note

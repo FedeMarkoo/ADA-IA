@@ -27,10 +27,13 @@ class VisionAnalyzer:
         return {"raw": text}
 
     @classmethod
-    def analyze(cls, path: Path | str, folder_context: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def analyze(
+        cls, path: Path | str, folder_context: Dict[str, Any], config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         config = config or {}
         try:
             from ada.infrastructure.engines.model_manager import ModelManager
+
             manager = ModelManager(config)
             provider = config.get("vision_provider", config.get("engine_provider", "ollama"))
             if not manager.available().get(provider):

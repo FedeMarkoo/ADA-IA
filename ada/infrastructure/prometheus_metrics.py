@@ -15,7 +15,6 @@ from pathlib import Path
 import psutil
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, ProcessCollector, generate_latest
 
-
 REGISTRY = CollectorRegistry(auto_describe=True)
 ProcessCollector(registry=REGISTRY)
 

@@ -1,4 +1,5 @@
 """System, triggers, updates, Telegram connector and audit routes for ADA web interface."""
+
 from __future__ import annotations
 
 import json
@@ -67,6 +68,7 @@ def memory_refiner_run_api():
 def receive_event():
     """Event ingress endpoint for external triggers (filesystem, webhooks, mobile)."""
     import secrets
+
     runtime = get_runtime()
     payload = request.get_json(silent=True) or {}
     topic = payload.get("topic") or payload.get("event")
@@ -178,6 +180,7 @@ def update_apply_api():
 # Telegram Connector Service Endpoints
 # ==============================================================================
 
+
 @system_bp.route("/api/services/telegram/status")
 def telegram_service_status():
     return jsonify(get_telegram_service_status())
@@ -226,7 +229,13 @@ def telegram_service_config():
     if runtime.get("trigger_manager"):
         runtime["trigger_manager"].config = runtime["cfg"]
 
-    return jsonify({"ok": True, "message": "Token cifrado con AES-256 en SecureVault (vault.db) y configuración actualizada", "status": get_telegram_service_status()})
+    return jsonify(
+        {
+            "ok": True,
+            "message": "Token cifrado con AES-256 en SecureVault (vault.db) y configuración actualizada",
+            "status": get_telegram_service_status(),
+        }
+    )
 
 
 @system_bp.route("/api/services/telegram/logs")

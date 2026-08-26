@@ -76,8 +76,7 @@ def text_from_result(result):
             if not calendars:
                 return "No encontré calendarios en Google Calendar."
             names = [
-                str(item.get("summary") or item.get("id") or item)
-                if isinstance(item, dict) else str(item)
+                str(item.get("summary") or item.get("id") or item) if isinstance(item, dict) else str(item)
                 for item in calendars
             ]
             return "Calendarios encontrados:\n" + "\n".join(f"• {name}" for name in names)
@@ -158,8 +157,11 @@ def text_from_result(result):
             if not calendars:
                 return "No encontré calendarios en Google Calendar."
             names = [
-                str(item.get("summary") or item.get("name") or item.get("id") or item)
-                if isinstance(item, dict) else str(item)
+                (
+                    str(item.get("summary") or item.get("name") or item.get("id") or item)
+                    if isinstance(item, dict)
+                    else str(item)
+                )
                 for item in calendars
             ]
             return "Calendarios encontrados:\n" + "\n".join(f"• {name}" for name in names)

@@ -20,7 +20,9 @@ class PresenceStore:
         default = Path.home() / "Desktop" / "ADA_Data" / "runtime" / "presence.json"
         self.path = Path(path or os.environ.get("ADA_PRESENCE_PATH", default)).expanduser()
 
-    def set(self, location: str, active: bool = True, ttl_seconds: int = 7200, source: str = "unknown") -> Dict[str, Any]:
+    def set(
+        self, location: str, active: bool = True, ttl_seconds: int = 7200, source: str = "unknown"
+    ) -> Dict[str, Any]:
         now = time.time()
         payload = {
             "location": str(location).strip().lower(),

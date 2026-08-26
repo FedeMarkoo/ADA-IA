@@ -103,9 +103,9 @@ class IntentRouterTests(unittest.TestCase):
             def call(self, provider, prompt, **kwargs):
                 raise TimeoutError("router timeout")
 
-        result = IntentRouter(
-            TimeoutModel(), memory=self.memory, mcp_manager=FakeMCPManager()
-        ).route("¿Cuál es mi próximo evento de Google Calendar?")
+        result = IntentRouter(TimeoutModel(), memory=self.memory, mcp_manager=FakeMCPManager()).route(
+            "¿Cuál es mi próximo evento de Google Calendar?"
+        )
         self.assertEqual(result["action"], "ask")
         self.assertEqual(result["routing_error"], "mcp_router_failed")
 
@@ -144,7 +144,10 @@ class IntentRouterTests(unittest.TestCase):
             agent = Agent({"engine_provider": "unknown", "db_path": str(Path(directory) / "test.db")})
             result = agent.parse_prompt("Cual es mi próximo evento en calendar?")
             # Consultas de calendario no deben mutar archivos ni exigir rutas locales de disco
-            self.assertIn(result.get("action"), {None, "ask", "suggest", "google_calendar.list_events", "google_calendar.search_events"})
+            self.assertIn(
+                result.get("action"),
+                {None, "ask", "suggest", "google_calendar.list_events", "google_calendar.search_events"},
+            )
 
 
 if __name__ == "__main__":

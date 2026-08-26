@@ -23,12 +23,14 @@ from ada.infrastructure.prometheus_metrics import (
 )
 import psutil
 
+
 def _find_project_root() -> Path:
     p = Path(__file__).resolve().parent
     for parent in [p, *p.parents]:
         if (parent / "pyproject.toml").exists():
             return parent
     return Path(__file__).resolve().parents[2]
+
 
 PROJECT_ROOT = _find_project_root()
 if str(PROJECT_ROOT) not in sys.path:
@@ -131,11 +133,36 @@ class MCPManager:
 
             if not self._servers:
                 self._servers = {
-                    "filesystem": MCPServerInfo(name="filesystem", command="python", args=["-m", "ada.mcps.servers.filesystem"], description="Servidor MCP de archivos propio de ADA"),
-                    "web-search": MCPServerInfo(name="web-search", command="python", args=["-m", "ada.mcps.servers.web_search"], description="Búsqueda web DuckDuckGo"),
-                    "photography": MCPServerInfo(name="photography", command="python", args=["-m", "ada.mcps.servers.photography"], description="Análisis de fotos/RAWs"),
-                    "system-runner": MCPServerInfo(name="system-runner", command="python", args=["-m", "ada.mcps.servers.system"], description="Ejecutor en allowlist"),
-                    "google-gmail": MCPServerInfo(name="google-gmail", transport="sse", url="https://mcp.googleapis.com/v1/gmail", description="Google Gmail MCP"),
+                    "filesystem": MCPServerInfo(
+                        name="filesystem",
+                        command="python",
+                        args=["-m", "ada.mcps.servers.filesystem"],
+                        description="Servidor MCP de archivos propio de ADA",
+                    ),
+                    "web-search": MCPServerInfo(
+                        name="web-search",
+                        command="python",
+                        args=["-m", "ada.mcps.servers.web_search"],
+                        description="Búsqueda web DuckDuckGo",
+                    ),
+                    "photography": MCPServerInfo(
+                        name="photography",
+                        command="python",
+                        args=["-m", "ada.mcps.servers.photography"],
+                        description="Análisis de fotos/RAWs",
+                    ),
+                    "system-runner": MCPServerInfo(
+                        name="system-runner",
+                        command="python",
+                        args=["-m", "ada.mcps.servers.system"],
+                        description="Ejecutor en allowlist",
+                    ),
+                    "google-gmail": MCPServerInfo(
+                        name="google-gmail",
+                        transport="sse",
+                        url="https://mcp.googleapis.com/v1/gmail",
+                        description="Google Gmail MCP",
+                    ),
                 }
 
             self._discover_tools()
@@ -148,6 +175,7 @@ class MCPManager:
         if "filesystem" in self._servers:
             try:
                 from mcps.filesystem.server import create_filesystem_server
+
                 srv = create_filesystem_server()
                 for tname, tmeta in srv.tools.items():
                     self._tools[tname] = ToolDefinition(
@@ -167,6 +195,7 @@ class MCPManager:
             s_name = "web-search" if "web-search" in self._servers else "web_search"
             try:
                 from mcps.web_search.server import create_web_search_server
+
                 srv = create_web_search_server()
                 for tname, tmeta in srv.tools.items():
                     self._tools[tname] = ToolDefinition(
@@ -184,6 +213,7 @@ class MCPManager:
         if "photography" in self._servers:
             try:
                 from mcps.photography.server import create_photography_server
+
                 srv = create_photography_server()
                 for tname, tmeta in srv.tools.items():
                     self._tools[tname] = ToolDefinition(
@@ -201,6 +231,7 @@ class MCPManager:
         if "food" in self._servers:
             try:
                 from mcps.food.server import create_food_server
+
                 srv = create_food_server()
                 for tname, tmeta in srv.tools.items():
                     self._tools[tname] = ToolDefinition(
@@ -218,6 +249,7 @@ class MCPManager:
         if "transport" in self._servers:
             try:
                 from mcps.transport.server import create_transport_server
+
                 srv = create_transport_server()
                 for tname, tmeta in srv.tools.items():
                     self._tools[tname] = ToolDefinition(
@@ -236,6 +268,7 @@ class MCPManager:
             s_name = "system-runner" if "system-runner" in self._servers else "system"
             try:
                 from mcps.system.server import create_system_server
+
                 srv = create_system_server()
                 for tname, tmeta in srv.tools.items():
                     self._tools[tname] = ToolDefinition(
@@ -254,6 +287,7 @@ class MCPManager:
         if "git" in self._servers:
             try:
                 from mcps.git.server import create_git_server
+
                 srv = create_git_server()
                 for tname, tmeta in srv.tools.items():
                     self._tools[tname] = ToolDefinition(
@@ -286,8 +320,12 @@ class MCPManager:
                 "gmail.list_labels": "Lista etiquetas de Gmail.",
             }.items():
                 self._tools[tool_name] = ToolDefinition(
-                    name=tool_name, server=s_name, category="gmail", description=description,
-                    parameters={"type": "object", "additionalProperties": True}, risk_level="safe",
+                    name=tool_name,
+                    server=s_name,
+                    category="gmail",
+                    description=description,
+                    parameters={"type": "object", "additionalProperties": True},
+                    risk_level="safe",
                 )
 
         if "google-drive" in self._servers:
@@ -363,9 +401,7 @@ class MCPManager:
                     entry["status"] = s.status
                     mcp_servers[name] = entry
 
-                data = {
-                    "mcpServers": mcp_servers
-                }
+                data = {"mcpServers": mcp_servers}
                 with open(self.config_path, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except Exception:
@@ -432,7 +468,9 @@ class MCPManager:
                 server.tool_count = counts.get(name, 0)
                 MCP_RUNNING.labels(mcp=name).set(1 if server.status == "active" else 0)
                 try:
-                    MCP_MEMORY.labels(mcp=name).set(psutil.Process().memory_info().rss if server.status == "active" else 0)
+                    MCP_MEMORY.labels(mcp=name).set(
+                        psutil.Process().memory_info().rss if server.status == "active" else 0
+                    )
                 except psutil.Error:
                     pass
             return [s.as_dict() for s in self._servers.values()]
@@ -507,7 +545,14 @@ class MCPManager:
                 "latency_ms": 0.5 if server.status == "active" else None,
             }
 
-    def add_custom_server(self, name: str, transport: str = "stdio", command: Optional[str] = None, args: Optional[List[str]] = None, url: Optional[str] = None) -> Dict[str, Any]:
+    def add_custom_server(
+        self,
+        name: str,
+        transport: str = "stdio",
+        command: Optional[str] = None,
+        args: Optional[List[str]] = None,
+        url: Optional[str] = None,
+    ) -> Dict[str, Any]:
         with self._lock:
             server = MCPServerInfo(
                 name=name,
@@ -532,7 +577,9 @@ class MCPManager:
         cpu_started = psutil.Process().cpu_times()
         try:
             result = self._execute_tool(name, parameters, agent)
-            status = "error" if isinstance(result, dict) and (result.get("error") or result.get("ok") is False) else "ok"
+            status = (
+                "error" if isinstance(result, dict) and (result.get("error") or result.get("ok") is False) else "ok"
+            )
             return result
         except Exception:
             status = "error"
@@ -545,7 +592,9 @@ class MCPManager:
             MCP_SERVER_IN_FLIGHT.labels(mcp=mcp).dec()
             try:
                 cpu_finished = psutil.Process().cpu_times()
-                cpu_delta = max(0.0, (cpu_finished.user + cpu_finished.system) - (cpu_started.user + cpu_started.system))
+                cpu_delta = max(
+                    0.0, (cpu_finished.user + cpu_finished.system) - (cpu_started.user + cpu_started.system)
+                )
                 MCP_CPU.labels(mcp=mcp, tool=name).inc(cpu_delta)
                 MCP_MEMORY.labels(mcp=mcp).set(psutil.Process().memory_info().rss)
             except psutil.Error:
@@ -564,22 +613,26 @@ class MCPManager:
                 month_start = datetime.strptime(requested_month, "%Y-%m")
                 next_month = month_start.replace(day=28) + timedelta(days=4)
                 month_end = next_month.replace(day=1)
-                parameters.update({
-                    "_search_month": requested_month,
-                    "timeMin": month_start.replace(tzinfo=timezone.utc).isoformat(),
-                    "timeMax": month_end.replace(tzinfo=timezone.utc).isoformat(),
-                })
+                parameters.update(
+                    {
+                        "_search_month": requested_month,
+                        "timeMin": month_start.replace(tzinfo=timezone.utc).isoformat(),
+                        "timeMax": month_end.replace(tzinfo=timezone.utc).isoformat(),
+                    }
+                )
             except (TypeError, ValueError):
                 parameters.pop("date", None)
         if name == "google_calendar.list_events" and not parameters.get("timeMin"):
             now = datetime.now(timezone.utc)
-            parameters.update({
-                "timeMin": now.isoformat(),
-                "timeMax": (now + timedelta(days=30)).isoformat(),
-                "singleEvents": True,
-                "orderBy": "startTime",
-                "maxResults": 20,
-            })
+            parameters.update(
+                {
+                    "timeMin": now.isoformat(),
+                    "timeMax": (now + timedelta(days=30)).isoformat(),
+                    "singleEvents": True,
+                    "orderBy": "startTime",
+                    "maxResults": 20,
+                }
+            )
         if name == "google_calendar.list_events":
             now = datetime.now(timezone.utc)
             try:
@@ -618,8 +671,14 @@ class MCPManager:
                         return result
                     return self._execute_google_rest("drive", parameters)
                 if name.startswith("google_calendar."):
-                    result = self._execute_remote("https://calendarmcp.googleapis.com/mcp/v1", name.split(".", 1)[1], parameters)
-                    if result.get("ok") or name.split(".", 1)[1] not in {"list_calendars", "list_events", "search_events"}:
+                    result = self._execute_remote(
+                        "https://calendarmcp.googleapis.com/mcp/v1", name.split(".", 1)[1], parameters
+                    )
+                    if result.get("ok") or name.split(".", 1)[1] not in {
+                        "list_calendars",
+                        "list_events",
+                        "search_events",
+                    }:
                         return result
                     return self._execute_google_rest("calendar", parameters, name.split(".", 1)[1])
                 if name.startswith("gmail.") and name != "gmail.read_inbox":
@@ -629,6 +688,7 @@ class MCPManager:
                     return self._execute_remote("https://gmailmcp.googleapis.com/mcp/v1", operation, parameters)
                 if name.startswith("filesystem."):
                     from mcps.filesystem.server import create_filesystem_server
+
                     srv = create_filesystem_server()
                     if name in srv.handlers:
                         res = srv.handlers[name](parameters)
@@ -636,12 +696,14 @@ class MCPManager:
 
                 elif name == "web_search.search":
                     from mcps.web_search.server import create_web_search_server
+
                     srv = create_web_search_server()
                     res = srv.handlers[name](parameters)
                     return {"ok": "error" not in res, "result": res}
 
                 elif name.startswith("photography."):
                     from mcps.photography.server import create_photography_server
+
                     srv = create_photography_server()
                     if name in srv.handlers:
                         res = srv.handlers[name](parameters)
@@ -649,6 +711,7 @@ class MCPManager:
 
                 elif name.startswith("food."):
                     from mcps.food.server import create_food_server
+
                     srv = create_food_server()
                     if name in srv.handlers:
                         res = srv.handlers[name](parameters)
@@ -656,18 +719,21 @@ class MCPManager:
 
                 elif name == "transport.get_status":
                     from mcps.transport.server import create_transport_server
+
                     srv = create_transport_server()
                     res = srv.handlers[name](parameters)
                     return {"ok": not (isinstance(res, dict) and res.get("ok") is False), "result": res}
 
                 elif name == "system.run_command":
                     from mcps.system.server import create_system_server
+
                     srv = create_system_server()
                     res = srv.handlers[name](parameters)
                     return {"ok": "error" not in res, "result": res}
 
                 elif name.startswith("git."):
                     from mcps.git.server import create_git_server
+
                     srv = create_git_server()
                     if name in srv.handlers:
                         res = srv.handlers[name](parameters)
@@ -714,17 +780,24 @@ class MCPManager:
         access_token = MCPManager._google_access_token()
         if not access_token:
             return {"ok": False, "error": "Falta autorizar Google OAuth para ADA."}
-        payload = json.dumps({
-            "jsonrpc": "2.0",
-            "id": int(time.time() * 1000),
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": parameters or {}},
-        }).encode()
-        req = urllib.request.Request(url, data=payload, method="POST", headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-            "Authorization": f"Bearer {access_token}",
-        })
+        payload = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": int(time.time() * 1000),
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": parameters or {}},
+            }
+        ).encode()
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                "Authorization": f"Bearer {access_token}",
+            },
+        )
         try:
             with urllib.request.urlopen(req, timeout=60) as response:
                 body = json.loads(response.read().decode())
@@ -744,32 +817,42 @@ class MCPManager:
         if not access_token:
             return {"ok": False, "error": "Falta autorizar Google OAuth para ADA."}
         if service == "drive":
-            query = urllib.parse.urlencode({
-                "pageSize": parameters.get("pageSize", 100),
-                # Keep the cloud URL in the structured result so ADA can
-                # provide a direct Drive link without another round-trip.
-                "fields": "files(id,name,mimeType,modifiedTime,webViewLink,parents,size),nextPageToken",
-            })
+            query = urllib.parse.urlencode(
+                {
+                    "pageSize": parameters.get("pageSize", 100),
+                    # Keep the cloud URL in the structured result so ADA can
+                    # provide a direct Drive link without another round-trip.
+                    "fields": "files(id,name,mimeType,modifiedTime,webViewLink,parents,size),nextPageToken",
+                }
+            )
             url = "https://www.googleapis.com/drive/v3/files?" + query
         elif service == "gmail":
             if operation == "list_labels":
                 url = "https://gmail.googleapis.com/gmail/v1/users/me/labels"
             elif operation == "search_threads":
-                query = urllib.parse.urlencode({"q": parameters.get("query", ""), "maxResults": parameters.get("pageSize", 100)})
+                query = urllib.parse.urlencode(
+                    {"q": parameters.get("query", ""), "maxResults": parameters.get("pageSize", 100)}
+                )
                 url = "https://gmail.googleapis.com/gmail/v1/users/me/messages?" + query
             elif operation == "get_message":
-                url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + urllib.parse.quote(str(parameters.get("messageId", "")), safe="")
+                url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + urllib.parse.quote(
+                    str(parameters.get("messageId", "")), safe=""
+                )
             else:
-                url = "https://gmail.googleapis.com/gmail/v1/users/me/threads/" + urllib.parse.quote(str(parameters.get("threadId", "")), safe="")
+                url = "https://gmail.googleapis.com/gmail/v1/users/me/threads/" + urllib.parse.quote(
+                    str(parameters.get("threadId", "")), safe=""
+                )
         elif operation in {"list_events", "search_events"}:
-            query = urllib.parse.urlencode({
-                "maxResults": parameters.get("maxResults", parameters.get("pageSize", 100)),
-                "singleEvents": str(parameters.get("singleEvents", True)).lower(),
-                "orderBy": parameters.get("orderBy", "startTime"),
-                **({"timeMin": parameters["timeMin"]} if parameters.get("timeMin") else {}),
-                **({"timeMax": parameters["timeMax"]} if parameters.get("timeMax") else {}),
-                **({"q": parameters["query"]} if operation == "search_events" and parameters.get("query") else {}),
-            })
+            query = urllib.parse.urlencode(
+                {
+                    "maxResults": parameters.get("maxResults", parameters.get("pageSize", 100)),
+                    "singleEvents": str(parameters.get("singleEvents", True)).lower(),
+                    "orderBy": parameters.get("orderBy", "startTime"),
+                    **({"timeMin": parameters["timeMin"]} if parameters.get("timeMin") else {}),
+                    **({"timeMax": parameters["timeMax"]} if parameters.get("timeMax") else {}),
+                    **({"q": parameters["query"]} if operation == "search_events" and parameters.get("query") else {}),
+                }
+            )
             url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?" + query
         else:
             query = urllib.parse.urlencode({"maxResults": parameters.get("pageSize", 100)})
@@ -815,7 +898,9 @@ class MCPManager:
             try:
                 # Refresh one minute early; OAuth access tokens normally live
                 # for 3600 seconds and the vault stores when we received it.
-                token_is_fresh = bool(refreshed_at and expires_in and time.time() < float(refreshed_at) + float(expires_in) - 60)
+                token_is_fresh = bool(
+                    refreshed_at and expires_in and time.time() < float(refreshed_at) + float(expires_in) - 60
+                )
             except (TypeError, ValueError):
                 token_is_fresh = False
             if token_is_fresh or not refreshed_at:
@@ -831,12 +916,14 @@ class MCPManager:
         client_secret = token.get("client_secret") or vault.get("google_oauth_client_secret")
         if not client_id or not client_secret:
             return access_token
-        body = urllib.parse.urlencode({
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        }).encode()
+        body = urllib.parse.urlencode(
+            {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            }
+        ).encode()
         request = urllib.request.Request(
             "https://oauth2.googleapis.com/token",
             data=body,
@@ -850,12 +937,14 @@ class MCPManager:
             return access_token
         if not refreshed.get("access_token"):
             return access_token
-        refreshed.update({
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-            "refreshed_at": time.time(),
-            "scopes": token.get("scopes") or [s for s in token.get("scope", "").split() if s],
-        })
+        refreshed.update(
+            {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "refresh_token": refresh_token,
+                "refreshed_at": time.time(),
+                "scopes": token.get("scopes") or [s for s in token.get("scope", "").split() if s],
+            }
+        )
         vault.set("google_oauth_token", refreshed, meta={"provider": "google", "scopes": refreshed["scopes"]})
         return refreshed["access_token"]

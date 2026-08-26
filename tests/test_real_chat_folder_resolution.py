@@ -22,7 +22,9 @@ class RealChatFolderResolutionTests(unittest.TestCase):
                 calls.append(task)
                 folder = Path(task["payload"]["dir"])
                 dirs = sorted(str(path) for path in folder.iterdir() if path.is_dir())
-                return {"result": {"ok": True, "action": "list_dirs", "dir": str(folder), "dirs": dirs, "count": len(dirs)}}
+                return {
+                    "result": {"ok": True, "action": "list_dirs", "dir": str(folder), "dirs": dirs, "count": len(dirs)}
+                }
 
         return FakeAgent()
 
@@ -42,7 +44,9 @@ class RealChatFolderResolutionTests(unittest.TestCase):
 
                 def decide_and_run(self, task):
                     calls.append(task)
-                    return {"result": {"action": "list_files", "dir": task["payload"].get("dir"), "files": [], "count": 0}}
+                    return {
+                        "result": {"action": "list_files", "dir": task["payload"].get("dir"), "files": [], "count": 0}
+                    }
 
             service = WebChatService(FakeAgent(), FakeAgent.cfg)
             state = SimpleNamespace(conversation=[], pending_action=None)
@@ -110,10 +114,19 @@ class RealChatFolderResolutionTests(unittest.TestCase):
                     payload = task["payload"]
                     extensions = {value.lower() for value in payload.get("extensions", [])}
                     files = [
-                        str(path) for path in Path(payload["dir"]).iterdir()
+                        str(path)
+                        for path in Path(payload["dir"]).iterdir()
                         if path.is_file() and (not extensions or path.suffix.lower() in extensions)
                     ]
-                    return {"result": {"ok": True, "action": "list_files", "dir": payload["dir"], "files": files, "count": len(files)}}
+                    return {
+                        "result": {
+                            "ok": True,
+                            "action": "list_files",
+                            "dir": payload["dir"],
+                            "files": files,
+                            "count": len(files),
+                        }
+                    }
 
             service = WebChatService(FakeAgent(), FakeAgent.cfg)
             state = SimpleNamespace(conversation=[], pending_action=None, pending_path_action=None, current_path=None)
@@ -138,7 +151,9 @@ class RealChatFolderResolutionTests(unittest.TestCase):
 
                 def decide_and_run(self, task):
                     calls.append(task)
-                    return {"result": {"action": "list_dirs", "dir": task["payload"].get("dir"), "dirs": [], "count": 0}}
+                    return {
+                        "result": {"action": "list_dirs", "dir": task["payload"].get("dir"), "dirs": [], "count": 0}
+                    }
 
             service = WebChatService(FakeAgent(), FakeAgent.cfg)
             state = SimpleNamespace(conversation=[], pending_action=None)
@@ -176,8 +191,14 @@ class RealChatFolderResolutionTests(unittest.TestCase):
             base = Path(tmp) / "GoogleDrive"
             samsung = base / "Ara Samsung"
             for name in (
-                "360Panoramas", "AHIHI_COLLAGE", "DCIM", "Download",
-                "EditedOnlinePhotos", "WhatsApp", "bluetooth", "photocollage",
+                "360Panoramas",
+                "AHIHI_COLLAGE",
+                "DCIM",
+                "Download",
+                "EditedOnlinePhotos",
+                "WhatsApp",
+                "bluetooth",
+                "photocollage",
             ):
                 (samsung / name).mkdir(parents=True)
 

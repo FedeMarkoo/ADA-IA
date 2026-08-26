@@ -1,4 +1,5 @@
 """Shared web runtime state, session management and activity tracking for ADA."""
+
 from __future__ import annotations
 
 import logging
@@ -120,8 +121,18 @@ def activity_descriptor(phase: str, details: Dict[str, Any]) -> tuple[str, str, 
         "received": ("working", "Recibí el pedido", "Preparando la ejecución", "agent"),
         "route_local": ("working", "Eligiendo una ruta local", str(action or "filesystem"), "filesystem"),
         "route_rule": ("working", "Interpretando el pedido", str(action or "regla local"), "router"),
-        "folder_resolver_started": ("working", "Buscando la carpeta", str(details.get("context_path") or "Google Drive"), "filesystem"),
-        "folder_resolver_finished": ("working", "Carpeta localizada", str(details.get("path") or details.get("status") or ""), "filesystem"),
+        "folder_resolver_started": (
+            "working",
+            "Buscando la carpeta",
+            str(details.get("context_path") or "Google Drive"),
+            "filesystem",
+        ),
+        "folder_resolver_finished": (
+            "working",
+            "Carpeta localizada",
+            str(details.get("path") or details.get("status") or ""),
+            "filesystem",
+        ),
         "router_model_started": ("working", "Entendiendo la intención", "Clasificador de pedidos", "router"),
         "router_model_finished": ("working", "Intención comprendida", str(action or "conversación"), "router"),
         "model_started": ("working", "Pensando con el modelo", str(details.get("model") or "modelo local"), "model"),
@@ -150,15 +161,27 @@ def activity_descriptor(phase: str, details: Dict[str, Any]) -> tuple[str, str, 
             "OK" if details.get("ok", True) else (details.get("error") or "error"),
             str(details.get("server") or "mcp"),
         ),
-        "folder_index_updated": ("working", "Actualizando memoria de carpetas", str(details.get("parent") or ""), "sqlite-memory"),
+        "folder_index_updated": (
+            "working",
+            "Actualizando memoria de carpetas",
+            str(details.get("parent") or ""),
+            "sqlite-memory",
+        ),
         "completed": ("complete", "Tarea completada", str(details.get("detail") or "Resultado entregado"), None),
-        "error": ("error", "La tarea terminó con un error", str(details.get("detail") or details.get("error") or "Error"), None),
+        "error": (
+            "error",
+            "La tarea terminó con un error",
+            str(details.get("detail") or details.get("error") or "Error"),
+            None,
+        ),
         "timeout": ("error", "La tarea agotó el tiempo configurado", str(details.get("detail") or "Timeout"), None),
     }
     return descriptors.get(phase, ("working", "ADA está trabajando", phase.replace("_", " "), details.get("component")))
 
 
-def activity_update(runtime: Dict[str, Any], phase: str, details: Optional[Dict[str, Any]] = None, session_id: Optional[str] = None) -> None:
+def activity_update(
+    runtime: Dict[str, Any], phase: str, details: Optional[Dict[str, Any]] = None, session_id: Optional[str] = None
+) -> None:
     details = dict(details or {})
     lock = runtime.setdefault("activity_lock", threading.RLock())
     now = time.time()
@@ -190,13 +213,15 @@ def activity_update(runtime: Dict[str, Any], phase: str, details: Optional[Dict[
             }
 
         if phase.startswith("capability_"):
-            state.setdefault("execution_steps", []).append({
-                "phase": phase,
-                "server": details.get("server"),
-                "tool": details.get("tool"),
-                "ok": details.get("ok"),
-                "at": now,
-            })
+            state.setdefault("execution_steps", []).append(
+                {
+                    "phase": phase,
+                    "server": details.get("server"),
+                    "tool": details.get("tool"),
+                    "ok": details.get("ok"),
+                    "at": now,
+                }
+            )
 
         trace_entry = {
             "phase": phase,
@@ -206,7 +231,11 @@ def activity_update(runtime: Dict[str, Any], phase: str, details: Optional[Dict[
             "component": component,
             "model": state.get("model"),
             "role": state.get("role"),
-            "extra": {k: v for k, v in details.items() if k not in {"message", "detail"} and isinstance(v, (str, int, float, bool, list, dict))},
+            "extra": {
+                k: v
+                for k, v in details.items()
+                if k not in {"message", "detail"} and isinstance(v, (str, int, float, bool, list, dict))
+            },
             "at": now,
         }
 
@@ -214,11 +243,17 @@ def activity_update(runtime: Dict[str, Any], phase: str, details: Optional[Dict[
         trace.append(trace_entry)
         state["trace"] = trace[-30:]
 
-        state.update({
-            "status": status_value, "phase": phase, "label": label,
-            "detail": detail[:500], "component": component,
-            "session_id": session_id or state.get("session_id"), "updated_at": now,
-        })
+        state.update(
+            {
+                "status": status_value,
+                "phase": phase,
+                "label": label,
+                "detail": detail[:500],
+                "component": component,
+                "session_id": session_id or state.get("session_id"),
+                "updated_at": now,
+            }
+        )
         recent = list(state.get("recent") or [])
         recent.append({"phase": phase, "label": label, "detail": detail[:180], "status": status_value, "at": now})
         state["recent"] = recent[-12:]
@@ -257,7 +292,15 @@ def activity_snapshot(runtime: Dict[str, Any]) -> Dict[str, Any]:
         history = [dict(item) for item in _task_history[:10]]
     snapshot["history"] = history
     if snapshot.get("status") == "complete" and time.time() - float(snapshot.get("updated_at") or 0) > 8:
-        snapshot.update({"status": "idle", "phase": "idle", "label": "ADA está lista", "detail": "Esperando una tarea", "component": None})
+        snapshot.update(
+            {
+                "status": "idle",
+                "phase": "idle",
+                "label": "ADA está lista",
+                "detail": "Esperando una tarea",
+                "component": None,
+            }
+        )
     return snapshot
 
 
@@ -297,6 +340,7 @@ telegram_logs: deque = deque(maxlen=200)
 
 def resolve_telegram_token() -> str:
     from telegram.bot import resolve_telegram_token as resolve_token
+
     return resolve_token(get_runtime().get("cfg"))
 
 

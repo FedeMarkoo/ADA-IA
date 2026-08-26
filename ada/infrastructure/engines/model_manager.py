@@ -75,7 +75,9 @@ class ModelManager:
         self.provider_router = ProviderRouter(self.config)
         self.local_runtime = LocalModelRuntime(self.config)
         if self.config.get("ollama_auto_unload", False):
-            self._ollama_reaper = threading.Thread(target=self._ollama_reaper_loop, name="ada-ollama-reaper", daemon=True)
+            self._ollama_reaper = threading.Thread(
+                target=self._ollama_reaper_loop, name="ada-ollama-reaper", daemon=True
+            )
             self._ollama_reaper.start()
 
     def _ollama_reaper_loop(self):
@@ -165,6 +167,7 @@ class ModelManager:
         """Load optional provider keys from the encrypted vault, never config."""
         try:
             from ada.infrastructure.credentials import SecureVault
+
             vault = SecureVault()
             self.openai_key = self.openai_key or vault.get("openai_api_key")
             self.gemini_key = self.gemini_key or vault.get("gemini_api_key")
@@ -221,7 +224,9 @@ class ModelManager:
                 "name": name,
                 "roles": roles,
                 "min_ram_gb": max(2.0, round(params * 0.75, 1)) if params else 4.0,
-                "quality_tier": "huge" if params >= 24 else "large" if params >= 12 else "medium" if params >= 7 else "small",
+                "quality_tier": (
+                    "huge" if params >= 24 else "large" if params >= 12 else "medium" if params >= 7 else "small"
+                ),
                 "description": "Modelo instalado detectado automáticamente.",
             }
         profile.setdefault("name", name)
@@ -290,12 +295,14 @@ class ModelManager:
         for role in self.MODEL_ROLES:
             budget = self._mode_budget(mode, role, profile)
             candidates = [
-                item for item in installed
+                item
+                for item in installed
                 if role in set(item.get("roles") or []) and float(item.get("min_ram_gb", 0) or 0) <= budget
             ]
             if role == "router" and not candidates:
                 candidates = [
-                    item for item in installed
+                    item
+                    for item in installed
                     if "chat" in set(item.get("roles") or [])
                     and float(item.get("parameters_b") or 0) <= 4
                     and float(item.get("min_ram_gb", 0) or 0) <= budget
@@ -303,7 +310,11 @@ class ModelManager:
             if mode == "light" or role == "router" or (mode == "hybrid" and role == "chat"):
                 ordered = sorted(
                     candidates,
-                    key=lambda item: (float(item.get("min_ram_gb", 0)), float(item.get("parameters_b", 0)), item["name"]),
+                    key=lambda item: (
+                        float(item.get("min_ram_gb", 0)),
+                        float(item.get("parameters_b", 0)),
+                        item["name"],
+                    ),
                 )
             else:
                 ordered = sorted(candidates, key=lambda item: (-self._role_power(item, role), item["name"]))
@@ -331,18 +342,27 @@ class ModelManager:
         cores = max(1, int(profile.get("cpu_cores") or 1))
         settings = {
             "light": {
-                "cpu_limit_percent": 50, "ollama_num_thread": min(4, cores), "ollama_num_ctx": 4096,
-                "ollama_keep_alive": "2m", "chat_max_tokens": 256,
+                "cpu_limit_percent": 50,
+                "ollama_num_thread": min(4, cores),
+                "ollama_num_ctx": 4096,
+                "ollama_keep_alive": "2m",
+                "chat_max_tokens": 256,
                 "model_role_max_tokens": {"chat": 256, "reasoning": 512, "coding": 768, "tools": 512},
             },
             "hybrid": {
-                "cpu_limit_percent": 75, "ollama_num_thread": min(6, cores), "ollama_num_ctx": 4096,
-                "ollama_keep_alive": "10m", "chat_max_tokens": 768,
+                "cpu_limit_percent": 75,
+                "ollama_num_thread": min(6, cores),
+                "ollama_num_ctx": 4096,
+                "ollama_keep_alive": "10m",
+                "chat_max_tokens": 768,
                 "model_role_max_tokens": {"chat": 768, "reasoning": 1600, "coding": 2048, "tools": 1024},
             },
             "turbo": {
-                "cpu_limit_percent": 100, "ollama_num_thread": cores, "ollama_num_ctx": 16000,
-                "ollama_keep_alive": "30m", "chat_max_tokens": 1200,
+                "cpu_limit_percent": 100,
+                "ollama_num_thread": cores,
+                "ollama_num_ctx": 16000,
+                "ollama_keep_alive": "30m",
+                "chat_max_tokens": 1200,
                 "model_role_max_tokens": {"chat": 1200, "reasoning": 2400, "coding": 3200, "tools": 1600},
             },
         }
@@ -376,8 +396,7 @@ class ModelManager:
                 for candidate in sorted(self.AUTO_MODES)
             },
             "runtime_presets": {
-                candidate: self.runtime_settings_for_mode(candidate, hardware)
-                for candidate in sorted(self.AUTO_MODES)
+                candidate: self.runtime_settings_for_mode(candidate, hardware) for candidate in sorted(self.AUTO_MODES)
             },
             "warnings": warnings,
         }
@@ -570,7 +589,11 @@ class ModelManager:
             return routed
         if privacy == "high" and self.provider in self.LOCAL_PROVIDERS | {"gpt4all"} and available.get(self.provider):
             return self.provider
-        if privacy != "high" and complexity <= int(self.config.get("local_max_complexity", 5)) and available.get(self.provider):
+        if (
+            privacy != "high"
+            and complexity <= int(self.config.get("local_max_complexity", 5))
+            and available.get(self.provider)
+        ):
             return self.provider
         if self.provider in available and available[self.provider] and privacy != "high":
             return self.provider
@@ -593,8 +616,10 @@ class ModelManager:
 
     def call(self, provider, prompt, **kwargs):
         started = time.monotonic()
-        model_tag = kwargs.get("ollama_model") or kwargs.get(f"{provider}_model") or (
-            self._model("chat", "ollama_model", "llama3.2:3b") if provider in self.LOCAL_PROVIDERS else "default"
+        model_tag = (
+            kwargs.get("ollama_model")
+            or kwargs.get(f"{provider}_model")
+            or (self._model("chat", "ollama_model", "llama3.2:3b") if provider in self.LOCAL_PROVIDERS else "default")
         )
         tags = {"provider": provider, "model": model_tag}
         self.metrics.increment("provider.calls", tags=tags)
@@ -603,7 +628,11 @@ class ModelManager:
         failed = False
         try:
             if provider in self.LOCAL_PROVIDERS:
-                return self._call_llama_cpp(prompt, **kwargs) if provider == "llama_cpp" else self._call_ollama(prompt, **kwargs)
+                return (
+                    self._call_llama_cpp(prompt, **kwargs)
+                    if provider == "llama_cpp"
+                    else self._call_ollama(prompt, **kwargs)
+                )
             if provider == "openai":
                 return self._call_openai(prompt, **kwargs)
             if provider == "openrouter":
@@ -734,10 +763,15 @@ class ModelManager:
         model = kwargs.get("llama_cpp_model") or self.local_runtime.model_alias
         payload = {
             "model": model,
-            "messages": [{"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + image_base64}},
-            ]}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + image_base64}},
+                    ],
+                }
+            ],
             "stream": False,
             "temperature": kwargs.get("temperature", 0.1),
             "response_format": {"type": "json_object"},
@@ -807,11 +841,23 @@ class ModelManager:
         model = kwargs.get("gemini_model", self.config.get("gemini_model", "gemini-3.6-flash"))
         parts = [{"text": prompt}]
         if image_base64:
-            parts.append({"inline_data": {"mime_type": kwargs.get("image_mime_type", "image/jpeg"), "data": image_base64}})
-        payload = json.dumps({"contents": [{"role": "user", "parts": parts}], "generationConfig": {
-            "temperature": kwargs.get("temperature", 0.2), "maxOutputTokens": kwargs.get("max_tokens", 1024),
-        }}).encode("utf-8")
-        url = "https://generativelanguage.googleapis.com/v1beta/models/" + urllib.parse.quote(model, safe="") + ":generateContent"
+            parts.append(
+                {"inline_data": {"mime_type": kwargs.get("image_mime_type", "image/jpeg"), "data": image_base64}}
+            )
+        payload = json.dumps(
+            {
+                "contents": [{"role": "user", "parts": parts}],
+                "generationConfig": {
+                    "temperature": kwargs.get("temperature", 0.2),
+                    "maxOutputTokens": kwargs.get("max_tokens", 1024),
+                },
+            }
+        ).encode("utf-8")
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            + urllib.parse.quote(model, safe="")
+            + ":generateContent"
+        )
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": self.gemini_key or "",
@@ -831,10 +877,20 @@ class ModelManager:
     def _call_groq(self, prompt, **kwargs):
         """Call Groq's OpenAI-compatible chat completions endpoint."""
         model = kwargs.get("groq_model", self.config.get("groq_model", "llama-3.3-70b-versatile"))
-        payload = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
-                              "temperature": kwargs.get("temperature", 0.2), "max_tokens": kwargs.get("max_tokens", 1024)}).encode("utf-8")
-        request = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions", data=payload,
-                                          headers={"Content-Type": "application/json", "Authorization": "Bearer " + (self.groq_key or "")}, method="POST")
+        payload = json.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": kwargs.get("temperature", 0.2),
+                "max_tokens": kwargs.get("max_tokens", 1024),
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=payload,
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + (self.groq_key or "")},
+            method="POST",
+        )
         try:
             with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 180)) as response:
                 data = json.loads(response.read().decode("utf-8"))
