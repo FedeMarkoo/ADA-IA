@@ -59,6 +59,19 @@ class TestModelManager(unittest.TestCase):
             self.assertEqual(self.manager._call_openai("two", api_key="key"), "ok")
         factory.assert_called_once_with(api_key="key", base_url=None)
 
+    def test_route_hints_resolve_to_allowlisted_role_and_fallbacks(self):
+        manager = ModelManager(
+            {
+                "model_policy": {"reasoning": {"preferred": "reasoner", "fallbacks": ["small"]}},
+                "models": {"reasoning": "reasoner"},
+                "engine_provider": "unknown",
+            }
+        )
+        selection = manager.select_model_for_route({"task_type": "reasoning", "complexity": 8})
+        self.assertEqual(selection["role"], "reasoning")
+        self.assertEqual(selection["model"], "reasoner")
+        self.assertIn("small", selection["fallbacks"])
+
     def test_automatic_policy_is_cached_until_reload(self):
         manager = ModelManager({"model_selection_mode": "light", "local_runtime": {"auto_start": False}})
         with patch.object(manager, "automatic_policy", return_value={"chat": {"preferred": "small"}}) as build:

@@ -110,6 +110,17 @@ class IntentRouter:
                 {
                     "tool": {"type": "string"},
                     "parameters": {"type": "object", "additionalProperties": True},
+                    "task_type": {
+                        "type": "string",
+                        "enum": ["chat", "reasoning", "coding", "vision", "tools", "classification"],
+                    },
+                    "complexity": {"type": "integer", "minimum": 1, "maximum": 10},
+                    "model_hint": {"type": "string"},
+                    "required_capabilities": {"type": "array", "items": {"type": "string"}},
+                    "privacy": {"type": "string", "enum": ["high", "normal", "low"]},
+                    "latency": {"type": "string", "enum": ["fast", "balanced", "quality"]},
+                    "requires_tool_calling": {"type": "boolean"},
+                    "estimated_output_tokens": {"type": "integer", "minimum": 1},
                 }
             )
         return schema
@@ -451,6 +462,13 @@ class IntentRouter:
                     "confidence": self._confidence(candidate.get("confidence")),
                 }
             )
+            result.setdefault("task_type", "tools")
+            result.setdefault("complexity", 4)
+            result.setdefault("model_hint", "tools")
+            result.setdefault("required_capabilities", ["tool_calling"])
+            result.setdefault("privacy", self.config.get("privacy_default", "normal"))
+            result.setdefault("latency", "balanced")
+            result.setdefault("requires_tool_calling", True)
             return result
         if action not in self._allowed_actions():
             return fallback

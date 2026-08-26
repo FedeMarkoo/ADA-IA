@@ -13,7 +13,7 @@ Reemplazar el muro de regex en español para detectar intenciones por un registr
 | ARQ-06 | Router pequeño, determinista y sin contexto completo | ✅ Implementado |
 | ARQ-07 | Validación de tool y parámetros antes de ejecutar; fallback a chat | ✅ Implementado |
 | ARQ-08 | Suite de evaluación para comandos, chat, MCPs y seguridad | ✅ Implementado |
-| ARQ-09 | Selector de modelos LiteLLM informado por señales del router | 🟡 Propuesto |
+| ARQ-09 | Selector de modelos LiteLLM informado por señales del router | ✅ Implementado |
 
 ## Flujo de cuatro capas
 

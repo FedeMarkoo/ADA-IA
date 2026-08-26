@@ -77,6 +77,10 @@ class Agent:
 
     def decide_and_run(self, task):
         task = dict(task)
+        if task.get("task_type") and not task.get("model_role"):
+            task["model_role"] = task["task_type"]
+        if task.get("model_hint") in {"chat", "reasoning", "coding", "vision", "tools", "router"}:
+            task.setdefault("model_role", task["model_hint"])
         task.setdefault("complexity", self.estimate_complexity(task.get("prompt", "")))
         provider = self.model_manager.choose(task)
         self.history.append({"task": task, "chosen_model": provider})

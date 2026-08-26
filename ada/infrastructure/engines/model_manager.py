@@ -457,6 +457,27 @@ class ModelManager:
                 return name
         return names[0] if names else ""
 
+    def select_model_for_route(self, route):
+        """Resolve router hints into an allowlisted model selection."""
+        route = dict(route or {})
+        task_type = str(route.get("task_type") or route.get("model_hint") or "chat").lower()
+        role = task_type if task_type in self.MODEL_ROLES else self.role_for_task(route)
+        if route.get("requires_tool_calling"):
+            role = "tools"
+        task = dict(route)
+        task["model_role"] = role
+        model = self.select_model(task, role=role)
+        fallbacks = [name for name in self._model_candidates(task, role) if name != model]
+        return {
+            "model": model,
+            "fallbacks": fallbacks[:3],
+            "provider": self.choose(task),
+            "role": role,
+            "task_type": task_type,
+            "complexity": max(1, min(10, int(route.get("complexity", 4) or 4))),
+            "reason": f"task_type={task_type}; complexity={route.get('complexity', 4)}; role={role}",
+        }
+
     @staticmethod
     def role_for_task(task):
         explicit = task.get("model_role")
