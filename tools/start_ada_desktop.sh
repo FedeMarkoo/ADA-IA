@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VENV_SITE="$DIR/.venv/lib/python3.14/site-packages"
+VENV_SITE="$(find "$DIR/.venv/lib" -maxdepth 2 -type d -name 'site-packages' 2>/dev/null | head -n 1)"
 SYSTEM_PYTHON="${ADA_SYSTEM_PYTHON:-/usr/bin/python3}"
 
 if [[ ! -x "$SYSTEM_PYTHON" ]]; then
