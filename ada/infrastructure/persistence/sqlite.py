@@ -833,6 +833,29 @@ class Memory:
             )
             self.conn.commit()
 
+    def compact_conversation(self, session, summary, keep_messages=40):
+        """Persist a bounded summary and remove only the older message rows."""
+        keep_messages = max(1, int(keep_messages))
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT id FROM conversation_messages WHERE session=? ORDER BY id DESC LIMIT ?",
+                (session, keep_messages),
+            ).fetchall()
+            if not rows:
+                return 0
+            oldest_kept_id = rows[-1][0]
+            cursor = self.conn.execute(
+                "DELETE FROM conversation_messages WHERE session=? AND id<?",
+                (session, oldest_kept_id),
+            )
+            self.conn.execute(
+                "INSERT INTO conversation_summaries(session, summary, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT(session) DO UPDATE SET summary=excluded.summary, updated_at=CURRENT_TIMESTAMP",
+                (session, self._seal(summary or "")),
+            )
+            self.conn.commit()
+            return cursor.rowcount
+
     def clear_conversation(self, session="main"):
         with self._lock:
             self.conn.execute("DELETE FROM conversation_messages WHERE session=?", (session,))

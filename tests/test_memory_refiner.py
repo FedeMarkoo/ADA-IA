@@ -82,6 +82,27 @@ class TestMemoryRefiner(unittest.TestCase):
         remaining = len(self.mem.recent_tasks(limit=1000))
         self.assertEqual(remaining, 500)
 
+    def test_compacts_long_conversation_and_keeps_recent_messages(self):
+        self.refiner.config.update(
+            {
+                "memory_compaction_threshold_messages": 20,
+                "memory_compaction_keep_messages": 6,
+                "memory_compaction_max_summary_chars": 500,
+            }
+        )
+        self.refiner.compactor.config = self.refiner.config
+        self.mem.append_conversation(
+            [{"role": "user", "text": f"mensaje histórico {i}"} for i in range(30)], session="long"
+        )
+
+        result = self.refiner._compact_conversations()
+
+        self.assertEqual(result["sessions"], 1)
+        self.assertEqual(result["messages"], 24)
+        self.assertEqual(len(self.mem.conversation(session="long", limit=100)), 6)
+        self.assertIn("mensaje histórico 0", self.mem.get_conversation_summary("long"))
+        self.assertLessEqual(len(self.mem.get_conversation_summary("long")), 500)
+
 
 if __name__ == "__main__":
     unittest.main()

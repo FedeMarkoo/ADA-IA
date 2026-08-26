@@ -69,6 +69,10 @@ def load_config(path: Path | str | None = None, project_root: Path | str | None 
         logger.warning("allowed_roots_empty_fail_closed path=%s", config_path)
     config.setdefault("confirm_risky", True)
     config.setdefault("memory_encryption", False)
+    config.setdefault("memory_compaction_enabled", True)
+    config.setdefault("memory_compaction_threshold_messages", 100)
+    config.setdefault("memory_compaction_keep_messages", 40)
+    config.setdefault("memory_compaction_max_summary_chars", 6000)
     config.setdefault("allowed_commands", [])
     # Agent work is allowed to take minutes. These limits are intentionally
     # independent from the selected model/performance mode.

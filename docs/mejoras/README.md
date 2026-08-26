@@ -27,6 +27,7 @@ Este directorio contiene el registro modular de mejoras, correcciones de segurid
 | **PERF-01** | Performance | Concurrencia, cachés, streaming y resiliencia del runtime | 🟠 Priorizado | Auditoría 2026-08 | [11-performance-y-resiliencia.md](11-performance-y-resiliencia.md) |
 | **ARQ-04** | Arquitectura | Registro único de tools y routing estructurado sin regex | 🟡 Propuesto | Diseño 2026-08 | [12-registro-de-tools-y-routing.md](12-registro-de-tools-y-routing.md) |
 | **ARQ-09** | Model Routing | Selector de modelos para LiteLLM informado por el router | ✅ Implementado | `f78bf75` | [12-registro-de-tools-y-routing.md](12-registro-de-tools-y-routing.md) |
+| **MEM-01** | Memoria | Compactador local de conversaciones largas con retención configurable | ✅ Implementado | `En este branch` | [13-compactador-de-memoria.md](13-compactador-de-memoria.md) |
 
 ---
 
@@ -44,3 +45,4 @@ Este directorio contiene el registro modular de mejoras, correcciones de segurid
 10. [10. Seguridad fail-closed](10-seguridad-fail-closed.md)
 11. [11. Performance y resiliencia](11-performance-y-resiliencia.md)
 12. [12. Registro de tools y routing](12-registro-de-tools-y-routing.md)
+13. [13. Compactador de memoria](13-compactador-de-memoria.md)

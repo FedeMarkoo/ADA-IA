@@ -15,6 +15,8 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+from ada.application.services.memory_compactor import MemoryCompactor
+
 logger = logging.getLogger("ada.memory_refiner")
 
 
@@ -27,6 +29,7 @@ class MemoryRefiner:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._last_run: float = 0.0
+        self.compactor = MemoryCompactor(memory, self.config)
 
     @property
     def interval_seconds(self) -> int:
@@ -89,6 +92,7 @@ class MemoryRefiner:
         extracted_facts = self._extract_knowledge_from_conversations()
         pruned_memories = self._prune_stale_memories()
         pruned_tasks = self._prune_old_tasks()
+        compacted = self._compact_conversations()
         with self._lock:
             self._last_run = time.time()
             current_time = self._last_run
@@ -96,10 +100,20 @@ class MemoryRefiner:
             "extracted_facts": extracted_facts,
             "pruned_memories": pruned_memories,
             "pruned_tasks": pruned_tasks,
+            "compacted_sessions": compacted["sessions"],
+            "compacted_messages": compacted["messages"],
             "timestamp": current_time,
         }
         logger.info("memory_refiner_completed: %s", summary)
         return summary
+
+    def _compact_conversations(self) -> Dict[str, int]:
+        try:
+            sessions = self.memory.list_recent_sessions(limit=50)
+            return self.compactor.compact_sessions(sessions)
+        except Exception as exc:
+            logger.warning("memory_compaction_failed: %s", exc)
+            return {"sessions": 0, "messages": 0}
 
     def _extract_knowledge_from_conversations(self) -> int:
         """Scan recent conversations for user preferences, facts, and corrections."""

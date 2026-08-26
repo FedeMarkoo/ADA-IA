@@ -24,6 +24,10 @@
   "data_dir": "~/Desktop/ADA_Data",
   "db_path": "~/Desktop/ADA_Data/memory.db",
   "memory_encryption": false,
+  "memory_compaction_enabled": true,
+  "memory_compaction_threshold_messages": 100,
+  "memory_compaction_keep_messages": 40,
+  "memory_compaction_max_summary_chars": 6000,
   "photo_root": "~/GoogleDrive/Fotos",
   "photo_executor": "thread",
   "allowed_roots": [
