@@ -43,17 +43,13 @@ ADA/
 ## Índices de documentación
 
 - [Documentación general](docs/README.md)
-- [Arquitectura](docs/architecture/overview.md)
-- [Estructura de carpetas](docs/architecture/folder-structure.md)
-- [Inicio rápido](docs/guides/getting-started.md)
-- [Operaciones y diagnóstico](docs/guides/operations.md)
-- [Desarrollo y tests](docs/guides/development.md)
-- [Herramientas MCP](docs/mcps/README.md)
-- [Dashboard y API](docs/dashboard/README.md)
-- [Modelos y benchmarks](docs/models/README.md)
-- [Telegram](docs/telegram/README.md)
-- [Mejoras y roadmap](docs/mejoras/README.md)
-- [Changelog](docs/CHANGELOG.md)
+- [Presentación](docs/01-presentacion/README.md)
+- [Instalación y primer uso](docs/02-instalacion-y-primer-uso/README.md)
+- [Tecnologías y arquitectura](docs/03-tecnologias-y-arquitectura/README.md)
+- [Flujos completos](docs/03-tecnologias-y-arquitectura/flujos/README.md)
+- [Métricas y operaciones](docs/04-observabilidad-y-operaciones/README.md)
+- [Mejoras, roadmap y changelog](docs/05-evolucion-del-proyecto/README.md)
+- [Documentación histórica](docs_old/README.md)
 
 ## Instalación y ejecución
 

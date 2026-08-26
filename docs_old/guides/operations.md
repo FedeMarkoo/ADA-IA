@@ -27,6 +27,7 @@ Si ADA corre dentro de Docker en vez de en el host, cambiá el target de
 - `ada_mcp_running` y `ada_mcp_tool_enabled`: estado operativo de MCPs y tools.
 - `ada_mcp_memory_bytes` y `ada_mcp_cpu_seconds_total`: recursos observados por MCP/tool.
 - `ada_system_memory_bytes{state}` y `ada_system_cpu_usage_ratio`: recursos disponibles del sistema.
+- `ada_system_gpu_usage_ratio`, `ada_system_gpu_memory_bytes{state}` y `ada_system_gpu_available`: uso y memoria de GPU; usa `nvidia-smi` en NVIDIA y una estimación por frecuencia GT en Intel integrada.
 - `ada_process_memory_bytes`, `ada_process_cpu_usage_ratio` y `ada_process_uptime_seconds`: recursos de ADA.
 - `ada_component_memory_bytes{component}`, `ada_component_cpu_usage_ratio{component}` y `ada_component_running{component}`: ADA, Ollama, Telegram, Prometheus y Grafana cuando son detectables como procesos.
 - `ada_responses_total{source,status}`: respuestas de ADA separadas en `ok` y `error`.

@@ -1,38 +1,62 @@
-# Documentación de ADA-IA
+# ADA-IA — Documentación
 
-ADA-IA es un asistente local con modelos de lenguaje, herramientas MCP, dashboard, automatizaciones y canales externos. Esta página es el punto de entrada: elegí el recorrido según lo que necesites hacer.
+ADA es un agente local-first que recibe pedidos desde distintos canales, interpreta la intención, selecciona modelos, consulta memoria y ejecuta herramientas MCP con políticas de seguridad y confirmación.
 
-## Empezar a usar ADA
+![Núcleo de ADA](01-presentacion/assets/nucleo.png)
 
-1. [Instalación e inicio](guides/getting-started.md): preparar el entorno y abrir ADA.
-2. [Guía de uso del dashboard](user-guide.md): operar cada pantalla con capturas reales.
-3. [Aplicación de escritorio](desktop.md): requisitos y ejecución del shell GTK/WebKit.
-4. [Operaciones y diagnóstico](guides/operations.md): salud, métricas, backups y alertas.
+## Índice
 
-## Usar y configurar capacidades
+### 1. Presentación
 
-- [Dashboard y API](dashboard/README.md): alcance del panel, navegación y accesos rápidos.
-- [Referencia REST y SSE](dashboard/api-reference.md): contratos de la API, capacidades y servidores MCP.
-- [Herramientas MCP](mcps/README.md): registro, protocolo y herramientas disponibles.
-- [Modelos y benchmarks](models/README.md): catálogo, roles y mediciones.
-- [Telegram](telegram/README.md): bot, configuración y ejecución.
+- [1.1 Visión y propósito](01-presentacion/vision-y-proposito.md)
+- [1.2 Capacidades](01-presentacion/capacidades.md)
+- [1.3 Interfaz y experiencia](01-presentacion/interfaz-y-experiencia.md)
+- [1.4 Glosario](01-presentacion/glosario.md)
 
-## Entender la implementación
+### 2. Instalación y primer uso
 
-- [Arquitectura](architecture/overview.md): componentes y responsabilidades.
-- [Flujo de una petición](architecture/data-flow.md): router, seguridad, modelos, MCPs y memoria.
-- [Estructura del proyecto](architecture/folder-structure.md): módulos y límites.
-- [Flujos técnicos completos](architecture/complete-flows.md): secuencias, seguridad y SSE.
-- [Routing multiproveedor](architecture/llm-routing-and-omnirouter.md): política de proveedores y OmniRoute.
-- [Auditoría UX/UI](architecture/ux-audit.md): decisiones de diseño del dashboard.
+- [2.1 Requisitos](02-instalacion-y-primer-uso/requisitos.md)
+- [2.2 Instalación](02-instalacion-y-primer-uso/instalacion.md)
+- [2.3 Configuración inicial](02-instalacion-y-primer-uso/configuracion-inicial.md)
+- [2.4 Ollama y modelos](02-instalacion-y-primer-uso/ollama-y-modelos.md)
+- [2.5 Primer prompt](02-instalacion-y-primer-uso/primer-prompt.md)
+- [2.6 Solución de problemas](02-instalacion-y-primer-uso/solucionar-problemas.md)
 
-## Mantenimiento y decisiones
+### 3. Tecnologías y arquitectura
 
-- [Desarrollo y tests](guides/development.md)
-- [Mejoras y roadmap](mejoras/README.md)
-- [Changelog](CHANGELOG.md)
+- [3.1 Stack tecnológico](03-tecnologias-y-arquitectura/stack-tecnologico.md)
+- [3.2 Arquitectura general](03-tecnologias-y-arquitectura/arquitectura-general.md)
+- [3.3 Componentes principales](03-tecnologias-y-arquitectura/componentes-principales.md)
+- [3.4 Persistencia y modelo de datos](03-tecnologias-y-arquitectura/persistencia-y-modelo-de-datos.md)
+- [3.5 Memoria](03-tecnologias-y-arquitectura/memoria.md)
+- [3.6 Modelos y selector](03-tecnologias-y-arquitectura/modelos-y-selector.md)
+- [3.7 MCPs](03-tecnologias-y-arquitectura/mcps.md)
 
-## Capturas
+#### 3.8 Flujos de ejecución
 
-La [galería de capturas](screenshots/README.md) reúne las 12 vistas del dashboard. Las mismas imágenes aparecen contextualizadas dentro de la [guía de uso](user-guide.md), no hace falta revisar la galería para seguir el recorrido normal.
+- [3.8.1 Flujo completo del prompt](03-tecnologias-y-arquitectura/flujos/01-flujo-completo-del-prompt.md)
+- [3.8.2 Routing y clasificación](03-tecnologias-y-arquitectura/flujos/02-routing-y-clasificacion.md)
+- [3.8.3 Selector de modelos](03-tecnologias-y-arquitectura/flujos/03-selector-de-modelos.md)
+- [3.8.4 Memoria y contexto](03-tecnologias-y-arquitectura/flujos/04-memoria-y-contexto.md)
+- [3.8.5 MCPs y herramientas](03-tecnologias-y-arquitectura/flujos/05-mcps-y-herramientas.md)
+- [3.8.6 Confirmación y seguridad](03-tecnologias-y-arquitectura/flujos/06-confirmacion-y-seguridad.md)
+- [3.8.7 Streaming, fallbacks y errores](03-tecnologias-y-arquitectura/flujos/07-streaming-fallbacks-y-errores.md)
+- [3.8.8 Refinería y compactación](03-tecnologias-y-arquitectura/flujos/08-refineria-y-compactacion.md)
 
+### 4. Observabilidad y operaciones
+
+- [4.1 Métricas](04-observabilidad-y-operaciones/metricas.md)
+- [4.2 Dashboards](04-observabilidad-y-operaciones/dashboards.md)
+- [4.3 Healthcheck y diagnóstico](04-observabilidad-y-operaciones/healthcheck-y-diagnostico.md)
+- [4.4 Logs, auditoría y backups](04-observabilidad-y-operaciones/logs-auditoria-y-backups.md)
+- [4.5 Rendimiento y mantenimiento](04-observabilidad-y-operaciones/rendimiento-y-mantenimiento.md)
+
+### 5. Evolución del proyecto
+
+- [5.1 Changelog](05-evolucion-del-proyecto/changelog.md)
+- [5.2 Mejoras implementadas](05-evolucion-del-proyecto/mejoras/README.md)
+- [5.3 Roadmap](05-evolucion-del-proyecto/roadmap.md)
+- [5.4 Decisiones de arquitectura](05-evolucion-del-proyecto/decisiones-de-arquitectura.md)
+- [5.5 Propuestas pendientes](05-evolucion-del-proyecto/propuestas-pendientes.md)
+
+La documentación histórica anterior se conserva en [`docs_old/`](../docs_old/).
