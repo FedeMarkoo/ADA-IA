@@ -234,7 +234,7 @@ class ChatPathRegressionTests(unittest.TestCase):
 
 class TelegramRegressionTests(unittest.TestCase):
     def test_processed_update_ids_are_bounded_and_deduplicated(self):
-        bot = TelegramListener({"telegram": {"token": "test"}})
+        bot = TelegramListener({"telegram": {"token": "test", "allowed_chat_ids": [10]}})
         bot._remember_update(123)
         bot._remember_update(123)
         self.assertEqual(len(bot._processed_update_ids), 1)
@@ -245,7 +245,7 @@ class TelegramRegressionTests(unittest.TestCase):
         self.assertIn(4095, bot._processed_update_ids)
 
     def test_duplicate_update_is_not_processed_twice(self):
-        bot = TelegramListener({"telegram": {"token": "test"}})
+        bot = TelegramListener({"telegram": {"token": "test", "allowed_chat_ids": [10]}})
         bot._invoke_internal_chat = Mock(return_value="respuesta")
         bot.send_message = Mock()
         update = {

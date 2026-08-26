@@ -569,6 +569,8 @@ class MCPManager:
 
     def execute_tool(self, name: str, parameters: Dict[str, Any], agent: Any = None) -> Dict[str, Any]:
         """Execute one tool and record complete MCP-level telemetry."""
+        parameters = dict(parameters or {})
+        confirmed = bool(parameters.pop("_confirmed", False))
         definition = self.get_tool(name) or {}
         mcp = str(definition.get("server") or "unknown")
         MCP_IN_FLIGHT.labels(mcp=mcp, tool=name).inc()
@@ -576,6 +578,9 @@ class MCPManager:
         started = time.monotonic()
         cpu_started = psutil.Process().cpu_times()
         try:
+            if definition.get("requires_confirmation") and not confirmed:
+                status = "error"
+                return {"ok": False, "error": "confirmation_required", "tool": name}
             result = self._execute_tool(name, parameters, agent)
             status = (
                 "error" if isinstance(result, dict) and (result.get("error") or result.get("ok") is False) else "ok"
