@@ -8,6 +8,13 @@ from ada.capabilities.data.git import run as git_capability_run
 
 
 class TestGitMCP(unittest.TestCase):
+    def test_add_terminates_options_before_paths(self):
+        mgr = GitManager()
+        with patch.object(mgr, "_run_git", return_value={"ok": True}) as run_git:
+            result = mgr.add({"files": ["--intentional-option", "file.txt"]})
+        self.assertTrue(result["ok"])
+        self.assertEqual(run_git.call_args.args[0], ["add", "--", "--intentional-option", "file.txt"])
+
     def test_git_manager_status_success(self):
         mgr = GitManager()
         fake_porcelain = "## main...origin/main\n M ada/config.py\n?? new_file.py\nM  staged.py\n"

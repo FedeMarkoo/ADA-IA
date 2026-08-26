@@ -132,7 +132,8 @@ class GitManager:
         if isinstance(files, str):
             files = [files]
 
-        cmd = ["add"] + files
+        # End git options before accepting user-controlled paths.
+        cmd = ["add", "--"] + files
         res = self._run_git(cmd)
         if not res.get("ok"):
             return {"ok": False, "error": res.get("stderr") or res.get("error")}
