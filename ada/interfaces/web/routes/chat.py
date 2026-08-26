@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import threading
 import time
 from queue import Empty, Queue
 from flask import Blueprint, Response, jsonify, request, stream_with_context
@@ -183,7 +184,10 @@ def activity_stream():
     @stream_with_context
     def generate():
         last_state = None
+        condition = runtime.setdefault("activity_condition", threading.Condition(runtime["activity_lock"]))
         while True:
+            with condition:
+                condition.wait(timeout=30)
             current_state = activity_snapshot(runtime)
             payload = json.dumps(current_state, ensure_ascii=False)
             if payload != last_state:
@@ -191,7 +195,6 @@ def activity_stream():
                 yield f"data: {payload}\n\n"
             else:
                 yield ": keepalive\n\n"
-            time.sleep(0.5)
 
     return Response(
         generate(),
@@ -235,6 +238,7 @@ def debug_events_stream():
     @stream_with_context
     def generate():
         last_id = 0
+        condition = runtime.setdefault("activity_condition", threading.Condition(runtime["activity_lock"]))
         while True:
             if runtime.get("debug_log"):
                 events = runtime["debug_log"].read_after(last_id, limit=50)
@@ -242,7 +246,8 @@ def debug_events_stream():
                     last_id = max(last_id, event["id"])
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             yield ": keepalive\n\n"
-            time.sleep(0.5)
+            with condition:
+                condition.wait(timeout=30)
 
     return Response(
         generate(),

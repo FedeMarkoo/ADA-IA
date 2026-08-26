@@ -188,8 +188,9 @@ def activity_update(
 ) -> None:
     details = dict(details or {})
     lock = runtime.setdefault("activity_lock", threading.RLock())
+    condition = runtime.setdefault("activity_condition", threading.Condition(lock))
     now = time.time()
-    with lock:
+    with condition:
         state = runtime.setdefault("activity", new_activity_state())
         status_value, label, detail, component = activity_descriptor(phase, details)
 
@@ -284,6 +285,7 @@ def activity_update(
                 _task_history.insert(0, task_record)
                 if len(_task_history) > MAX_TASK_HISTORY:
                     _task_history.pop()
+        condition.notify_all()
 
 
 def activity_snapshot(runtime: Dict[str, Any]) -> Dict[str, Any]:
