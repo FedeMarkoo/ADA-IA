@@ -15,6 +15,8 @@ import time
 import urllib.error
 import urllib.request
 
+from ada.infrastructure.runtime.llama_cpp import LlamaCppRuntime
+
 
 @dataclass
 class RuntimeStatus:
@@ -49,6 +51,15 @@ class LocalModelRuntime:
             self.config = dict(config)
         runtime = self.config.get("local_runtime", {})
         self.provider = runtime.get("provider", "ollama")
+        if self.provider == "llama_cpp":
+            self._llama_cpp = getattr(self, "_llama_cpp", LlamaCppRuntime(self.config))
+            self._llama_cpp.reload(self.config)
+            self.endpoint = self._llama_cpp.endpoint
+            self.model_alias = self._llama_cpp.model_alias
+            self.auto_start = self._llama_cpp.auto_start
+            self.startup_timeout = self._llama_cpp.startup_timeout
+            self.binary = self._llama_cpp.binary
+            return
         self.endpoint = os.environ.get(
             "ADA_OLLAMA_URL",
             runtime.get("url", self.config.get("ollama_url", "http://127.0.0.1:11434")),
@@ -73,6 +84,8 @@ class LocalModelRuntime:
                     break
 
     def _healthy(self):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp._healthy()
         try:
             with urllib.request.urlopen(self.endpoint + "/api/tags", timeout=1.5) as response:
                 return response.status == 200
@@ -80,12 +93,16 @@ class LocalModelRuntime:
             return False
 
     def status(self):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp.status()
         if self._healthy():
             return RuntimeStatus(self.provider, self.endpoint, True, self._process is not None, "ready")
         reason = "not_running" if self.binary else "ollama_not_installed"
         return RuntimeStatus(self.provider, self.endpoint, False, self._process is not None, reason)
 
     def start(self):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp.start()
         """Explicitly start Ollama service."""
         with self._lock:
             if self._healthy():
@@ -118,6 +135,8 @@ class LocalModelRuntime:
             return RuntimeStatus(self.provider, self.endpoint, False, True, "startup_timeout")
 
     def stop(self):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp.stop()
         """Explicitly stop the Ollama service."""
         with self._lock:
             if self._process and self._process.poll() is None:
@@ -138,12 +157,16 @@ class LocalModelRuntime:
             return RuntimeStatus(self.provider, self.endpoint, healthy, False, "stopped" if not healthy else "still_running")
 
     def restart(self):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp.restart()
         """Explicitly restart the Ollama service."""
         self.stop()
         time.sleep(0.5)
         return self.start()
 
     def ensure_ready(self):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp.ensure_ready()
         """Return status, starting the local runtime if configured to do so."""
         with self._lock:
             status = self.status()
@@ -152,6 +175,8 @@ class LocalModelRuntime:
             return self.start()
 
     def installed_models(self):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp.installed_models()
         if not self.ensure_ready().available:
             return []
         try:
@@ -162,6 +187,8 @@ class LocalModelRuntime:
             return []
 
     def ensure_models(self, models):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp.ensure_models(models)
         """Report model readiness; optional pulling is explicit to avoid surprise downloads."""
         installed = set(self.installed_models())
         missing = [model for model in models if model and model not in installed]
@@ -181,6 +208,8 @@ class LocalModelRuntime:
         }
 
     def pull_model(self, model):
+        if self.provider == "llama_cpp":
+            return self._llama_cpp.pull_model(model)
         try:
             payload = json.dumps({"name": model, "stream": False}).encode("utf-8")
             request = urllib.request.Request(

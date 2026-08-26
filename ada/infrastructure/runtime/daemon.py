@@ -53,6 +53,10 @@ def run(config=None):
     backup_interval = max(0.0, float(config.get("backup_interval_seconds", 0)))
     next_backup = time.monotonic() + backup_interval if backup_interval else None
     update_manager = UpdateManager(config) if (config.get("update") or {}).get("enabled") else None
+    if update_manager is not None:
+        # If this process was started by the commit autorestart, finish the
+        # existing Telegram message instead of sending a second notification.
+        update_manager.finalize_restart_notification(success=True)
     update_interval = max(300.0, float((config.get("update") or {}).get("check_interval_seconds", 3600)))
     next_update_check = time.monotonic() if update_manager else None
     cron_config = (config.get("triggers") or {}).get("cron") or {}

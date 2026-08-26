@@ -42,6 +42,21 @@ class RuntimeTests(unittest.TestCase):
         runtime.reload({"ollama_url": "http://127.0.0.1:2", "local_runtime": {"auto_start": False}})
         self.assertEqual(runtime.endpoint, "http://127.0.0.1:2")
 
+    def test_llama_cpp_runtime_is_independent_process_backend(self):
+        runtime = LocalModelRuntime(
+            {
+                "local_runtime": {
+                    "provider": "llama_cpp",
+                    "auto_start": False,
+                    "model_path": "/tmp/model-that-does-not-exist.gguf",
+                }
+            }
+        )
+        status = runtime.ensure_ready()
+        self.assertFalse(status.available)
+        self.assertEqual(status.provider, "llama_cpp")
+        self.assertEqual(status.reason, "llama_server_not_installed")
+
     def test_runtime_starts_ollama_without_privileged_systemctl(self):
         runtime = LocalModelRuntime({"ollama_url": "http://127.0.0.1:1"})
         runtime.binary = "/usr/bin/ollama"

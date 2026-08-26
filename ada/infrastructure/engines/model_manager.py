@@ -19,6 +19,7 @@ from ada.models.catalog import DEFAULT_MODEL_CATALOG
 
 from ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
 from ada.infrastructure.observability import Metrics
+from ada.infrastructure.prometheus_metrics import OLLAMA_DURATION, OLLAMA_EXECUTIONS, OLLAMA_IN_FLIGHT
 from ada.ollama.client import OllamaClient
 from ada.infrastructure.engines.provider_router import ProviderRouter
 
@@ -39,6 +40,7 @@ except Exception:  # optional dependency
 
 
 class ModelManager:
+    LOCAL_PROVIDERS = {"ollama", "llama_cpp", "local"}
     AUTO_MODES = {"light", "hybrid", "turbo"}
     MODEL_ROLES = ("chat", "router", "reasoning", "coding", "tools", "vision")
     MODE_LABELS = {
@@ -144,12 +146,13 @@ class ModelManager:
             self._installed_cache = (0.0, [])
 
     def available(self):
-        local_available = self._ollama_available() if self.provider == "ollama" else False
+        local_available = self._ollama_available() if self.provider in self.LOCAL_PROVIDERS else False
         return {
             # `local` is the stable ADA capability; `ollama` is the current
             # implementation so callers can remain backwards compatible.
             "local": local_available,
             "ollama": local_available,
+            "llama_cpp": local_available,
             "openai": bool(OpenAI and self.openai_key),
             "anthropic": bool(Anthropic and self.anthropic_key),
             "gemini": bool(self.gemini_key),
@@ -418,7 +421,7 @@ class ModelManager:
         """Select a hardware-compatible model name from the runtime policy."""
         names = self._model_candidates(task, role)
         names = self._adaptive_order(names)
-        installed = set(self._installed_model_names()) if self.provider == "ollama" else set()
+        installed = set(self._installed_model_names()) if self.provider in self.LOCAL_PROVIDERS else set()
         for name in names:
             if name and (not installed or name in installed):
                 return name
@@ -471,7 +474,7 @@ class ModelManager:
     def ensure_model(self, task, role="chat"):
         """Ensure the selected local model is installed or use an installed fallback."""
         selected = self.select_model(task, role)
-        if self.provider != "ollama" or not selected:
+        if self.provider not in self.LOCAL_PROVIDERS or not selected:
             return selected
         status = self.local_runtime.ensure_models([selected])
         if status.get("ready"):
@@ -510,7 +513,7 @@ class ModelManager:
         """Expose runtime and installed-model state for the UI and diagnostics."""
         status = (
             self.local_runtime.ensure_ready()
-            if self.provider == "ollama"
+            if self.provider in self.LOCAL_PROVIDERS
             else {
                 "provider": self.provider,
                 "endpoint": "configured locally",
@@ -519,7 +522,7 @@ class ModelManager:
                 "reason": "ready" if self.available().get(self.provider, False) else "provider_unavailable",
             }
         )
-        if self.provider == "ollama":
+        if self.provider in self.LOCAL_PROVIDERS:
             status_available = status.available if isinstance(status, RuntimeStatus) else bool(status.get("available"))
             models = (
                 self.local_runtime.ensure_models(
@@ -557,7 +560,7 @@ class ModelManager:
         privacy = task.get("privacy", self.config.get("privacy_default", "normal"))
         fallback_providers = [self.provider] + list(self.config.get("engine_priority", []))
         if privacy == "high":
-            fallback_providers = [item for item in fallback_providers if item in {"ollama", "local", "gpt4all"}]
+            fallback_providers = [item for item in fallback_providers if item in self.LOCAL_PROVIDERS | {"gpt4all"}]
         routed = self.provider_router.choose(
             task,
             available,
@@ -565,7 +568,7 @@ class ModelManager:
         )
         if routed:
             return routed
-        if privacy == "high" and self.provider in {"ollama", "local", "gpt4all"} and available.get(self.provider):
+        if privacy == "high" and self.provider in self.LOCAL_PROVIDERS | {"gpt4all"} and available.get(self.provider):
             return self.provider
         if privacy != "high" and complexity <= int(self.config.get("local_max_complexity", 5)) and available.get(self.provider):
             return self.provider
@@ -577,12 +580,12 @@ class ModelManager:
         ]
         if complexity >= 7:
             for provider in priority:
-                if privacy == "high" and provider not in {"ollama", "local", "gpt4all"}:
+                if privacy == "high" and provider not in self.LOCAL_PROVIDERS | {"gpt4all"}:
                     continue
                 if available.get(provider, False):
                     return provider
         for provider in priority:
-            if privacy == "high" and provider not in {"ollama", "local", "gpt4all"}:
+            if privacy == "high" and provider not in self.LOCAL_PROVIDERS | {"gpt4all"}:
                 continue
             if available.get(provider, False):
                 return provider
@@ -590,13 +593,17 @@ class ModelManager:
 
     def call(self, provider, prompt, **kwargs):
         started = time.monotonic()
-        model_tag = kwargs.get("ollama_model") or kwargs.get(f"{provider}_model") or "default"
+        model_tag = kwargs.get("ollama_model") or kwargs.get(f"{provider}_model") or (
+            self._model("chat", "ollama_model", "llama3.2:3b") if provider in self.LOCAL_PROVIDERS else "default"
+        )
         tags = {"provider": provider, "model": model_tag}
         self.metrics.increment("provider.calls", tags=tags)
+        if provider in self.LOCAL_PROVIDERS:
+            OLLAMA_IN_FLIGHT.labels(model=str(model_tag)).inc()
         failed = False
         try:
-            if provider == "ollama":
-                return self._call_ollama(prompt, **kwargs)
+            if provider in self.LOCAL_PROVIDERS:
+                return self._call_llama_cpp(prompt, **kwargs) if provider == "llama_cpp" else self._call_ollama(prompt, **kwargs)
             if provider == "openai":
                 return self._call_openai(prompt, **kwargs)
             if provider == "openrouter":
@@ -623,13 +630,34 @@ class ModelManager:
             duration = time.monotonic() - started
             self._record_model_stat(model_tag, duration, error=failed)
             self.metrics.observe("provider.duration", duration, tags)
+            if provider in self.LOCAL_PROVIDERS:
+                status = "error" if failed else "ok"
+                OLLAMA_EXECUTIONS.labels(model=str(model_tag), status=status).inc()
+                OLLAMA_DURATION.labels(model=str(model_tag), status=status).observe(duration)
+                OLLAMA_IN_FLIGHT.labels(model=str(model_tag)).dec()
 
     def call_vision(self, provider, prompt, image_base64, **kwargs):
         if provider == "gemini":
             return self._call_gemini(prompt, image_base64=image_base64, **kwargs)
-        if provider != "ollama":
+        if provider not in self.LOCAL_PROVIDERS:
             raise RuntimeError("El proveedor configurado no ofrece análisis visual compatible")
-        return self._call_ollama_vision(prompt, image_base64, **kwargs)
+        if provider == "llama_cpp":
+            return self._call_llama_cpp_vision(prompt, image_base64, **kwargs)
+        model = kwargs.get("ollama_model") or self._model("vision", "vision_model", "qwen2.5vl:3b")
+        started = time.monotonic()
+        failed = False
+        OLLAMA_IN_FLIGHT.labels(model=str(model)).inc()
+        try:
+            return self._call_ollama_vision(prompt, image_base64, **kwargs)
+        except Exception:
+            failed = True
+            raise
+        finally:
+            status = "error" if failed else "ok"
+            duration = time.monotonic() - started
+            OLLAMA_EXECUTIONS.labels(model=str(model), status=status).inc()
+            OLLAMA_DURATION.labels(model=str(model), status=status).observe(duration)
+            OLLAMA_IN_FLIGHT.labels(model=str(model)).dec()
 
     def _call_ollama(self, prompt, **kwargs):
         model = kwargs.get("ollama_model") or self._model("chat", "ollama_model", "llama3.2:3b")
@@ -673,6 +701,60 @@ class ModelManager:
                 raise RuntimeError("Ollama devolvió un error: %s" % detail) from exc
         finally:
             self._mark_ollama_finished(model)
+
+    def _call_llama_cpp(self, prompt, **kwargs):
+        """Call the separately managed llama-server OpenAI-compatible endpoint."""
+        model = kwargs.get("llama_cpp_model") or self.local_runtime.model_alias
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "temperature": kwargs.get("temperature", 0.2),
+        }
+        if kwargs.get("max_tokens"):
+            payload["max_tokens"] = int(kwargs["max_tokens"])
+        if kwargs.get("format"):
+            payload["response_format"] = {"type": "json_object"}
+        request = urllib.request.Request(
+            self.local_runtime.endpoint + "/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 300)) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            return data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError("llama.cpp devolvió un error: %s" % detail) from exc
+
+    def _call_llama_cpp_vision(self, prompt, image_base64, **kwargs):
+        """Call llama-server multimodal chat using a configured mmproj model."""
+        model = kwargs.get("llama_cpp_model") or self.local_runtime.model_alias
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + image_base64}},
+            ]}],
+            "stream": False,
+            "temperature": kwargs.get("temperature", 0.1),
+            "response_format": {"type": "json_object"},
+        }
+        request = urllib.request.Request(
+            self.local_runtime.endpoint + "/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=kwargs.get("timeout", 300)) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            return data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError("llama.cpp devolvió un error visual: %s" % detail) from exc
 
     def _call_ollama_vision(self, prompt, image_base64, **kwargs):
         model = kwargs.get("ollama_model") or self._model("vision", "vision_model", "qwen2.5vl:3b")

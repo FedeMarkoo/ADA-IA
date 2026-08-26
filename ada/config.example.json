@@ -87,6 +87,7 @@
     "enabled": false,
     "auto_pull": false,
     "restart_on_update": false,
+    "telegram_chat_id": "",
     "branch": "main",
     "check_interval_seconds": 3600,
     "state_path": "~/Desktop/ADA_Data/runtime/update.json"
@@ -96,7 +97,14 @@
   "local_runtime": {
     "provider": "ollama",
     "auto_start": true,
-    "auto_pull": false
+    "auto_pull": false,
+    "url": "http://127.0.0.1:8080",
+    "binary": "",
+    "model_path": "~/Desktop/ADA_Data/models/model.gguf",
+    "model_alias": "ada-local",
+    "mmproj_path": "",
+    "host": "127.0.0.1",
+    "port": 8080
   },
   "telegram": {
     "enabled": false,

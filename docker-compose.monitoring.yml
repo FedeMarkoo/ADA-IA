@@ -16,6 +16,11 @@ services:
     image: grafana/grafana:11.3.0
     depends_on:
       - prometheus
+    environment:
+      # The local ADA dashboard embeds Grafana in its Métricas tab.
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     ports:
       - "3000:3000"
     volumes:
@@ -26,4 +31,3 @@ services:
 volumes:
   prometheus_data:
   grafana_data:
-
