@@ -1,7 +1,6 @@
 import json
 import concurrent.futures
 from unittest.mock import MagicMock, patch
-from pathlib import Path
 
 from ada.application.services.healthcheck import (
     HEALTHCHECK_PROMPTS,
@@ -17,15 +16,11 @@ def test_healthcheck_prompts_are_persisted_in_sqlite():
     memory = Memory(":memory:")
     store = HealthcheckStore(memory)
     prompts = store.prompts()
-    assert len(prompts) > 13
+    assert len(prompts) >= 15
     assert {item["id"] for item in prompts} == {item["id"] for item in HEALTHCHECK_PROMPTS}
     assert memory.conn.execute("SELECT COUNT(*) FROM healthcheck_prompts").fetchone()[0] == len(prompts)
     assert len({item["category"] for item in prompts}) >= 6
     assert sum(item["category"] == "gmail" for item in prompts) == 3
-    source_ids = {
-        item["id"] for item in json.loads((Path(__file__).parents[1] / "ai_testing" / "prompts.json").read_text())
-    }
-    assert source_ids.issubset({item["id"] for item in prompts})
 
 
 def test_cases_can_be_added_to_an_existing_category():

@@ -7,7 +7,7 @@
 | SEC-01 | Purgar `ada/config.json` y datos personales de TODO el historial de Git | ✅ Implementado | `620070c` |
 | SEC-02 | Excluir `ada/config.json` y `config.json` en `.gitignore` | ✅ Implementado | `620070c` |
 | SEC-03 | Reemplazar rutas de usuario absolutas hardcodeadas por `Path.home()` | ✅ Implementado | `620070c` |
-| SEC-04 | Anonimizar datos personales en prompts de `ai_testing/prompts.json` | ✅ Implementado | `620070c` |
+| SEC-04 | Anonimizar datos personales en prompts de testing funcional | ✅ Implementado | `620070c` |
 | SEC-05 | Rate-limiting y throttling en mutaciones de la Bóveda de Credenciales | ✅ Implementado | `En este branch` |
 | SEC-06 | Token de autenticación interno para webhook/REST API de Telegram | ✅ Implementado | `En este branch` |
 | SEC-07 | Modo de visualización embebida local de Grafana para Desktop | ℹ️ Documentado | Diseño activo |
