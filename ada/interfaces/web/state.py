@@ -64,14 +64,17 @@ def ollama_config_payload(config: Dict[str, Any]) -> Dict[str, Any]:
 class PersistentConversation(list):
     """List-compatible history that survives UI and server restarts."""
 
-    def __init__(self, memory, session="main"):
+    def __init__(self, memory, session="main", limit=1000):
         self.memory = memory
         self.session = session
-        super().__init__(memory.conversation(session=session, limit=1000))
+        self.max_messages = max(1, int(limit))
+        super().__init__(memory.conversation(session=session, limit=self.max_messages))
 
     def extend(self, items):
         items = list(items)
         super().extend(items)
+        if len(self) > self.max_messages:
+            del self[: len(self) - self.max_messages]
         self.memory.append_conversation(items, session=self.session)
 
     def clear(self):
@@ -80,14 +83,15 @@ class PersistentConversation(list):
 
 
 class WebSessionState:
-    def __init__(self, memory, session_id: str):
+    def __init__(self, memory, session_id: str, history_limit=1000):
         self.session_id = session_id
-        self.conversation = PersistentConversation(memory, session=session_id)
+        self.conversation = PersistentConversation(memory, session=session_id, limit=history_limit)
         self.pending_action: Optional[Dict[str, Any]] = None
         self.pending_path_action: Optional[Dict[str, Any]] = None
         self.current_path = memory.get_folder_context(session_id) if hasattr(memory, "get_folder_context") else None
         self.last_result: Optional[Dict[str, Any]] = None
         self.lock = threading.RLock()
+        self.last_access = time.monotonic()
 
 
 _task_history: List[Dict[str, Any]] = []
@@ -326,7 +330,28 @@ def get_session_state() -> WebSessionState:
         session_id = secrets.token_urlsafe(24)
         g.ada_session_id = session_id
     with runtime["session_states_lock"]:
-        return runtime["session_states"].setdefault(session_id, WebSessionState(runtime["agent"].mem, session_id))
+        states = runtime["session_states"]
+        now = time.monotonic()
+        ttl = max(60, int(runtime.get("session_ttl_seconds", 3600)))
+        max_sessions = max(1, int(runtime.get("session_max_count", 256)))
+        expired = [key for key, value in states.items() if now - value.last_access > ttl and key != session_id]
+        for key in expired:
+            states.pop(key, None)
+        state = states.get(session_id)
+        if state is None:
+            state = WebSessionState(
+                runtime["agent"].mem,
+                session_id,
+                history_limit=max(1, int(runtime.get("session_history_limit", 1000))),
+            )
+            states[session_id] = state
+        state.last_access = now
+        while len(states) > max_sessions:
+            oldest = min(states, key=lambda key: states[key].last_access)
+            if oldest == session_id and len(states) > 1:
+                oldest = min((key for key in states if key != session_id), key=lambda key: states[key].last_access)
+            states.pop(oldest, None)
+        return state
 
 
 # ==============================================================================
