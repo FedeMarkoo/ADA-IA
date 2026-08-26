@@ -28,73 +28,73 @@ Las vistas también aceptan los hashes `#overview`, `#core`, `#benchmark`, `#met
 
 Muestra salud, hardware, modelos instalados y servicios. Permite actualizar, volver a comprobar, iniciar/detener/reiniciar Ollama, reiniciar el agente y reiniciar MCPs.
 
-![Resumen del dashboard](assets-overview.png)
+![Resumen del dashboard](screenshots/assets-overview.png)
 
 ### Núcleo ADA
 
 Mapa en vivo de canales, agente, modelos y servidores MCP. La actividad muestra router, modelo, resolución de carpetas, capabilities, herramientas y respuesta.
 
-![Núcleo ADA](assets-core.png)
+![Núcleo ADA](screenshots/assets-core.png)
 
 ### Healthcheck funcional
 
 Ejecuta casos reales y muestra estado, respuesta, evaluación, tiempo y trace. Permite filtrar, ejecutar, cancelar, reanudar, agregar casos de solo lectura y consultar historial.
 
-![Healthcheck funcional](assets-healthcheck.png)
+![Healthcheck funcional](screenshots/assets-healthcheck.png)
 
 ### Métricas
 
 Embebe Grafana; Prometheus está disponible en `/metrics` y su configuración vive en `monitoring/`.
 
-![Métricas](assets-metrics.png)
+![Métricas](screenshots/assets-metrics.png)
 
 ### Conversar con ADA
 
 Chat de prueba con sesión persistente, respuesta JSON o streaming SSE y limpieza de conversación.
 
-![Conversar con ADA](assets-chat.png)
+![Conversar con ADA](screenshots/assets-chat.png)
 
 ### Motor local
 
 Administra Ollama, modelos instalados/en ejecución, carga, descarga de memoria, eliminación, pull con progreso, precarga, detalles, CPU, contexto, temperatura, keep-alive y timeouts.
 
-![Motor local](assets-ollama.png)
+![Motor local](screenshots/assets-ollama.png)
 
 ### Modelos y roles
 
 Asigna modelos para conversación, visión y router; permite modos predefinidos, selección manual, catálogo, compatibilidad de hardware y benchmarks.
 
-![Modelos y roles](assets-models.png)
+![Modelos y roles](screenshots/assets-models.png)
 
 ### Herramientas MCP
 
 Vista maestro-detalle para buscar servidores, filtrar por estado, iniciar/detener/reiniciar/ping, activar tools, inspeccionar schemas JSON, ejecutar pruebas, ver manifiesto/consola y registrar servidores.
 
-![Herramientas MCP](assets-mcps.png)
+![Herramientas MCP](screenshots/assets-mcps.png)
 
 ### Disparadores
 
 Centraliza Telegram, dispositivos extraíbles, calendario, cron y webhook; muestra estado deseado, proceso y acciones.
 
-![Disparadores](assets-triggers.png)
+![Disparadores](screenshots/assets-triggers.png)
 
 ### Telegram
 
 Guarda configuración, prueba el token con `getMe`, inicia/detiene/reinicia el bot y consulta historial. El token se enmascara y puede almacenarse en la bóveda.
 
-![Telegram](assets-telegram.png)
+![Telegram](screenshots/assets-telegram.png)
 
 ### Actividad y memoria
 
 Muestra estadísticas SQLite, sesiones y auditoría de acciones.
 
-![Actividad y memoria](assets-memory.png)
+![Actividad y memoria](screenshots/assets-memory.png)
 
 ### Preferencias
 
 Edita configuración y gestiona secretos de `vault.db`. Las mutaciones requieren host local, JSON y protección CSRF cuando existe sesión.
 
-![Preferencias](assets-settings.png)
+![Preferencias](screenshots/assets-settings.png)
 
 ## Recorrido recomendado
 
