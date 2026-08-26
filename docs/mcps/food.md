@@ -6,14 +6,13 @@ El servidor MCP **`mcps/food/`** gestiona la nutrición, recetas, alacena, lista
 
 ## 📁 Estructura Modular
 
-```text
-mcps/food/
-├── server.py              # Servidor Stdio MCP (expone 3 herramientas principales)
-├── shopping.py            # Lista de compras con categorización y prioridades
-├── recipes.py             # Recetario, ingredientes y auto-seeding de perfil markdown
-├── inventory.py           # Control de stock en alacena y alerta de faltantes (low_stock)
-├── planner.py             # Planificador semanal de comidas
-└── budget.py              # Control presupuestario y registro de gastos
+```mermaid
+flowchart TD
+    Server[server.py: servidor MCP] --> Shopping[shopping.py: lista de compras]
+    Server --> Recipes[recipes.py: recetario]
+    Server --> Inventory[inventory.py: alacena]
+    Server --> Planner[planner.py: comidas semanales]
+    Server --> Budget[budget.py: presupuesto]
 ```
 
 ---

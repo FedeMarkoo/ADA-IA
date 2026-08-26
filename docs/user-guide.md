@@ -1,109 +1,94 @@
-# Guía funcional de ADA-IA
+# Guía de uso del dashboard
 
-Guía de uso del dashboard web, la aplicación de escritorio y el canal Telegram. El contenido se verificó contra el código y una ejecución local del dashboard el **26/08/2026**.
+Esta guía recorre ADA en el orden habitual de trabajo: comprobar el sistema, ejecutar una tarea, configurar capacidades y revisar actividad. Las capturas son del dashboard local a **1366×768 px**; los indicadores y datos pueden variar según la instalación.
 
-> Los indicadores de salud, procesos, modelos y métricas son datos de ejecución. Pueden variar entre capturas y cada instalación; las imágenes ilustran la interfaz y no constituyen un estado fijo del sistema.
+## Antes de empezar
 
-## Formas de uso
+Iniciá ADA y abrí `http://127.0.0.1:5005`.
 
-| Canal | Inicio | Uso |
-|---|---|---|
-| Dashboard web | `./.venv/bin/python -m ada.interfaces.web.server` | Operación, configuración, diagnóstico y chat |
-| Aplicación de escritorio | `ada desktop` | El mismo dashboard dentro de GTK/WebKitGTK |
-| Telegram | `telegram/bot.py` o pestaña Telegram | Mensajería remota y recepción de fotos |
+```bash
+./.venv/bin/python -m ada.interfaces.web.server
+```
 
-El dashboard usa `http://127.0.0.1:5005` por defecto. El shell de escritorio inicia ese mismo servidor en un puerto disponible y carga la URL en una ventana nativa.
+Para instalación completa, consultá [Inicio rápido](guides/getting-started.md). Para usar el mismo panel como ventana nativa, consultá [Aplicación de escritorio](desktop.md).
 
-## Navegación
+## 1. Operar ADA
 
-- **Operar**: Resumen, Núcleo ADA, Healthcheck, Métricas y Conversar con ADA.
-- **Configurar**: Motor local, Modelos y roles y Herramientas.
-- **Canales y datos**: Disparadores, Telegram, Actividad y memoria y Preferencias.
+### Resumen: comprobar que ADA está lista
 
-Las vistas también aceptan los hashes `#overview`, `#core`, `#benchmark`, `#metrics`, `#chat`, `#ollama`, `#models`, `#mcps`, `#triggers`, `#telegram`, `#memory` y `#settings`.
+Usá **Resumen** para ver salud general, RAM, modelos y servicios. Desde aquí se puede refrescar el estado, ejecutar comprobaciones, administrar Ollama y abrir directamente chat, modelos o herramientas.
 
-## Pantallas y funciones
+![Resumen](screenshots/assets-overview.png)
 
-### Resumen
+### Núcleo ADA: entender qué está ocurriendo
 
-Muestra salud, hardware, modelos instalados y servicios. Permite actualizar, volver a comprobar, iniciar/detener/reiniciar Ollama, reiniciar el agente y reiniciar MCPs.
-
-![Resumen del dashboard](screenshots/assets-overview.png)
-
-### Núcleo ADA
-
-Mapa en vivo de canales, agente, modelos y servidores MCP. La actividad muestra router, modelo, resolución de carpetas, capabilities, herramientas y respuesta.
+**Núcleo ADA** muestra los canales de entrada, los modelos activos, los MCPs y la traza de una tarea. Es la primera vista a consultar si una solicitud no sigue el flujo esperado.
 
 ![Núcleo ADA](screenshots/assets-core.png)
 
-### Healthcheck funcional
+### Conversar con ADA: probar una tarea
 
-Ejecuta casos reales y muestra estado, respuesta, evaluación, tiempo y trace. Permite filtrar, ejecutar, cancelar, reanudar, agregar casos de solo lectura y consultar historial.
+Escribí una solicitud en **Conversar con ADA**. El chat conserva la sesión del navegador, puede transmitir la respuesta y permite limpiar la conversación cuando quieras iniciar una prueba nueva.
 
-![Healthcheck funcional](screenshots/assets-healthcheck.png)
+![Chat](screenshots/assets-chat.png)
 
-### Métricas
+### Healthcheck y métricas: diagnosticar
 
-Embebe Grafana; Prometheus está disponible en `/metrics` y su configuración vive en `monitoring/`.
+El **Healthcheck** ejecuta casos reales por categoría, guarda historial y permite reintentar o cancelar una corrida. La pestaña **Métricas** muestra Grafana sobre las métricas expuestas en `/metrics`.
+
+![Healthcheck](screenshots/assets-healthcheck.png)
 
 ![Métricas](screenshots/assets-metrics.png)
 
-### Conversar con ADA
-
-Chat de prueba con sesión persistente, respuesta JSON o streaming SSE y limpieza de conversación.
-
-![Conversar con ADA](screenshots/assets-chat.png)
+## 2. Configurar modelos y herramientas
 
 ### Motor local
 
-Administra Ollama, modelos instalados/en ejecución, carga, descarga de memoria, eliminación, pull con progreso, precarga, detalles, CPU, contexto, temperatura, keep-alive y timeouts.
+En **Motor local** administrá Ollama y sus modelos: iniciar/detener/reiniciar, descargar, cargar en memoria, descargar de memoria, eliminar y ajustar timeouts, contexto, temperatura y keep-alive.
 
 ![Motor local](screenshots/assets-ollama.png)
 
 ### Modelos y roles
 
-Asigna modelos para conversación, visión y router; permite modos predefinidos, selección manual, catálogo, compatibilidad de hardware y benchmarks.
+En **Modelos y roles** elegí qué modelo resuelve conversación, visión y router. También permite usar perfiles, validar compatibilidad con el hardware y ejecutar benchmarks.
 
 ![Modelos y roles](screenshots/assets-models.png)
 
 ### Herramientas MCP
 
-Vista maestro-detalle para buscar servidores, filtrar por estado, iniciar/detener/reiniciar/ping, activar tools, inspeccionar schemas JSON, ejecutar pruebas, ver manifiesto/consola y registrar servidores.
+En **Herramientas** podés iniciar, detener, reiniciar y hacer ping a servidores MCP. La vista también permite inspeccionar schemas, activar o pausar tools, ejecutar pruebas JSON y registrar un servidor.
 
 ![Herramientas MCP](screenshots/assets-mcps.png)
 
-### Disparadores
+## 3. Canales, automatización y datos
 
-Centraliza Telegram, dispositivos extraíbles, calendario, cron y webhook; muestra estado deseado, proceso y acciones.
+### Disparadores y Telegram
+
+**Disparadores** reúne Telegram, dispositivos extraíbles, calendario, cron y webhook. **Telegram** permite configurar el bot, probar el token, controlar su proceso y revisar las conversaciones registradas.
 
 ![Disparadores](screenshots/assets-triggers.png)
 
-### Telegram
-
-Guarda configuración, prueba el token con `getMe`, inicia/detiene/reinicia el bot y consulta historial. El token se enmascara y puede almacenarse en la bóveda.
-
 ![Telegram](screenshots/assets-telegram.png)
 
-### Actividad y memoria
+### Actividad, memoria y preferencias
 
-Muestra estadísticas SQLite, sesiones y auditoría de acciones.
+**Actividad y memoria** ofrece estadísticas SQLite, sesiones y auditoría. **Preferencias** administra la configuración general, rutas permitidas y secretos del vault.
 
 ![Actividad y memoria](screenshots/assets-memory.png)
 
-### Preferencias
-
-Edita configuración y gestiona secretos de `vault.db`. Las mutaciones requieren host local, JSON y protección CSRF cuando existe sesión.
-
 ![Preferencias](screenshots/assets-settings.png)
 
-## Recorrido recomendado
+## Procedimientos frecuentes
 
-1. Revisar **Resumen** y comprobar Ollama, agente y MCPs.
-2. Ajustar **Modelos y roles** según la tarea.
-3. Probar en **Conversar con ADA**.
-4. Observar la traza en **Núcleo ADA** y la auditoría en **Actividad y memoria**.
-5. Diagnosticar integraciones desde **Healthcheck**, **Herramientas** o **Disparadores**.
+| Necesito… | Ir a | Acción |
+|---|---|---|
+| Ver por qué una tarea falló | Núcleo ADA y Healthcheck | Revisar trace, resultado y disponibilidad del MCP/modelo |
+| Cambiar el modelo de chat o visión | Modelos y roles | Elegir modo o asignación manual y guardar |
+| Probar una herramienta | Herramientas | Seleccionar servidor, revisar schema y ejecutar JSON de prueba |
+| Recuperar un servicio local | Resumen o Motor local | Ejecutar comprobación y administrar Ollama/servicios |
+| Activar Telegram | Telegram | Guardar token, limitar chats autorizados y arrancar el bot |
+| Auditar una acción | Actividad y memoria | Consultar registro y sesión persistente |
 
 ## Seguridad
 
-Las lecturas suelen ser automáticas. Escritura de archivos, comandos, envíos y publicaciones se marcan como riesgosas y respetan `confirm_risky`, `allowed_roots`, la allowlist de comandos y permisos de cada capability.
+Las lecturas suelen ser automáticas. Operaciones de escritura, comandos, envíos o publicaciones respetan `confirm_risky`, `allowed_roots`, la allowlist de comandos y los permisos declarados por cada herramienta.

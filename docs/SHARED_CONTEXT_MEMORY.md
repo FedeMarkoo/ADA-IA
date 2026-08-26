@@ -30,48 +30,18 @@ La propuesta **no intenta compartir la KV cache entre modelos**. Ollama/modelos 
 
 ## Arquitectura propuesta
 
-```text
-                         ┌──────────────────────┐
-                         │      ChatService      │
-                         │ session_id + request  │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │   Context Manager     │
-                         │                      │
-                         │  1. recent messages │
-                         │  2. summary          │
-                         │  3. semantic memory  │
-                         │  4. profile          │
-                         │  5. task context     │
-                         └──────────┬───────────┘
-                                    │
-                         bounded context packet
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │       Router         │
-                         │ choose model/role    │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │     ModelManager     │
-                         │ context budget       │
-                         │ num_ctx / predict    │
-                         └──────────┬───────────┘
-                                    │
-                     ┌──────────────┼──────────────┐
-                     ▼              ▼              ▼
-                  Ollama A       Ollama B       Ollama C
-                     │              │              │
-                     └──────────────┼──────────────┘
-                                    │
-                           respuestas / eventos
-                                    │
-                                    ▼
-                         Shared Memory Store
+```mermaid
+flowchart TD
+    Chat[ChatService: sesión y solicitud] --> Context[ContextManager]
+    Context --> Packet[Context packet acotado]
+    Packet --> Router[Router: modelo y rol]
+    Router --> Manager[ModelManager: presupuesto y parámetros]
+    Manager --> A[Modelo A]
+    Manager --> B[Modelo B]
+    Manager --> C[Modelo C]
+    A --> Store[(Shared Memory Store)]
+    B --> Store
+    C --> Store
 ```
 
 ## Qué significa “contexto compartido”
@@ -238,10 +208,11 @@ Desventaja: cold starts al cambiar de modelo.
 
 Una implementación como:
 
-```text
-Modelo A ─┐
-Modelo B ─┼──> misma KV cache
-Modelo C ─┘
+```mermaid
+flowchart LR
+    A[Modelo A] -. no compartida .-> KV[KV cache]
+    B[Modelo B] -. no compartida .-> KV
+    C[Modelo C] -. no compartida .-> KV
 ```
 
 no debería formar parte de esta mejora.
@@ -250,13 +221,11 @@ La KV cache depende de los pesos, arquitectura, tokenizer y estado interno del m
 
 La arquitectura correcta es:
 
-```text
-                 Shared Context Store
-                         │
-             ┌───────────┼───────────┐
-             ▼           ▼           ▼
-          Model A      Model B      Model C
-          own KV       own KV       own KV
+```mermaid
+flowchart TD
+    Store[(Shared Context Store)] --> A[Modelo A: KV propia]
+    Store --> B[Modelo B: KV propia]
+    Store --> C[Modelo C: KV propia]
 ```
 
 pero cada modelo recibe solamente el contexto que necesita.
@@ -339,14 +308,11 @@ Agregar un `MemoryBudgetManager` o integrarlo al runtime de recursos.
 
 Conceptualmente:
 
-```text
-available_memory
-       │
-       ▼
-model_weight_budget
-       │
-       ├── active model
-       └── context budget
+```mermaid
+flowchart TD
+    Memory[Memoria disponible] --> Budget[Presupuesto para pesos]
+    Budget --> Active[Modelo activo]
+    Budget --> Context[Presupuesto de contexto]
 ```
 
 No asumir que todo el presupuesto disponible puede convertirse en `num_ctx`.
@@ -359,16 +325,12 @@ El router actual ya tiene un fast-path para algunas consultas conversacionales s
 
 La nueva arquitectura debería ampliar esta idea:
 
-```text
-simple request
-    │
-    ├── deterministic route ──> model
-    │
-    └── no context required
-
-contextual request
-    │
-    └── ContextManager ──> bounded packet ──> router/model
+```mermaid
+flowchart TD
+    Request{Solicitud} -->|Simple| Direct[Ruta determinista hacia el modelo]
+    Request -->|Contextual| Context[ContextManager]
+    Context --> Packet[Packet acotado]
+    Packet --> Routed[Router y modelo]
 ```
 
 Esto reduce tanto tokens como KV cache.
@@ -419,12 +381,11 @@ KV cache independiente
 
 a:
 
-```text
-1 memoria compartida y persistente
-        │
-        ├── contexto pequeño → modelo A
-        ├── contexto pequeño → modelo B
-        └── contexto pequeño → modelo C
+```mermaid
+flowchart TD
+    Store[(Memoria compartida y persistente)] --> A[Contexto pequeño para modelo A]
+    Store --> B[Contexto pequeño para modelo B]
+    Store --> C[Contexto pequeño para modelo C]
 ```
 
 No elimina la memoria necesaria para los pesos de los modelos, pero evita duplicar innecesariamente el historial y reduce la KV cache requerida por request.

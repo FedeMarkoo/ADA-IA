@@ -1,45 +1,35 @@
-# Flujo de Datos y Razonamiento
+# Flujo de una petición
 
-Este documento detalla el ciclo de vida de una consulta desde que ingresa al sistema hasta que se genera una respuesta o se ejecuta una herramienta.
+Una solicitud entra desde la web o Telegram, se clasifica, se valida y se resuelve con un modelo o una herramienta MCP. El resultado y la traza se guardan localmente antes de volver al canal de origen.
 
----
-
-## 🔄 Ciclo de Vida de una Petición
-
-```text
-1. Usuario envía mensaje (vía Web Dashboard o Telegram)
-   │
-   ▼
-2. Endpoint `/api/chat` o `/api/chat/stream`
-   │
-   ▼
-3. IntentRouter (ada.application.router)
-   ├── Clasificación determinística / semántica rápida
-   └── Detección de intenciones (chat, photo, food, files, system, etc.)
-   │
-   ▼
-4. PolicyEngine (ada.domain.policy)
-   ├── Verificación de seguridad y confirmaciones requeridas
-   └── Validación de rutas autorizadas (allowed_roots)
-   │
-   ▼
-5. Planner / MCP Execution / MultiAgentCoordinator
-   ├── Invocación a herramientas MCP (`mcps/`)
-   └── Consulta a modelos LLM locales (OllamaClient)
-   │
-   ▼
-6. Persistencia y Memoria (ada.infrastructure.persistence.sqlite)
-   ├── Registro de tarea y auditoría en `ada/memory.db`
-   └── Actualización de contexto conversacional
-   │
-   ▼
-7. Respuesta formateada devuelta al cliente
+```mermaid
+flowchart TD
+    Input[Mensaje web o Telegram] --> Endpoint[/api/chat o /api/chat/stream/]
+    Endpoint --> Session[Sesión y contexto]
+    Session --> Router[Intent Router]
+    Router --> Decision{Tipo de tarea}
+    Decision -->|Conversación| Model[Model Manager]
+    Decision -->|Herramienta| Policy[Policy Engine]
+    Policy --> Check{¿Permitida?}
+    Check -->|Sí| MCP[MCP Manager]
+    Check -->|No o requiere confirmación| Request[Solicitar confirmación o informar bloqueo]
+    MCP --> Tool[Servidor MCP]
+    Tool --> Result[Resultado estructurado]
+    Model --> Result
+    Result --> Memory[(Memoria y auditoría SQLite)]
+    Memory --> Response[Respuesta formateada]
+    Response --> Output[Web JSON/SSE o Telegram]
 ```
 
----
+## Reglas de seguridad
 
-## 🛡️ Políticas de Confirmación y Riesgo
+| Tipo de acción | Tratamiento |
+|---|---|
+| Lectura de datos permitidos | Puede ejecutarse automáticamente |
+| Escritura de archivos o comandos | Respeta `allowed_roots`, allowlist y `confirm_risky` |
+| Mutación desde la web | Requiere host local, JSON y token CSRF si hay sesión |
+| Evento externo | Requiere `X-ADA-Event-Token` |
 
-Para garantizar la seguridad de los datos personales:
-- Las lecturas (`filesystem.list_files`, `food.recipes`, `photography.analyze_photo`) tienen riesgo **`safe`** y se ejecutan automáticamente.
-- Las mutaciones de archivos (`filesystem.write_file`, `filesystem.move_files`, `system.run_command`) tienen riesgo **`confirmation`** y requieren autorización previa si `confirm_risky` está habilitado.
+## Respuesta en streaming
+
+El endpoint `/api/chat/stream` publica fases de ejecución y fragmentos de respuesta mediante Server-Sent Events. El detalle de esos eventos y las secuencias de seguridad está en [Flujos técnicos completos](complete-flows.md).

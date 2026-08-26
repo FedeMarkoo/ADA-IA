@@ -6,17 +6,16 @@ El servidor MCP **`mcps/photography/`** es un motor completo y modular para proc
 
 ## 📁 Arquitectura Modular Interna
 
-```text
-mcps/photography/
-├── server.py              # Servidor Stdio JSON-RPC 2.0 (registra 7 herramientas)
-├── analyzer.py            # Métricas: nitidez (Laplaciano), exposición, contraste, ruido ISO
-├── raw_engine.py          # Decodificación de archivos RAW (rawpy, EXIF) en 1 solo paso
-├── xmp.py                 # Generación y reparación de sidecars XMP de Lightroom
-├── burst.py               # Detección inteligente de secuencias de ráfagas
-├── batch.py               # Orquestación de culling y análisis masivo en paralelo
-├── organizer.py           # Agrupador temático con protección contra colisiones
-├── lightroom.py           # Auditoría y sincronización del catálogo de Lightroom
-└── vision.py              # Análisis semántico y artístico conectando con VLMs locales
+```mermaid
+flowchart TD
+    Server[server.py: servidor MCP] --> Analyzer[analyzer.py: calidad técnica]
+    Server --> Raw[raw_engine.py: RAW y EXIF]
+    Server --> XMP[xmp.py: sidecars]
+    Server --> Burst[burst.py: ráfagas]
+    Server --> Batch[batch.py: culling masivo]
+    Server --> Organizer[organizer.py: clasificación]
+    Server --> Lightroom[lightroom.py: catálogo]
+    Server --> Vision[vision.py: análisis semántico]
 ```
 
 ---

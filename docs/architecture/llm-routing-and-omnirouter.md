@@ -38,10 +38,14 @@ Referencias: [Hermes API server](https://hermes-agent.nousresearch.com/docs/user
 
 Un gateway puede intentar esta secuencia:
 
-```text
-Solicitud 1 → proveedor A → límite alcanzado
-Solicitud 2 → proveedor B → continúa
-Solicitud 3 → proveedor C → continúa
+```mermaid
+flowchart LR
+    R1[Solicitud 1] --> A[Proveedor A]
+    A --> Limit[Límite alcanzado]
+    R2[Solicitud 2] --> B[Proveedor B]
+    B --> Continue[Continúa]
+    R3[Solicitud 3] --> C[Proveedor C]
+    C --> Continue
 ```
 
 Esto puede aumentar la capacidad acumulada cuando las cuotas son realmente
@@ -75,14 +79,13 @@ Para eliminar la dependencia de instalar Ollama sin mezclar la inferencia con
 el proceso web de ADA, el backend local previsto es `llama-server` de
 `llama.cpp`:
 
-```text
-ADA / ModelManager
-       ↓ HTTP OpenAI-compatible
-llama-server (proceso independiente)
-       ├─ modelo GGUF
-       ├─ /health
-       ├─ /metrics
-       └─ /slots
+```mermaid
+flowchart TD
+    ADA[ADA / ModelManager] -->|HTTP compatible con OpenAI| Server[llama-server]
+    Server --> Model[Modelo GGUF]
+    Server --> Health[/health]
+    Server --> Metrics[/metrics]
+    Server --> Slots[/slots]
 ```
 
 ADA debe administrar únicamente el ciclo de vida: detectar el binario,
@@ -119,19 +122,16 @@ requisito.
 
 No reemplazar ADA. Incorporar una capa de gateway opcional:
 
-```text
-Usuario / Telegram / Web
-            ↓
-ADA: intención, privacidad, permisos y memoria
-            ↓
-      ModelGateway local
-       ├─ Ollama
-       ├─ NVIDIA/API autorizada
-       ├─ Gemini
-       ├─ OpenRouter
-       └─ otros endpoints compatibles
-            ↓
-       modelo seleccionado
+```mermaid
+flowchart TD
+    User[Usuario, Telegram o web] --> ADA[ADA: intención, privacidad, permisos y memoria]
+    ADA --> Gateway[ModelGateway local]
+    Gateway --> Ollama[Ollama]
+    Gateway --> Nvidia[NVIDIA o API autorizada]
+    Gateway --> Gemini[Gemini]
+    Gateway --> OpenRouter[OpenRouter]
+    Gateway --> Other[Otros endpoints compatibles]
+    Gateway --> Selected[Modelo seleccionado]
 ```
 
 ADA debe conservar la decisión de si una tarea puede salir del equipo. El
@@ -177,13 +177,20 @@ pero la superficie expuesta debe ser mínima y explícita.
 
 ## Política inicial sugerida
 
-```text
-1. Tarea privada o simple       → Ollama
-2. MCP de ADA                   → ADA ejecuta directamente
-3. Tarea externa compleja       → gateway autorizado
-4. Cuota agotada                → siguiente proveedor compatible
-5. Todos los remotos fallan     → Ollama o error controlado
-6. Proveedor con costo no cero  → bloqueado salvo autorización explícita
+```mermaid
+flowchart TD
+    Task{Tipo de tarea} -->|Privada o simple| Ollama[Ollama]
+    Task -->|MCP de ADA| MCP[ADA ejecuta directamente]
+    Task -->|Externa compleja| Gateway[Gateway autorizado]
+    Gateway --> Quota{¿Cuota disponible?}
+    Quota -->|Sí| Remote[Proveedor compatible]
+    Quota -->|No| Next[Siguiente proveedor]
+    Next --> Fallback{¿Queda remoto?}
+    Fallback -->|Sí| Gateway
+    Fallback -->|No| Local[Ollama o error controlado]
+    Remote --> Cost{¿Costo permitido?}
+    Cost -->|No| Block[Requiere autorización]
+    Cost -->|Sí| Result[Ejecutar]
 ```
 
 ## Criterios de aceptación

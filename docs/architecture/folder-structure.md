@@ -1,66 +1,39 @@
-# Estructura del Proyecto y Carpetas
+# Estructura del proyecto
 
-El repositorio está organizado en carpetas independientes en la raíz, evitando acoplamientos innecesarios.
+El repositorio se organiza por responsabilidad. El núcleo no implementa los servidores MCP ni el frontend; los consume mediante contratos claros.
 
----
-
-## 📁 Árbol de Directorios Principal
-
-```text
-ADA-IA/
-├── README.md               # 📖 Descripción general e inicio rápido
-├── pyproject.toml          # 📦 Definición de paquetes y dependencias (PEP 517/621)
-│
-├── ada/                    # 🤖 Núcleo del Asistente Inteligente
-│   ├── config.json         # Configuración del agente y rutas permitidas
-│   ├── memory.db           # Base de datos SQLite (memoria, sesiones, auditoría)
-│   ├── application/        # Servicios de aplicación (Agent, Router, Planner, Doctor)
-│   ├── domain/             # Contratos de dominio y reglas de negocio
-│   ├── infrastructure/     # Adaptadores (Persistencia, Recursos, Integraciones)
-│   ├── interfaces/         # API Web Flask/REST y CLI
-│   ├── mcps/               # Gestor e introspección de herramientas MCP (MCPManager)
-│   ├── models/             # Catálogo y benchmark de modelos
-│   ├── ollama/             # Cliente HTTP local para Ollama
-│   └── agents/             # Coordinador multiagente y agentes fotográficos
-│
-├── dashboard/              # 🖥️ Gestor Web SPA (Frontend React 19)
-│   ├── index.html          # Shell HTML con carga de fuentes Inter/Outfit
-│   ├── app.js              # Controlador SPA completo en React 19
-│   └── styles.css          # Sistema de diseño dark-theme con tokens CSS
-│
-├── mcps/                   # 🔌 Servidores MCP Modulares e Independientes
-│   ├── config.json         # Registro canónico mcpServers
-│   ├── protocol.py         # Servidor base Stdio JSON-RPC 2.0
-│   ├── photography/        # Análisis RAW, sidecars XMP, ráfagas y Lightroom
-│   ├── food/               # Compras, recetario, stock de alacena y presupuestos
-│   ├── filesystem/         # Operaciones seguras sobre archivos con allowlist
-│   ├── system/             # Ejecución de comandos del sistema
-│   └── web_search/         # Búsqueda en vivo DuckDuckGo
-│
-├── models/                 # 🧠 Modelos de Ollama, Modelfiles y Benchmarks
-│   ├── catalog.json        # Catálogo de modelos y asignación de roles
-│   ├── benchmarks.json     # Historial de benchmarks de velocidad
-│   └── modelfiles/         # Modelfiles personalizados (Modelfile.ada, Modelfile.vision)
-│
-├── telegram/               # 📱 Servidor / Bot Independiente de Telegram
-│   ├── bot.py              # Daemon long-polling desacoplado
-│   └── README.md           # Guía de ejecución del servidor de Telegram
-│
-├── tests/                  # 🧪 Suite de Pruebas Automatizadas (pytest)
-│   ├── test_photo_analysis.py
-│   ├── test_food.py
-│   ├── test_modular_packages.py
-│   ├── test_telegram.py
-│   └── ... (21 archivos de tests)
-│
-└── docs/                   # 📖 Documentación Técnica Completa
+```mermaid
+flowchart TD
+    Root[ADA-IA] --> Core[ada/: núcleo del agente]
+    Root --> UI[dashboard/: SPA local]
+    Root --> MCPs[mcps/: servidores MCP]
+    Root --> Models[models/: catálogo y Modelfiles]
+    Root --> Telegram[telegram/: bot independiente]
+    Root --> Tests[tests/: pruebas]
+    Root --> Docs[docs/: guías y referencia]
+    Core --> Application[application/: casos de uso]
+    Core --> Domain[domain/: políticas y tareas]
+    Core --> Infrastructure[infrastructure/: runtime, persistencia e integraciones]
+    Core --> Interfaces[interfaces/: web, CLI y escritorio]
+    Core --> Manager[mcps/: gestor MCP]
 ```
 
----
+## Carpetas principales
 
-## 🎯 Límites de Responsabilidad
+| Ruta | Contenido |
+|---|---|
+| `ada/` | Agente, router, servicios, políticas, persistencia y runtimes |
+| `dashboard/` | Interfaz React servida por la API local |
+| `mcps/` | Servidores de filesystem, fotografía, comida, búsqueda, sistema, transporte y Git |
+| `models/` | Catálogo, benchmarks y Modelfiles |
+| `telegram/` | Daemon de Telegram y adaptador HTTP |
+| `monitoring/` | Provisionamiento de Prometheus y Grafana |
+| `tests/` | Suite de regresión y pruebas de integración |
+| `docs/` | Documentación de uso, operación, arquitectura y referencias |
 
-- **`ada/`** no contiene código de servidores MCP ni lógica de interfaces específicas (como Telegram). Expone endpoints REST y consume las herramientas a través de `mcps/`.
-- **`mcps/`** es agnóstico a ADA: cada subcarpeta contiene un servidor MCP estándar que puede conectarse a cualquier cliente compatible (VSCode, Claude Desktop, Antigravity, ADA).
-- **`dashboard/`** es una aplicación cliente estática servida por el backend REST de ADA.
-- **`telegram/`** es un cliente que se comunica exclusivamente mediante llamadas HTTP al endpoint `/api/chat`.
+## Límites
+
+- `ada/` invoca herramientas a través de `MCPManager`; no contiene la implementación de cada servidor MCP.
+- `mcps/` puede funcionar con cualquier cliente compatible con MCP.
+- `dashboard/` consume la API REST/SSE y no contiene lógica de dominio.
+- `telegram/` se comunica con la API local, preservando el mismo flujo de seguridad y auditoría.

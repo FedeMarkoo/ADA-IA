@@ -322,22 +322,18 @@ respeta a medias. Estos cambios ordenan el proyecto y habilitan la evolución ha
 
 ### Estructura objetivo sugerida
 
-```text
-src/ada/
-├── domain/            tasks (Task/Intent/Plan/Action), food, policy, photography
-├── application/
-│   ├── services/      ChatService, PhotoService, FoodService, AutonomyService
-│   ├── planning/      planner/orchestrator (bucle de razonamiento + tool-calling)
-│   └── router.py
-├── agents/            coordinador genérico + especialistas (foto, comida, ...)
-├── capabilities/      con contrato declarativo (schema, riesgo, permisos)
-├── infrastructure/
-│   ├── engines/       proveedores LLM (Protocol)
-│   ├── persistence/   memoria (FTS5/vector), event store, audit log
-│   ├── runtime/       recursos, scheduler, watchers
-│   ├── integrations/  MCP, Telegram, web search, voz (STT/TTS)
-│   └── imaging/
-└── interfaces/        web, CLI, Telegram, (voz) → todas finas, llaman a services
+```mermaid
+flowchart TD
+    ADA[src/ada] --> Domain[domain: tareas, comida, política y fotografía]
+    ADA --> Application[application: servicios, planning y router]
+    ADA --> Agents[agents: coordinador y especialistas]
+    ADA --> Capabilities[capabilities: schema, riesgo y permisos]
+    ADA --> Infrastructure[infrastructure]
+    Infrastructure --> Engines[engines: proveedores LLM]
+    Infrastructure --> Persistence[persistence: memoria y auditoría]
+    Infrastructure --> Runtime[runtime: recursos y scheduler]
+    Infrastructure --> Integrations[integrations: MCP, Telegram y voz]
+    ADA --> Interfaces[interfaces: web, CLI y Telegram]
 ```
 
 ---

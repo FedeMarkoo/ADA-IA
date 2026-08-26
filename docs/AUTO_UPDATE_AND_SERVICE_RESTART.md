@@ -8,30 +8,18 @@ La actualización debe ser **segura, observable y reversible**, evitando hacer u
 
 ## Flujo propuesto
 
-```text
-                 GitHub / origin/main
-                         │
-                         ▼
-                  UpdateManager
-                         │
-                  ¿SHA cambió?
-                    /        \
-                  no          sí
-                  │            │
-                  │       ¿operación crítica?
-                  │          /       \
-                  │        sí         no
-                  │        │           │
-                  │     esperar        ▼
-                  │              git pull --ff-only
-                  │                       │
-                  │                validar actualización
-                  │                       │
-                  │                 reinicio coordinado
-                  │                       │
-                  │                  health checks
-                  │                       │
-                  └───────────────◄──────┘
+```mermaid
+flowchart TD
+    Origin[GitHub / origin/main] --> Manager[UpdateManager]
+    Manager --> Changed{¿Cambió el SHA?}
+    Changed -->|No| Wait[Esperar al próximo ciclo]
+    Changed -->|Sí| Critical{¿Hay una operación crítica?}
+    Critical -->|Sí| Wait
+    Critical -->|No| Pull[git pull --ff-only]
+    Pull --> Validate[Validar actualización]
+    Validate --> Restart[Reinicio coordinado]
+    Restart --> Health[Health checks]
+    Health --> Manager
 ```
 
 ## Componente nuevo: `UpdateManager`
@@ -166,28 +154,24 @@ El reinicio debe estar centralizado en un componente de lifecycle, no disperso e
 
 Por ejemplo:
 
-```text
-ServiceManager
- ├── API / Web service
- ├── Chat service
- ├── Router
- ├── MCP manager
- ├── background workers
- └── otros servicios administrados por ADA
+```mermaid
+flowchart TD
+    Services[ServiceManager] --> API[API y dashboard]
+    Services --> Chat[Chat service]
+    Services --> Router[Router]
+    Services --> MCP[MCP Manager]
+    Services --> Workers[Workers de fondo]
+    Services --> Other[Otros servicios administrados]
 ```
 
 Después del `git pull`:
 
-```text
-stop/reload
-    ↓
-reload configuration
-    ↓
-recreate application components
-    ↓
-start
-    ↓
-health checks
+```mermaid
+flowchart TD
+    Stop[Detener o recargar] --> Config[Recargar configuración]
+    Config --> Components[Reconstruir componentes]
+    Components --> Start[Iniciar servicios]
+    Start --> Health[Health checks]
 ```
 
 ### Ollama
@@ -285,16 +269,12 @@ La memoria persistente debe convertirse en la fuente de verdad de la conversaci�
 
 De esa forma:
 
-```text
-restart ADA
-    ↓
-SessionState perdido
-    ↓
-Shared Memory intacta
-    ↓
-ADA reconstruye contexto
-    ↓
-conversación continúa
+```mermaid
+flowchart TD
+    Restart[Reinicio de ADA] --> Lost[SessionState en memoria se pierde]
+    Lost --> Persisted[Memoria compartida permanece]
+    Persisted --> Restore[ADA reconstruye el contexto]
+    Restore --> Continue[La conversación continúa]
 ```
 
 Esto es especialmente importante si ADA se actualiza mientras está siendo utilizada.
@@ -325,22 +305,14 @@ Estas dos mejoras deberían implementarse conjuntamente:
 
 El resultado buscado es que ADA pueda cambiar de versión de forma prácticamente transparente:
 
-```text
-usuario
-  │
-  ▼
-ADA
-  │
-  ├── Shared Memory
-  │       └── contexto persistente
-  │
-  ├── Router
-  │       └── modelo adecuado
-  │
-  └── UpdateManager
-          │
-          ├── detecta commit
-          ├── pull
-          ├── restart
-          └── health check
+```mermaid
+flowchart TD
+    User[Usuario] --> ADA[ADA]
+    ADA --> Memory[Shared Memory: contexto persistente]
+    ADA --> Router[Router: modelo adecuado]
+    ADA --> Update[UpdateManager]
+    Update --> Detect[Detectar commit]
+    Update --> Pull[Actualizar código]
+    Update --> Restart[Reiniciar]
+    Update --> Health[Comprobar salud]
 ```

@@ -41,3 +41,7 @@ ollama pull llama3.2:3b
 python -m ada.interfaces.web.server
 ```
 Abrí tu navegador en **[http://127.0.0.1:5005](http://127.0.0.1:5005)** para acceder al panel de control interactivo.
+
+Al abrirlo, verificá que el estado general sea saludable. La guía completa de cada pantalla está en [Guía de uso del dashboard](../user-guide.md).
+
+![Resumen del dashboard](../screenshots/assets-overview.png)

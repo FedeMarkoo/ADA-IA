@@ -1,26 +1,43 @@
-# Dashboard Gestor Web (ADA Hub)
+# Dashboard ADA Hub
 
-El Dashboard de ADA Hub (`dashboard/`) es una interfaz moderna desarrollada en **React 19 SPA**, diseñada para monitorear la salud del sistema, controlar servidores MCP, gestionar modelos de Ollama y administrar el bot de Telegram.
+El dashboard es la interfaz local para operar ADA: muestra el estado del sistema, permite conversar con el agente, configurar modelos y herramientas, y administrar canales como Telegram.
 
----
+## Acceso
 
-## 🎨 Características Visuales y de UX
+Iniciá el servidor y abrí `http://127.0.0.1:5005`:
 
-- **Dark Theme Nativo**: Sistema de diseño con tokens de color HSL y tipografías *Inter*, *Outfit* y *JetBrains Mono*.
-- **Sin Build Step Pesado**: React 19 se ejecuta directamente mediante módulos ESM nativos del navegador, garantizando rendimiento instantáneo y cero complejidad de empaquetado.
-- **Auto-Healing & Health Doctor**: Diagnóstico en 7 áreas clave con botón de auto-remediación a 100% de salud.
+```bash
+./.venv/bin/python -m ada.interfaces.web.server
+```
 
----
+La aplicación de escritorio carga esta misma interfaz dentro de una ventana nativa. Consultá [Aplicación de escritorio](../desktop.md) para sus requisitos.
 
-## 📑 Pestañas del Panel
+## Recorrido de operación
 
-1. **📊 Overview**: Estado global de CPU, RAM, motores de inferencia, score de salud y acciones rápidas de reparación.
-2. **🦙 Ollama Hub**: Monitoreo de modelos descargados, descarga de nuevos modelos (`pull`), descarga de VRAM y benchmarks.
-3. **🧠 Modelos & Roles**: Asignación de modelos especializados por tarea (Chat general, Coder, Vision, Router) y pruebas de velocidad.
-4. **🔌 MCPs & Herramientas**: Explorador interactivo estilo IDE de los servidores MCP registrados, activación/desactivación de tools y ejecutor de prueba con schema JSON.
-5. **💬 ADA Chat**: Chat interactivo con streaming Server-Sent Events (SSE) y renderizado de respuestas.
-6. **📱 Telegram Bot**: Panel de control del bot de Telegram (iniciar, detener, reiniciar, verificar token con `getMe`).
-7. **🗃️ Memoria & Auditoría**: Visor de base de datos SQLite y auditoría de eventos.
-8. **⚙️ Configuración**: Ajustes del agente y rutas permitidas.
+| Objetivo | Pantalla | Qué permite hacer |
+|---|---|---|
+| Comprobar el sistema | Resumen | Consultar salud, recursos, modelos y servicios críticos |
+| Entender una ejecución | Núcleo ADA | Ver canales, modelos, MCPs y traza de actividad |
+| Probar una tarea | Conversar con ADA | Usar el chat con respuesta normal o streaming |
+| Diagnosticar una falla | Healthcheck | Ejecutar casos, ver resultados y reintentar |
+| Configurar el agente | Motor local, Modelos, Herramientas | Gestionar runtime, roles y MCPs |
+| Gestionar canales | Disparadores y Telegram | Controlar eventos y el bot |
 
-Para el recorrido detallado de cada pantalla, acciones y capturas reales, consultar la [Guía funcional](../user-guide.md). El [Catálogo completo](../functional-catalog.md) relaciona las pantallas con sus endpoints y módulos de implementación.
+### Estado del sistema
+
+![Resumen del dashboard](../screenshots/assets-overview.png)
+
+### Herramientas MCP
+
+![Herramientas MCP](../screenshots/assets-mcps.png)
+
+### Conversación con ADA
+
+![Chat de ADA](../screenshots/assets-chat.png)
+
+## Documentación relacionada
+
+- [Guía de uso completa](../user-guide.md): las 12 pantallas, acciones y capturas en orden de uso.
+- [Referencia REST y SSE](api-reference.md): contratos de la API.
+- [Catálogo funcional](../functional-catalog.md): endpoints, MCPs y capacidades del dominio.
+- [Galería de capturas](../screenshots/README.md): consulta visual rápida de todas las vistas.
