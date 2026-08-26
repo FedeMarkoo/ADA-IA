@@ -12,7 +12,7 @@ La regla de oro es medir antes de optimizar. ADA ya expone métricas Prometheus 
 |---|---|---|---|---|
 | PERF-01 | Conexión SQLite por thread y lock exclusivo de escritura | 🔴 Pendiente | Alto | Medio |
 | PERF-02 | Cache TTL de `hardware_profile()` | ✅ Implementado | Alto | Bajo |
-| PERF-03 | Cachear e invalidar la policy de modelos | 🟠 Pendiente | Medio-alto | Bajo |
+| PERF-03 | Cachear e invalidar la policy de modelos | ✅ Implementado | Medio-alto | Bajo |
 | PERF-04 | Reutilizar clientes HTTP/proveedores | 🟠 Pendiente | Medio | Bajo-medio |
 | PERF-05 | Streaming real de tokens hacia SSE | 🟠 Pendiente | Alto en percepción | Medio |
 | PERF-06 | Servidor productivo y `/api/chat` fuera del thread de request | 🟠 Pendiente | Medio-alto | Medio |

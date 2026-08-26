@@ -69,6 +69,8 @@ class ModelManager:
         self._model_stats_lock = threading.RLock()
         self._ollama_activity = {}
         self._ollama_activity_lock = threading.RLock()
+        self._policy_cache = {}
+        self._policy_cache_lock = threading.RLock()
         self._ollama_reaper_stop = threading.Event()
         self._installed_cache = (0.0, [])
         self._apply_config(config or {})
@@ -146,6 +148,8 @@ class ModelManager:
         with self._model_stats_lock:
             self._gpt4all = None
             self._installed_cache = (0.0, [])
+        with self._policy_cache_lock:
+            self._policy_cache.clear()
 
     def available(self):
         local_available = self._ollama_available() if self.provider in self.LOCAL_PROVIDERS else False
@@ -333,7 +337,12 @@ class ModelManager:
     def effective_policy(self):
         mode = str(self.config.get("model_selection_mode") or "manual").lower()
         if mode in self.AUTO_MODES:
-            return self.automatic_policy(mode)
+            with self._policy_cache_lock:
+                cached = self._policy_cache.get(mode)
+                if cached is None:
+                    cached = self.automatic_policy(mode)
+                    self._policy_cache[mode] = cached
+                return cached
         return self.config.get("model_policy", {})
 
     @classmethod

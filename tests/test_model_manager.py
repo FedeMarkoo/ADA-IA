@@ -44,6 +44,12 @@ class TestModelManager(unittest.TestCase):
         self.assertEqual(self.manager.provider, "gemini")
         self.assertEqual(self.manager.config["privacy_default"], "high")
 
+    def test_automatic_policy_is_cached_until_reload(self):
+        manager = ModelManager({"model_selection_mode": "light", "local_runtime": {"auto_start": False}})
+        with patch.object(manager, "automatic_policy", return_value={"chat": {"preferred": "small"}}) as build:
+            self.assertEqual(manager.effective_policy(), manager.effective_policy())
+        build.assert_called_once_with("light")
+
 
 if __name__ == "__main__":
     unittest.main()
