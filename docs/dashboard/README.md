@@ -22,3 +22,5 @@ El Dashboard de ADA Hub (`dashboard/`) es una interfaz moderna desarrollada en *
 6. **📱 Telegram Bot**: Panel de control del bot de Telegram (iniciar, detener, reiniciar, verificar token con `getMe`).
 7. **🗃️ Memoria & Auditoría**: Visor de base de datos SQLite y auditoría de eventos.
 8. **⚙️ Configuración**: Ajustes del agente y rutas permitidas.
+
+Para el recorrido detallado de cada pantalla, acciones y capturas reales, consultar la [Guía funcional](../user-guide.md). El [Catálogo completo](../functional-catalog.md) relaciona las pantallas con sus endpoints y módulos de implementación.

@@ -8,7 +8,7 @@ ADA-IA incluye herramientas integradas para diagnóstico continuo y auto-remedia
 
 ADA expone métricas nativas de Prometheus en `http://127.0.0.1:5005/metrics`.
 La retención y las series históricas quedan a cargo de Prometheus; Grafana es la
-interfaz recomendada. No se necesita ni se debe ejecutar `tools/metrics_scraper.py`.
+interfaz integrada en la pestaña **Métricas** del Dashboard de ADA.
 
 ```bash
 docker compose -f docker-compose.monitoring.yml up -d
@@ -29,6 +29,7 @@ Si ADA corre dentro de Docker en vez de en el host, cambiá el target de
 - `ada_mcp_memory_bytes` y `ada_mcp_cpu_seconds_total`: recursos observados por MCP/tool.
 - `ada_system_memory_bytes{state}` y `ada_system_cpu_usage_ratio`: recursos disponibles del sistema.
 - `ada_process_memory_bytes`, `ada_process_cpu_usage_ratio` y `ada_process_uptime_seconds`: recursos de ADA.
+- `ada_component_memory_bytes{component}`, `ada_component_cpu_usage_ratio{component}` y `ada_component_running{component}`: ADA, Ollama, Telegram, Prometheus y Grafana cuando son detectables como procesos.
 - `ada_responses_total{source,status}`: respuestas de ADA separadas en `ok` y `error`.
 
 Los MCP locales se ejecutan dentro del proceso de ADA, por lo que su memoria
@@ -70,7 +71,7 @@ cp ada/memory.db ~/Desktop/ada_backup_$(date +%Y%m%d).db
 
 ## 🚆 Alertas del Sarmiento con presencia
 
-ADA incluye la capability de lectura `transport_status` y una regla opcional para consultar el Sarmiento a las 13:00
+ADA incluye el MCP `transport` con la tool `transport.get_status` y una regla opcional para consultar el Sarmiento a las 13:00
 cuando existe una señal de presencia válida en `work`. La función está desactivada por defecto.
 
 1. Configurá el token de la API de Transporte BA fuera de Git:
@@ -103,5 +104,8 @@ estimación conservadora cuando no hay tokenizer específico del modelo.
 
 El `UpdateManager` está integrado al daemon, pero `update.enabled` y `update.auto_pull`
 son `false` por defecto. Al habilitarlo, sólo acepta un fast-forward sobre un worktree
-limpio y usa `git pull --ff-only`; nunca ejecuta `reset --hard`, borra archivos ni
-reinicia el proceso actual automáticamente. El estado queda en el `state_path` configurado.
+limpio y usa `git pull --ff-only`; nunca ejecuta `reset --hard` ni borra archivos.
+Cuando `update.restart_on_update` está activo, envía antes del reinicio un aviso de
+Telegram con fecha, hora, SHA completo y mensaje del commit. Configurá el destinatario
+en `update.telegram_chat_id` (y el token mediante la configuración habitual de Telegram).
+El estado queda en el `state_path` configurado.

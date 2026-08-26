@@ -10,6 +10,7 @@ Bienvenido a la documentación técnica de **ADA-IA**, un ecosistema modular de 
 - [**Visión General de Arquitectura**](architecture/overview.md): Principios de diseño, orquestador multiagente y router de intenciones.
 - [**Estructura del Proyecto**](architecture/folder-structure.md): Jerarquía de carpetas en la raíz y límites de responsabilidad.
 - [**Flujo de Datos y Razonamiento**](architecture/data-flow.md): Ciclo de vida de peticiones, políticas de seguridad y ejecución.
+- [**Flujos completos con Mermaid**](architecture/complete-flows.md): Arquitectura, chat, seguridad, ciclo de vida y streaming SSE.
 
 ### 🔌 2. Servidores y Herramientas MCP (`mcps/`)
 - [**Protocolo y Servidores MCP**](mcps/README.md): Estándar Stdio JSON-RPC 2.0, registro en `mcps/config.json` y catálogo de tools.
@@ -22,10 +23,14 @@ Bienvenido a la documentación técnica de **ADA-IA**, un ecosistema modular de 
 ### 🖥️ 3. Gestor Web y API (`dashboard/` & `ada/interfaces/web/`)
 - [**Dashboard Gestor Web**](dashboard/README.md): Interfaz gráfica en React 19, monitoreo de salud y panel de control.
 - [**Referencia de la API REST & SSE**](dashboard/api-reference.md): Endpoints de estado, chat en streaming, control de MCPs y diagnóstico.
+- [**Guía funcional y capturas**](user-guide.md): Todas las pantallas, acciones y procedimientos de uso.
+- [**Catálogo completo de funcionalidades**](functional-catalog.md): Capacidades, MCPs, rutas API y relación con el código.
+- [**Aplicación de escritorio**](desktop.md): Shell GTK/WebKit, requisitos y ejecución.
 
 ### 🧠 4. Modelos de Lenguaje & Visión (`models/`)
 - [**Catálogo de Modelos & Benchmarks**](models/README.md): Asignación de roles por hardware, catálogo y métricas de velocidad.
 - [**Modelfiles Personalizados**](models/modelfiles.md): Definición de prompts de sistema y parámetros para Ollama.
+- [**Routing multiproveedor y OmniRoute**](architecture/llm-routing-and-omnirouter.md): Comparación con Hermes, LiteLLM y OpenRouter; pools de credenciales, cuotas y arquitectura recomendada para ADA.
 
 ### 📱 5. Integración Telegram (`telegram/`)
 - [**Servidor Independiente de Telegram**](telegram/README.md): Daemon desacoplado, polling de mensajes y reenvío seguro.
