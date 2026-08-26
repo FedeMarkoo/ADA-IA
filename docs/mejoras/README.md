@@ -26,6 +26,7 @@ Este directorio contiene el registro modular de mejoras, correcciones de segurid
 | **SEC-08** | Seguridad | Defaults fail-closed y defensa en profundidad para tools/API | 🔴 Prioritario | Auditoría 2026-08 | [10-seguridad-fail-closed.md](10-seguridad-fail-closed.md) |
 | **PERF-01** | Performance | Concurrencia, cachés, streaming y resiliencia del runtime | 🟠 Priorizado | Auditoría 2026-08 | [11-performance-y-resiliencia.md](11-performance-y-resiliencia.md) |
 | **ARQ-04** | Arquitectura | Registro único de tools y routing estructurado sin regex | 🟡 Propuesto | Diseño 2026-08 | [12-registro-de-tools-y-routing.md](12-registro-de-tools-y-routing.md) |
+| **ARQ-09** | Model Routing | Selector de modelos para LiteLLM informado por el router | 🟡 Propuesto | Diseño 2026-08 | [12-registro-de-tools-y-routing.md](12-registro-de-tools-y-routing.md) |
 
 ---
 

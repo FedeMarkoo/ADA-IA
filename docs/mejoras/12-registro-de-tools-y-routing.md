@@ -13,6 +13,7 @@ Reemplazar el muro de regex en español para detectar intenciones por un registr
 | ARQ-06 | Router pequeño, determinista y sin contexto completo | ✅ Implementado |
 | ARQ-07 | Validación de tool y parámetros antes de ejecutar; fallback a chat | ✅ Implementado |
 | ARQ-08 | Suite de evaluación para comandos, chat, MCPs y seguridad | ✅ Implementado |
+| ARQ-09 | Selector de modelos LiteLLM informado por señales del router | 🟡 Propuesto |
 
 ## Flujo de cuatro capas
 
@@ -202,3 +203,134 @@ Como mínimo, la suite debe cubrir:
 | Diagnóstico | Telegram, métricas stale, timeouts y modos de modelo |
 
 Cada caso debe comprobar que el routing elige la capacidad correcta, que las acciones sensibles piden confirmación y que las consultas sin tool caen al modelo conversacional.
+
+## ARQ-09: selector de modelos para LiteLLM
+
+### Objetivo
+
+La llamada a LiteLLM no debe tener un modelo fijo e indiferenciado. ADA debe contar con un selector que elija el modelo o la cadena de fallback adecuada según la naturaleza de la tarea, su complejidad, los requisitos de privacidad, la latencia esperada y las capacidades necesarias.
+
+El router no ejecuta la selección final ni debe conocer secretos de proveedores. Su responsabilidad es devolver señales estructuradas y explicables; el selector transforma esas señales en un modelo concreto y LiteLLM realiza la llamada.
+
+```text
+mensaje
+   ↓
+router estructurado
+   ↓
+{ tool, parameters, task_type, complexity, model_hint, ... }
+   ↓
+ModelSelector
+   ├─ política de modelos
+   ├─ disponibilidad/capacidades
+   ├─ privacidad y presupuesto
+   ├─ latencia/coste
+   └─ fallbacks
+   ↓
+LiteLLM: completion(model=..., fallbacks=[...])
+```
+
+### Señales que debe emitir el router
+
+El JSON del router debe conservar `tool`, `parameters` y `confidence`, y sumar información suficiente para que el selector tenga una base objetiva:
+
+```json
+{
+  "tool": null,
+  "parameters": {},
+  "confidence": 0.94,
+  "task_type": "reasoning",
+  "complexity": 7,
+  "model_hint": "reasoning",
+  "required_capabilities": ["long_context"],
+  "privacy": "normal",
+  "latency": "balanced",
+  "requires_tool_calling": false,
+  "estimated_output_tokens": 900
+}
+```
+
+Campos y semántica:
+
+| Campo | Valores / ejemplo | Uso del selector |
+|---|---|---|
+| `task_type` | `chat`, `reasoning`, `coding`, `vision`, `tools`, `classification` | Mapea a un rol/política de modelos |
+| `complexity` | Entero `1..10` | Elige modelo liviano, medio o potente |
+| `model_hint` | `chat`, `fast`, `reasoning`, nombre lógico | Preferencia, nunca autorización absoluta |
+| `required_capabilities` | `long_context`, `vision`, `json_schema`, `tool_calling` | Filtra modelos incompatibles |
+| `privacy` | `high`, `normal`, `low` | Restringe proveedores remotos cuando corresponde |
+| `latency` | `fast`, `balanced`, `quality` | Prioriza velocidad o calidad |
+| `requires_tool_calling` | `true/false` | Exige soporte de tools/structured output |
+| `estimated_output_tokens` | Entero positivo | Comprueba presupuesto de contexto y tokens |
+
+Los campos deben tener enums, rangos y defaults definidos en el schema. Si el modelo router devuelve un valor inválido, el selector debe normalizarlo o usar defaults conservadores; nunca debe fallar hacia un modelo remoto de mayor privilegio.
+
+### Contrato del selector
+
+```python
+selection = selector.choose(
+    task_type="reasoning",
+    complexity=7,
+    model_hint="reasoning",
+    required_capabilities=["long_context"],
+    privacy="normal",
+    latency="balanced",
+    requires_tool_calling=False,
+    estimated_output_tokens=900,
+)
+
+# Resultado explicable y auditable
+{
+    "model": "ollama/qwen3:8b",
+    "fallbacks": ["openai/gpt-4o-mini"],
+    "provider": "ollama",
+    "role": "reasoning",
+    "reason": "complexity=7; requiere long_context; privacidad normal",
+}
+```
+
+El selector debe considerar, en este orden:
+
+1. restricciones duras: privacidad, capacidad requerida, modelo instalado y disponibilidad;
+2. política explícita del usuario o del sistema;
+3. `task_type` y `model_hint` del router;
+4. complejidad, tokens estimados y presupuesto de contexto;
+5. latencia/coste y métricas históricas;
+6. fallbacks compatibles.
+
+`model_hint` es una pista, no una orden. El selector puede ignorarla si el modelo no está disponible, no soporta la capacidad requerida o contradice una política de privacidad.
+
+### Integración con LiteLLM
+
+LiteLLM debe recibir el modelo ya resuelto, no decidir de forma opaca a partir de texto libre:
+
+```python
+selection = model_selector.choose(router_result, runtime_context)
+response = litellm.completion(
+    model=selection["model"],
+    fallbacks=selection["fallbacks"],
+    messages=messages,
+    temperature=temperature_for(router_result),
+    max_tokens=selection["max_tokens"],
+    response_format=selection.get("response_format"),
+)
+```
+
+La telemetría debe registrar `task_type`, `complexity`, `selected_model`, `provider`, `fallback_used`, latencia, tokens y motivo de selección, sin guardar prompts ni secretos innecesarios.
+
+### Reglas de seguridad y degradación
+
+- Nunca aceptar del router un nombre de modelo arbitrario para ejecutar directamente; `model_hint` debe resolverse contra un catálogo allowlisted.
+- Si falta `task_type` o `complexity`, usar `chat` y complejidad media, no el modelo más potente.
+- Si la salida requiere JSON, el selector debe filtrar modelos sin structured output y elegir un fallback compatible.
+- Si `privacy=high`, excluir proveedores remotos aunque el router sugiera un modelo remoto.
+- Si el router falla, usar la política de rol existente; no enviar el historial completo al router como mecanismo de recuperación.
+- Si el modelo principal falla, el fallback debe respetar las mismas restricciones de capacidad y privacidad.
+
+### Criterios de aceptación
+
+- El router devuelve JSON válido con `task_type`, `complexity` y `model_hint` además de tool/parámetros.
+- El selector nunca elige modelos fuera del catálogo permitido ni viola privacidad.
+- Dos tareas con distinta complejidad pueden seleccionar modelos distintos de forma determinista.
+- Un hint inválido, un modelo ausente o una capacidad incompatible producen fallback explicable.
+- La llamada LiteLLM recibe el modelo resuelto, sus fallbacks y el formato de respuesta requerido.
+- Las métricas permiten explicar por qué se eligió un modelo y medir si la decisión mejoró latencia/calidad.
