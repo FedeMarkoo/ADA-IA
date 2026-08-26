@@ -43,8 +43,8 @@ def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
         token = SecureVault().get("telegram_bot_token") or SecureVault().get("telegram_token")
         if token:
             return str(token).strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("telegram_token_vault_read_failed error=%s", exc)
     cfg_file = PROJECT_ROOT / "ada" / "config.json"
     if not cfg_file.is_file():
         cfg_file = PROJECT_ROOT / "config.json"
@@ -55,8 +55,8 @@ def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
             token = str(tg_c.get("token") or tg_c.get("bot_token") or c.get("telegram_token") or "").strip()
             if token:
                 return token
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("telegram_config_read_failed path=%s error=%s", cfg_file, exc)
     for env_path in [PROJECT_ROOT / ".env", Path.home() / ".env", Path.home() / ".config" / "ada" / ".env"]:
         if env_path.is_file():
             try:
@@ -66,8 +66,8 @@ def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
                         val = line.split("=", 1)[1].strip().strip('"').strip("'")
                         if val:
                             return val
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("telegram_env_read_failed path=%s error=%s", env_path, exc)
     return ""
 
 

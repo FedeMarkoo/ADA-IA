@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import sys
 import time
@@ -22,6 +23,8 @@ from ada.infrastructure.prometheus_metrics import (
     MCP_TOOL_ENABLED,
 )
 import psutil
+
+logger = logging.getLogger("ada.mcp.manager")
 
 
 def _find_project_root() -> Path:
@@ -128,8 +131,8 @@ class MCPManager:
                             status=s.get("status", "active"),
                             description=s.get("description", ""),
                         )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.exception("mcp_config_load_failed path=%s error=%s", self.config_path, exc)
 
             if not self._servers:
                 self._servers = {
@@ -187,8 +190,8 @@ class MCPManager:
                         risk_level=tmeta.get("risk_level", "safe"),
                         requires_confirmation=tmeta.get("requires_confirmation", False),
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.exception("mcp_filesystem_discovery_failed error=%s", exc)
 
         # 2. Web Search tools
         if "web-search" in self._servers or "web_search" in self._servers:
@@ -206,8 +209,8 @@ class MCPManager:
                         parameters=tmeta["inputSchema"],
                         risk_level=tmeta.get("risk_level", "safe"),
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.exception("mcp_web_search_discovery_failed error=%s", exc)
 
         # 3. Photography tools
         if "photography" in self._servers:
@@ -224,8 +227,8 @@ class MCPManager:
                         parameters=tmeta["inputSchema"],
                         risk_level=tmeta.get("risk_level", "safe"),
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.exception("mcp_config_persist_failed path=%s error=%s", self.config_path, exc)
 
         # 4. Food & Shopping tools
         if "food" in self._servers:
