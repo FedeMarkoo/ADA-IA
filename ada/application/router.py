@@ -9,6 +9,7 @@ import json
 import logging
 import re
 from datetime import date
+from ada.application.tool_registry import ToolRegistry
 
 logger = logging.getLogger("ada.router")
 
@@ -66,6 +67,7 @@ class IntentRouter:
             raise ValueError("IntentRouter requiere una instancia de memoria inyectada.")
         self.memory = memory
         self.mcp_manager = mcp_manager
+        self.tool_registry = ToolRegistry(mcp_manager)
 
     def _allowed_actions(self):
         return {row["action"] for row in self.memory.router_actions()}
@@ -82,10 +84,8 @@ class IntentRouter:
         try:
             tools = [
                 tool
-                for tool in self.mcp_manager.list_tools()
-                if tool.get("enabled")
-                and not tool.get("requires_confirmation")
-                and (not category or tool.get("category") == category or tool.get("server") == category)
+                for tool in self.tool_registry.all(category=category)
+                if not tool.get("requires_confirmation")
             ]
             return (
                 "\n".join(
@@ -434,8 +434,7 @@ class IntentRouter:
             tool = str(candidate.get("tool") or "")
             if not tool or not self.mcp_manager:
                 return fallback
-            known = {item.get("name"): item for item in self.mcp_manager.list_tools()}
-            definition = known.get(tool)
+            definition = self.tool_registry.get(tool)
             if not definition or not definition.get("enabled") or definition.get("requires_confirmation"):
                 return fallback
             result = dict(fallback)

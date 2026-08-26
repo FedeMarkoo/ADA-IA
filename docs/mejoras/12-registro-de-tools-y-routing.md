@@ -8,7 +8,7 @@ Reemplazar el muro de regex en español para detectar intenciones por un registr
 
 | ID | Mejora / Corrección | Estado |
 |---|---|---|
-| ARQ-04 | Registro único con nombre, descripción, JSON Schema, handler y confirmación | 🟡 Propuesto |
+| ARQ-04 | Registro único con nombre, descripción, JSON Schema, handler y confirmación | ✅ Implementado |
 | ARQ-05 | Dispatcher exacto para comandos `/v`, `/i`, `/r`, etc. | ✅ Implementado |
 | ARQ-06 | Router pequeño, determinista y sin contexto completo | 🟡 Propuesto |
 | ARQ-07 | Validación de tool y parámetros antes de ejecutar; fallback a chat | 🟡 Propuesto |
