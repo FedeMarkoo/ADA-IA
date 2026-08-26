@@ -45,11 +45,10 @@ flowchart TD
 
 ## Flujos detallados
 
-- [Routing y clasificación](02-routing-y-clasificacion.md)
-- [Selector de modelos](03-selector-de-modelos.md)
-- [Memoria y contexto](04-memoria-y-contexto.md)
-- [MCPs y herramientas](05-mcps-y-herramientas.md)
-- [Confirmación y seguridad](06-confirmacion-y-seguridad.md)
-- [Streaming, fallbacks y errores](07-streaming-fallbacks-y-errores.md)
-- [Refinería y compactación](08-refineria-y-compactacion.md)
-- [Versión detallada del flujo completo](01-flujo-completo-del-prompt.md)
+- [Routing y clasificación](01-routing-y-clasificacion.md)
+- [Selector de modelos](02-selector-de-modelos.md)
+- [Memoria y contexto](03-memoria-y-contexto.md)
+- [MCPs y herramientas](04-mcps-y-herramientas.md)
+- [Confirmación y seguridad](05-confirmacion-y-seguridad.md)
+- [Streaming, fallbacks y errores](06-streaming-fallbacks-y-errores.md)
+- [Refinería y compactación](07-refineria-y-compactacion.md)

@@ -34,14 +34,14 @@ ADA es un agente local-first que recibe pedidos desde distintos canales, interpr
 
 #### 3.8 Flujos de ejecución
 
-- [3.8.1 Flujo completo del prompt](03-tecnologias-y-arquitectura/flujos/01-flujo-completo-del-prompt.md)
-- [3.8.2 Routing y clasificación](03-tecnologias-y-arquitectura/flujos/02-routing-y-clasificacion.md)
-- [3.8.3 Selector de modelos](03-tecnologias-y-arquitectura/flujos/03-selector-de-modelos.md)
-- [3.8.4 Memoria y contexto](03-tecnologias-y-arquitectura/flujos/04-memoria-y-contexto.md)
-- [3.8.5 MCPs y herramientas](03-tecnologias-y-arquitectura/flujos/05-mcps-y-herramientas.md)
-- [3.8.6 Confirmación y seguridad](03-tecnologias-y-arquitectura/flujos/06-confirmacion-y-seguridad.md)
-- [3.8.7 Streaming, fallbacks y errores](03-tecnologias-y-arquitectura/flujos/07-streaming-fallbacks-y-errores.md)
-- [3.8.8 Refinería y compactación](03-tecnologias-y-arquitectura/flujos/08-refineria-y-compactacion.md)
+- [3.8.1 Flujo completo del prompt](03-tecnologias-y-arquitectura/flujos/README.md)
+- [3.8.2 Routing y clasificación](03-tecnologias-y-arquitectura/flujos/01-routing-y-clasificacion.md)
+- [3.8.3 Selector de modelos](03-tecnologias-y-arquitectura/flujos/02-selector-de-modelos.md)
+- [3.8.4 Memoria y contexto](03-tecnologias-y-arquitectura/flujos/03-memoria-y-contexto.md)
+- [3.8.5 MCPs y herramientas](03-tecnologias-y-arquitectura/flujos/04-mcps-y-herramientas.md)
+- [3.8.6 Confirmación y seguridad](03-tecnologias-y-arquitectura/flujos/05-confirmacion-y-seguridad.md)
+- [3.8.7 Streaming, fallbacks y errores](03-tecnologias-y-arquitectura/flujos/06-streaming-fallbacks-y-errores.md)
+- [3.8.8 Refinería y compactación](03-tecnologias-y-arquitectura/flujos/07-refineria-y-compactacion.md)
 
 ### 4. Observabilidad y operaciones
 
