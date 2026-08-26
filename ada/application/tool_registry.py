@@ -23,3 +23,26 @@ class ToolRegistry:
         for tool in self.all(category):
             confirmation = " (requiere confirmación)" if tool.get("requires_confirmation") else ""
             yield f"- {tool.get('name')} [{tool.get('category') or tool.get('server')}] — {tool.get('description') or 'sin descripción'}{confirmation}"
+
+    @staticmethod
+    def validate_parameters(tool: Dict[str, Any], parameters: Optional[Dict[str, Any]]) -> bool:
+        schema = tool.get("parameters") or tool.get("inputSchema") or {}
+        values = parameters or {}
+        if not isinstance(values, dict):
+            return False
+        required = schema.get("required") or []
+        if any(name not in values for name in required):
+            return False
+        properties = schema.get("properties") or {}
+        for name, value in values.items():
+            definition = properties.get(name) or {}
+            expected = definition.get("type")
+            if expected == "string" and not isinstance(value, str):
+                return False
+            if expected == "integer" and (isinstance(value, bool) or not isinstance(value, int)):
+                return False
+            if expected == "boolean" and not isinstance(value, bool):
+                return False
+            if expected == "array" and not isinstance(value, list):
+                return False
+        return True

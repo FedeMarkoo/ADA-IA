@@ -437,6 +437,8 @@ class IntentRouter:
             definition = self.tool_registry.get(tool)
             if not definition or not definition.get("enabled") or definition.get("requires_confirmation"):
                 return fallback
+            if not self.tool_registry.validate_parameters(definition, candidate.get("parameters") or {}):
+                return fallback
             result = dict(fallback)
             result.update(
                 {

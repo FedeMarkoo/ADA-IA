@@ -1,4 +1,5 @@
 import unittest
+from ada.application.tool_registry import ToolRegistry
 from pathlib import Path
 import tempfile
 
@@ -31,6 +32,11 @@ class FakeMCPManager:
 
 
 class IntentRouterTests(unittest.TestCase):
+    def test_tool_registry_rejects_missing_required_parameters(self):
+        tool = {"parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}
+        self.assertFalse(ToolRegistry.validate_parameters(tool, {}))
+        self.assertTrue(ToolRegistry.validate_parameters(tool, {"path": "/tmp"}))
+
     def setUp(self):
         self.memory = Memory(":memory:")
 
