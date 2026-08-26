@@ -17,6 +17,7 @@ from ada.application.services.responses import text_from_result
 from ada.interfaces.i18n import tr
 from ada.application.services.folder_resolver import FolderResolver
 from ada.application.context_manager import ContextManager
+from ada.application.commands import Command, CommandDispatcher
 from ada.application.router import is_capability_discussion
 
 logger = logging.getLogger("ada.web_chat")
@@ -75,6 +76,24 @@ class WebChatService:
         self.folder_resolver = FolderResolver(self.config, self._memory)
         self.context_manager = ContextManager(self._memory, self.config)
         self.mcp_manager = mcp_manager or getattr(agent, "mcp_manager", None)
+        self.command_dispatcher = CommandDispatcher(
+            {
+                "/v": Command("deployed_version", self._version_response),
+                "/version": Command("deployed_version", self._version_response),
+                "/versión": Command("deployed_version", self._version_response),
+                "/i": Command("system_info", lambda: {"reply": self._system_info()}),
+            }
+        )
+
+    @staticmethod
+    def _version_response():
+        try:
+            import importlib.metadata
+
+            version = importlib.metadata.version("ada-local")
+        except Exception:
+            version = "0.1.0"
+        return {"reply": f"ADA versión {version}", "model": "ADA · sistema"}
 
     def _capability_summary(self):
         """Build a user-facing capability list from the live MCP registry."""
@@ -359,21 +378,11 @@ class WebChatService:
         if lang:
             self.agent.lang = lang
 
-        # Telegram's version command must never go through the LLM router.
-        if re.fullmatch(r"/(?:v|version|versi[oó]n)", text, re.I):
-            try:
-                import importlib.metadata
-
-                pkg_ver = importlib.metadata.version("ada-local")
-            except Exception:
-                pkg_ver = "0.1.0"
-            reply = f"ADA versión {pkg_ver}"
+        command_result = self.command_dispatcher.dispatch(text)
+        if command_result is not None:
+            reply = command_result.get("reply", "")
             self._remember(state, text, reply)
-            return {"reply": reply, "model": "ADA · sistema"}, 200
-        if re.fullmatch(r"/i", text, re.I):
-            reply = self._system_info()
-            self._remember(state, text, reply)
-            return {"reply": reply, "model": "ADA · sistema"}, 200
+            return command_result, 200
         if len(text.split()) <= 4 and re.fullmatch(
             r"(?:hola|hi|hello|buenas|buenos días|buenos dias|buen día|buen dia|hey)(?:\s+ada)?", text, re.I
         ):

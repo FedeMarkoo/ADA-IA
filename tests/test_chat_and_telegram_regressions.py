@@ -8,6 +8,16 @@ from telegram.bot import TelegramListener
 
 
 class ChatPathRegressionTests(unittest.TestCase):
+    def test_exact_commands_use_dispatcher(self):
+        class FakeAgent:
+            lang = "es"
+
+        state = SimpleNamespace(conversation=[], pending_action=None, pending_path_action=None, current_path=None)
+        service = WebChatService(FakeAgent(), {})
+        response, status = service.handle("/v", state, "es")
+        self.assertEqual(status, 200)
+        self.assertRegex(response["reply"], r"ADA versión")
+
     def test_conceptual_photo_comparison_is_not_filesystem_intent(self):
         text = (
             "Compará tres enfoques para organizar fotos personales, explicá riesgos "
