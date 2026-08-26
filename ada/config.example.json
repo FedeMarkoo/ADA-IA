@@ -2,6 +2,7 @@
   "name": "ADA",
   "web_framework": "asgi",
   "ollama_url": "http://127.0.0.1:11434",
+  "ollama_backend": "litellm",
   "engine_provider": "ollama",
   "engine_priority": ["ollama", "gemini", "groq"],
   "gemini_model": "gemini-3.6-flash",

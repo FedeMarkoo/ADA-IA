@@ -38,6 +38,11 @@ try:
 except Exception:  # optional dependency
     GPT4All = None
 
+try:
+    from litellm import completion as litellm_completion
+except Exception:  # optional dependency
+    litellm_completion = None
+
 
 class ModelManager:
     LOCAL_PROVIDERS = {"ollama", "llama_cpp", "local"}
@@ -722,6 +727,8 @@ class ModelManager:
 
     def _call_ollama(self, prompt, **kwargs):
         model = kwargs.get("ollama_model") or self._model("chat", "ollama_model", "llama3.2:3b")
+        if self.config.get("ollama_backend", "urllib") == "litellm":
+            return self._call_litellm_ollama(prompt, model, **kwargs)
         options = {
             "temperature": kwargs.get("temperature", float(self.config.get("ollama_temperature", 0.2))),
             "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
@@ -762,6 +769,29 @@ class ModelManager:
                 raise RuntimeError("Ollama devolvió un error: %s" % detail) from exc
         finally:
             self._mark_ollama_finished(model)
+
+    def _call_litellm_ollama(self, prompt, model, **kwargs):
+        """Call a local Ollama model through LiteLLM's unified interface."""
+        if litellm_completion is None:
+            raise RuntimeError("El backend LiteLLM está configurado pero no está instalado.")
+        litellm_model = str(model)
+        if not litellm_model.startswith("ollama/"):
+            litellm_model = "ollama/" + litellm_model
+        request_kwargs = {
+            "model": litellm_model,
+            "api_base": self.ollama_url,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": kwargs.get("temperature", float(self.config.get("ollama_temperature", 0.2))),
+            "stream": False,
+        }
+        if kwargs.get("max_tokens") is not None:
+            request_kwargs["max_tokens"] = int(kwargs["max_tokens"])
+        if kwargs.get("format") is not None:
+            request_kwargs["format"] = kwargs["format"]
+        response = litellm_completion(
+            **request_kwargs,
+        )
+        return (response.choices[0].message.content or "").strip()
 
     def _call_llama_cpp(self, prompt, **kwargs):
         """Call the separately managed llama-server OpenAI-compatible endpoint."""

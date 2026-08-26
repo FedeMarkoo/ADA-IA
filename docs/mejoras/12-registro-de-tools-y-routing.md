@@ -317,6 +317,8 @@ response = litellm.completion(
 
 La telemetría debe registrar `task_type`, `complexity`, `selected_model`, `provider`, `fallback_used`, latencia, tokens y motivo de selección, sin guardar prompts ni secretos innecesarios.
 
+La integración de ADA se activa con `ollama_backend: "litellm"`. Instalarla con `pip install -e '.[litellm]'` (o `.[remote-llm]`). Los modelos locales se envían como `ollama/<modelo>` y usan `ollama_url` como `api_base`; también se preservan `max_tokens` y `format` cuando el caller los provee. Si se mantiene `ollama_backend: "urllib"`, ADA conserva el adaptador HTTP directo existente.
+
 ### Reglas de seguridad y degradación
 
 - Nunca aceptar del router un nombre de modelo arbitrario para ejecutar directamente; `model_hint` debe resolverse contra un catálogo allowlisted.

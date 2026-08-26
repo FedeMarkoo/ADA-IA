@@ -72,6 +72,18 @@ class TestModelManager(unittest.TestCase):
         self.assertEqual(selection["model"], "reasoner")
         self.assertIn("small", selection["fallbacks"])
 
+    def test_litellm_ollama_backend_uses_prefixed_local_model(self):
+        class Message:
+            content = "respuesta local"
+
+        fake_response = type("Response", (), {"choices": [type("Choice", (), {"message": Message()})()]})()
+        manager = ModelManager({"ollama_backend": "litellm", "ollama_url": "http://127.0.0.1:11434"})
+        with patch("ada.infrastructure.engines.model_manager.litellm_completion", return_value=fake_response) as call:
+            result = manager._call_ollama("hola", ollama_model="llama3.2:3b")
+        self.assertEqual(result, "respuesta local")
+        self.assertEqual(call.call_args.kwargs["model"], "ollama/llama3.2:3b")
+        self.assertEqual(call.call_args.kwargs["api_base"], manager.ollama_url)
+
     def test_automatic_policy_is_cached_until_reload(self):
         manager = ModelManager({"model_selection_mode": "light", "local_runtime": {"auto_start": False}})
         with patch.object(manager, "automatic_policy", return_value={"chat": {"preferred": "small"}}) as build:
