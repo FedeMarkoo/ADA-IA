@@ -20,7 +20,7 @@ flowchart TD
 
 ---
 
-## 🛠️ Herramientas Expuestas
+## Herramientas expuestas
 
 ### 1. `photography.analyze_photo`
 Analiza una fotografía individual (JPG, PNG, o RAW como `.ARW`, `.CR2`, `.NEF`, `.DNG`).

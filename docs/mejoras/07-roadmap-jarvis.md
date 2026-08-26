@@ -1,4 +1,4 @@
-# 🚀 07. Roadmap de Autonomía (JARVIS)
+# 07. Roadmap de Autonomía (JARVIS)
 
 ## Visión del Producto
 
@@ -8,7 +8,6 @@ Evolucionar a ADA de un asistente reactivo basado en prompts a un compañero pro
 3. Solicitar confirmación explícita para acciones sensibles.
 4. Mantener trazabilidad completa y reversibilidad de cambios.
 
----
 
 ## Fases de Evolución
 

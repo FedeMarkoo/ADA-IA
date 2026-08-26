@@ -2,9 +2,8 @@
 
 La carpeta `models/modelfiles/` almacena los archivos de definición de modelos de Ollama (`Modelfile`), donde se definen la personalidad, parámetros de temperatura y reglas del sistema.
 
----
 
-## 📄 Modelfiles Disponibles
+## Modelfiles disponibles
 
 ### 1. `Modelfile.ada`
 Modelfile principal para el asistente conversacional ADA:
@@ -16,9 +15,8 @@ Modelfile para evaluación de imágenes y fotografía:
 - **Base**: `llava:7b`
 - **System Prompt**: Enfatiza el análisis de composición, paleta cromática, balance de blancos y grading estético.
 
----
 
-## 🚀 Cómo Crear un Modelo en Ollama
+## Cómo crear un modelo en Ollama
 
 ```bash
 # Crear el modelo personalizado en Ollama

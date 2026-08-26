@@ -1,4 +1,4 @@
-# Shared Context & Dynamic Memory for Multi-Model Ollama
+# 09. Shared Context y Dynamic Memory para multi-modelo Ollama
 
 ## Objetivo
 
@@ -455,10 +455,17 @@ La implementación debería demostrar que:
 6. Las conversaciones largas siguen siendo coherentes gracias a summary + semantic retrieval.
 7. Se puede medir el consumo de memoria y tokens antes/después.
 
+## Estado de implementación
+
+- [x] **`ContextPacket`**: Implementado en `ada/application/context_manager.py` con `summary`, `recent_messages`, `memories`, `profile`, `task_state`, `token_budget`, estimación de tokens y truncado.
+- [x] **`ContextManager`**: Implementado en `ada/application/context_manager.py` con `budget_for()` por rol y complejidad (`router`, `chat`, `coding`, `reasoning`, `tools`).
+- [x] **Integración con chat**: `WebChatService` en `ada/application/services/web_chat.py` utiliza `ContextManager.build()` para estructurar el paquete de contexto en cada solicitud.
+- [x] **Persistencia de resumen**: `save_summary()` conectado con `MemoryLayers`.
+
 ## Conclusión
 
 **Sí conviene implementar contexto compartido en ADA, pero como memoria/context packet externo, no como KV cache compartida.**
 
-La base actual del proyecto es favorable: ya existen `MemoryLayers`, sesiones, router, selección por roles y un `ModelManager` centralizado para Ollama. La mejora debería unificar esas piezas en un `ContextManager` y convertir el tamaño del contexto en un recurso dinámico.
+La base actual del proyecto es favorable: ya existen `MemoryLayers`, sesiones, router, selección por roles y un `ModelManager` centralizado para Ollama. `ContextManager` unifica esas piezas y convierte el tamaño del contexto en un recurso dinámico.
 
-El beneficio principal será que los tres modelos puedan consultar la misma memoria lógica sin que ADA tenga que enviar el historial completo a cada uno. Esto permite aprovechar mejor la memoria disponible y, especialmente, escalar el sistema a más modelos sin multiplicar el costo del contexto de manera lineal.
+El beneficio principal es que los modelos pueden consultar la misma memoria lógica sin que ADA tenga que enviar el historial completo a cada uno. Esto permite aprovechar mejor la memoria disponible y escalar el sistema a más modelos sin multiplicar el costo del contexto de manera lineal.

@@ -38,6 +38,5 @@ La aplicación de escritorio carga esta misma interfaz dentro de una ventana nat
 ## Documentación relacionada
 
 - [Guía de uso completa](../user-guide.md): las 12 pantallas, acciones y capturas en orden de uso.
-- [Referencia REST y SSE](api-reference.md): contratos de la API.
-- [Catálogo funcional](../functional-catalog.md): endpoints, MCPs y capacidades del dominio.
+- [Referencia REST, SSE y catálogo](api-reference.md): contratos de la API, capacidades y servidores MCP.
 - [Galería de capturas](../screenshots/README.md): consulta visual rápida de todas las vistas.

@@ -17,7 +17,7 @@ flowchart TD
 
 ---
 
-## 🛠️ Herramientas Expuestas
+## Herramientas expuestas
 
 ### 1. `food.shopping`
 Administra la lista de compras del supermercado.

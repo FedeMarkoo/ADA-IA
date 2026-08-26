@@ -2,9 +2,8 @@
 
 ADA implementa y soporta el estándar abierto **Model Context Protocol (MCP)** desarrollado por Anthropic, permitiendo exponer y consumir herramientas mediante transporte Stdio JSON-RPC 2.0.
 
----
 
-## ⚙️ Registro Canónico: [`mcps/config.json`](file:///home/fedemarkoo/.gemini/antigravity-ide/scratch/ADA-IA/mcps/config.json)
+## Registro canónico: `mcps/config.json`
 
 El archivo `mcps/config.json` sigue el formato estándar `mcpServers` compatible con VSCode, Claude Desktop, Antigravity y ADA:
 
@@ -57,9 +56,8 @@ El archivo `mcps/config.json` sigue el formato estándar `mcpServers` compatible
 }
 ```
 
----
 
-## 🛠️ Catálogo de Servidores Disponibles
+## Catálogo de servidores disponibles
 
 | Servidor | Módulo | Herramientas Expuestas | Documentación |
 | :--- | :--- | :--- | :--- |

@@ -4,7 +4,7 @@ El servidor MCP **`mcps/web_search/`** proporciona búsqueda en la web en vivo s
 
 ---
 
-## 🛠️ Herramientas Expuestas
+## Herramientas expuestas
 
 ### `web_search.search`
 - **Descripción**: Realiza búsquedas en la web y devuelve títulos, fragmentos de texto (snippets) y URLs relevantes.

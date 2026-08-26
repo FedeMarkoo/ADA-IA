@@ -4,7 +4,7 @@ El servidor MCP **`mcps/filesystem/`** provee herramientas seguras para interact
 
 ---
 
-## 🛠️ Herramientas Expuestas
+## Herramientas expuestas
 
 ### 1. `filesystem.list_files`
 - **Descripción**: Lista archivos y carpetas dentro de directorios permitidos.

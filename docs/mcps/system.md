@@ -4,7 +4,7 @@ El servidor MCP **`mcps/system/`** permite ejecutar comandos y scripts de sistem
 
 ---
 
-## 🛠️ Herramientas Expuestas
+## Herramientas expuestas
 
 ### `system.run_command`
 - **Descripción**: Ejecuta un script o comando de sistema autorizado en la allowlist.

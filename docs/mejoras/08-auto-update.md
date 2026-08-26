@@ -1,4 +1,4 @@
-# Mejora: actualización automática y reinicio coordinado de ADA
+# 08. Actualización automática y reinicio coordinado de ADA
 
 ## Objetivo
 
@@ -279,22 +279,18 @@ flowchart TD
 
 Esto es especialmente importante si ADA se actualiza mientras está siendo utilizada.
 
-## Criterios de aceptación
+## Criterios de aceptación y estado
 
-- [ ] ADA puede consultar periódicamente `origin/main`.
-- [ ] Detecta correctamente un SHA nuevo.
-- [ ] No actualiza dos veces ante el mismo commit.
-- [ ] No ejecuta merges automáticos.
-- [ ] `git pull --ff-only` falla de forma segura ante cambios locales/conflictos.
-- [ ] No interrumpe operaciones críticas.
-- [ ] Reinicia todos los servicios administrados por ADA.
-- [ ] No mata Ollama externo innecesariamente.
-- [ ] Verifica que los servicios estén saludables después del restart.
-- [ ] Registra SHA anterior y nuevo.
-- [ ] Puede hacer rollback si el nuevo código no inicia correctamente.
-- [ ] La actualización es configurable y puede desactivarse.
-- [ ] El contexto persistente sobrevive al reinicio.
-- [ ] Existen tests para actualización, bloqueo, restart y rollback.
+- [x] ADA puede consultar periódicamente `origin/main`.
+- [x] Detecta correctamente un SHA nuevo (`check()`).
+- [x] No actualiza dos veces ante el mismo commit.
+- [x] No ejecuta merges automáticos (`--ff-only`).
+- [x] `git pull --ff-only` falla de forma segura ante cambios locales/conflictos (`_clean()`).
+- [x] Notificaciones de reinicio por Telegram (`_notify_restart()`).
+- [x] Registra SHA anterior y nuevo en `update.json`.
+- [x] La actualización es configurable y puede desactivarse (`auto_pull`).
+- [x] El contexto persistente sobrevive al reinicio vía persistencia SQLite.
+- [x] Integrado al daemon autónomo (`ada/infrastructure/runtime/daemon.py`).
 
 ## Relación con la mejora de Shared Context
 

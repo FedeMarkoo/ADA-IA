@@ -1,4 +1,4 @@
-# 🛡️ 01. Seguridad y Privacidad
+# 01. Seguridad y Privacidad
 
 ## Estado de Implementación
 
@@ -12,7 +12,6 @@
 | SEC-06 | Token de autenticación interno para webhook/REST API de Telegram | ✅ Implementado | `En este branch` |
 | SEC-07 | Modo de visualización embebida local de Grafana para Desktop | ℹ️ Documentado | Diseño activo |
 
----
 
 ## Detalle de Implementaciones
 

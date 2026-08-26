@@ -2,9 +2,8 @@
 
 ADA-IA incluye herramientas integradas para diagnóstico continuo y auto-remediación automática.
 
----
 
-## 📈 Métricas con Prometheus y Grafana
+## Métricas con Prometheus y Grafana
 
 ADA expone métricas nativas de Prometheus en `http://127.0.0.1:5005/metrics`.
 La retención y las series históricas quedan a cargo de Prometheus; Grafana es la
@@ -36,7 +35,7 @@ Los MCP locales se ejecutan dentro del proceso de ADA, por lo que su memoria
 residente es compartida: `ada_mcp_memory_bytes` informa la memoria del proceso
 ADA mientras ese MCP está activo, no una asignación física exclusiva.
 
-## 🩺 Health Doctor y Diagnóstico
+## Health Doctor y diagnóstico
 
 El servicio `HealthDoctor` (`ada/interfaces/web/doctor.py`) audita 7 áreas críticas del sistema:
 
@@ -48,9 +47,8 @@ El servicio `HealthDoctor` (`ada/interfaces/web/doctor.py`) audita 7 áreas crí
 6. **Recursos de Hardware**: Uso de RAM, throttling de CPU y VRAM.
 7. **Servicio Telegram Bot**: Conexión del bot y estado de long-polling.
 
----
 
-## 🛠️ Auto-Remediación
+## Auto-remediación
 
 Si algún subsistema se encuentra degradado o detenido, el botón **"Auto-reparar Todo"** del Dashboard ejecuta secuencialmente las acciones de recuperación:
 - Iniciar el servicio local de Ollama.
@@ -58,9 +56,8 @@ Si algún subsistema se encuentra degradado o detenido, el botón **"Auto-repara
 - Re-inicializar tablas de memoria.
 - Descargar modelos de VRAM si la memoria está saturada.
 
----
 
-## 💾 Respaldos de la Base de Datos
+## Respaldos de la base de datos
 
 Para respaldar tu historial de conversaciones, recetas y datos personales:
 
@@ -69,7 +66,7 @@ Para respaldar tu historial de conversaciones, recetas y datos personales:
 cp ada/memory.db ~/Desktop/ada_backup_$(date +%Y%m%d).db
 ```
 
-## 🚆 Alertas del Sarmiento con presencia
+## Alertas del Sarmiento con presencia
 
 ADA incluye el MCP `transport` con la tool `transport.get_status` y una regla opcional para consultar el Sarmiento a las 13:00
 cuando existe una señal de presencia válida en `work`. La función está desactivada por defecto.
@@ -93,14 +90,14 @@ curl -X POST http://127.0.0.1:5005/api/events \
 La presencia caduca automáticamente. Tailscale puede proteger el acceso entre el teléfono y ADA, pero no reemplaza la
 geofence ni determina por sí solo la ubicación física.
 
-## 🧠 Contexto y memoria acotados
+## Contexto y memoria acotados
 
 `ContextManager` construye paquetes de contexto por sesión con presupuesto por rol
 (`router`, `chat`, `coding`, `reasoning` y `tools`). Recupera sólo memoria relevante,
 conversación reciente y resúmenes persistentes en SQLite; el cálculo de tokens es una
 estimación conservadora cuando no hay tokenizer específico del modelo.
 
-## 🔄 Actualizaciones seguras
+## Actualizaciones seguras
 
 El `UpdateManager` está integrado al daemon, pero `update.enabled` y `update.auto_pull`
 son `false` por defecto. Al habilitarlo, sólo acepta un fast-forward sobre un worktree

@@ -2,9 +2,8 @@
 
 ADA utiliza **Ollama** como motor principal de inferencia local, permitiendo asignar modelos especializados a roles específicos según los recursos de hardware disponibles.
 
----
 
-## 🎯 Asignación de Roles por Tarea
+## Asignación de roles por tarea
 
 Los roles se configuran en `models/catalog.json` y se gestionan dinámicamente desde el Dashboard:
 
@@ -15,9 +14,8 @@ Los roles se configuran en `models/catalog.json` y se gestionan dinámicamente d
 | **`vision`** (Fotografía & OCR) | `llava:7b` / `llama3.2-vision` | 8 GB RAM / 6 GB VRAM | Evaluación estética, análisis de composición y OCR |
 | **`router`** (Clasificación Rápida)| `llama3.2:1b` / `qwen2.5:0.5b` | 2 GB RAM | Clasificación instantánea de intenciones (<50ms) |
 
----
 
-## ⏱️ Benchmarking de Velocidad
+## Benchmarking de velocidad
 
 El sistema mide y persiste la velocidad de generación (tokens por segundo) en `models/benchmarks.json`.
 Podés lanzar benchmarks en cualquier momento desde la pestaña **Modelos & Roles** del Dashboard o mediante la API:

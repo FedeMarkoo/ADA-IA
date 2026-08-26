@@ -1,8 +1,8 @@
-# 📋 Índice de Mejoras, Bugs y Roadmap — ADA-IA
+# Índice de mejoras, bugs y roadmap — ADA-IA
 
 Este directorio contiene el registro modular de mejoras, correcciones de seguridad, optimizaciones de arquitectura y roadmap del proyecto.
 
-## 📊 Matriz de Estado y Trazabilidad
+## Matriz de estado y trazabilidad
 
 | ID | Área / Módulo | Descripción | Estado | Commit / Referencia | Archivo de Detalle |
 |---|---|---|---|---|---|
@@ -21,15 +21,20 @@ Este directorio contiene el registro modular de mejoras, correcciones de segurid
 | **OBS-01** | Observabilidad | Telemetría Prometheus + Métricas Grafana | ✅ Implementado | `5e34825` | [06-observabilidad-y-monitoreo.md](06-observabilidad-y-monitoreo.md) |
 | **CI-01** | DevOps | Corrección de rutas en pipeline GitHub Actions | ✅ Implementado | `620070c` | [06-observabilidad-y-monitoreo.md](06-observabilidad-y-monitoreo.md) |
 | **JARV-01**| Visión Futura | Hoja de ruta de autonomía asistida (JARVIS) | 🚀 En Roadmap | Fase 1-4 | [07-roadmap-jarvis.md](07-roadmap-jarvis.md) |
+| **UPD-01** | Infraestructura | Actualización automática y reinicio coordinado | ✅ Implementado | `ada/infrastructure/update` | [08-auto-update.md](08-auto-update.md) |
+| **CTX-01** | Memoria | Shared Context y Dynamic Memory para multi-modelo | ✅ Implementado | `ada/application/context_manager` | [09-shared-context-memory.md](09-shared-context-memory.md) |
 
 ---
 
-## 📂 Archivos de Detalle
+## Archivos de detalle
 
-1. [01. Seguridad y Privacidad](01-seguridad-y-privacidad.md)
-2. [02. Concurrencia y Persistencia](02-concurrencia-y-persistencia.md)
-3. [03. Portabilidad y Rutas](03-portabilidad-y-rutas.md)
-4. [04. Arquitectura Web y Blueprints](04-arquitectura-web-y-blueprints.md)
+1. [01. Seguridad y privacidad](01-seguridad-y-privacidad.md)
+2. [02. Concurrencia y persistencia](02-concurrencia-y-persistencia.md)
+3. [03. Portabilidad y rutas](03-portabilidad-y-rutas.md)
+4. [04. Arquitectura web y Blueprints](04-arquitectura-web-y-blueprints.md)
 5. [05. Multiagente y MCPs](05-multiagente-y-mcps.md)
-6. [06. Observabilidad y Monitoreo](06-observabilidad-y-monitoreo.md)
-7. [07. Roadmap de Autonomía (JARVIS)](07-roadmap-jarvis.md)
+6. [06. Observabilidad y monitoreo](06-observabilidad-y-monitoreo.md)
+7. [07. Roadmap de autonomía (JARVIS)](07-roadmap-jarvis.md)
+8. [08. Actualización automática y reinicio](08-auto-update.md)
+9. [09. Shared Context y Dynamic Memory](09-shared-context-memory.md)
+

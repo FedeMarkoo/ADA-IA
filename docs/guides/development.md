@@ -2,9 +2,8 @@
 
 Guía para desarrolladores que deseen extender o modificar ADA-IA.
 
----
 
-## 🧪 Ejecución de Tests Automatizados
+## Ejecución de tests automatizados
 
 La suite de pruebas utiliza **`pytest`** y cubre el 100% de los subsistemas (fotografía, router, memoria SQLite, integración con Ollama, MCPs y Telegram):
 
@@ -19,16 +18,14 @@ pytest -v
 pytest tests/test_photo_analysis.py
 ```
 
----
 
-## 📦 Estándar de Empaquetado
+## Estándar de empaquetado
 
 - El proyecto sigue el estándar de **Namespace Packages de Python moderno (PEP 420)**. No se utilizan archivos `__init__.py`.
 - Todas las dependencias y configuración del empaquetado se encuentran centralizadas en `pyproject.toml`.
 
----
 
-## 🔌 Agregar un Nuevo Servidor MCP
+## Agregar un nuevo servidor MCP
 
 1. Creá una subcarpeta en `mcps/<tu_mcp>/`.
 2. Implementá tu servidor heredando de `mcps.protocol.StdioMCPServer`.

@@ -2,17 +2,15 @@
 
 El bot de Telegram está completamente desacoplado del núcleo de ADA y reside en su propia carpeta en la raíz: **`telegram/`**.
 
----
 
-## 🏗️ Cómo Funciona
+## Cómo funciona
 
 1. `telegram/bot.py` se conecta a la API de Telegram mediante *long-polling*.
 2. Al recibir un mensaje o imagen, lo transforma en un payload estructurado y lo envía mediante HTTP POST al endpoint `/api/chat` de ADA.
 3. Las imágenes adjuntas se descargan automáticamente en la carpeta `telegram_inbox/` y se envían a ADA para su análisis técnico/semántico.
 
----
 
-## 🚀 Ejecución Independiente
+## Ejecución independiente
 
 ### 1. Configuración de Credenciales (Bóveda Cifrada)
 El token se almacena de forma segura en `~/Desktop/ADA_Data/vault.db` con AES-256:

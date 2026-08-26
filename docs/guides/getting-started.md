@@ -2,17 +2,15 @@
 
 Esta guía te ayudará a instalar y levantar ADA-IA desde cero en tu máquina local.
 
----
 
-## 📋 Requisitos Previos
+## Requisitos previos
 
 - **Python 3.10+** (Recomendado: Python 3.11, 3.12 o 3.14).
 - **Ollama**: Descargá e instalá Ollama desde [ollama.com](https://ollama.com).
 - **Git**
 
----
 
-## 🛠️ Instalación en 3 Pasos
+## Instalación en 3 pasos
 
 ### 1. Clonar e Inicializar Entorno Virtual
 ```bash
@@ -33,9 +31,8 @@ pip install -e .
 ollama pull llama3.2:3b
 ```
 
----
 
-## 🚀 Iniciar el Gestor Web
+## Iniciar el gestor web
 
 ```bash
 python -m ada.interfaces.web.server

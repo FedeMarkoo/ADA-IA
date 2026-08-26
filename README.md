@@ -43,15 +43,17 @@ ADA/
 ## Índices de documentación
 
 - [Documentación general](docs/README.md)
-- [Objetivo y roadmap](docs/project/roadmap.md)
-- [Arquitectura](docs/project/architecture/overview.md)
-- [Estructura de carpetas](docs/project/architecture/folder-structure.md)
-- [Análisis de fotos](docs/project/features/photo-analysis.md)
-- [XMP y ráfagas](docs/project/features/xmp-and-bursts.md)
-- [Compras y recetas](docs/project/features/shopping-and-recipes.md)
-- [Telegram y Ollama](docs/project/integrations/telegram-and-ollama.md)
-- [Operación y recursos](docs/project/operations.md)
-- [Documentación de capabilities](docs/capabilities/README.md)
+- [Arquitectura](docs/architecture/overview.md)
+- [Estructura de carpetas](docs/architecture/folder-structure.md)
+- [Inicio rápido](docs/guides/getting-started.md)
+- [Operaciones y diagnóstico](docs/guides/operations.md)
+- [Desarrollo y tests](docs/guides/development.md)
+- [Herramientas MCP](docs/mcps/README.md)
+- [Dashboard y API](docs/dashboard/README.md)
+- [Modelos y benchmarks](docs/models/README.md)
+- [Telegram](docs/telegram/README.md)
+- [Mejoras y roadmap](docs/mejoras/README.md)
+- [Changelog](docs/CHANGELOG.md)
 
 ## Instalación y ejecución
 
