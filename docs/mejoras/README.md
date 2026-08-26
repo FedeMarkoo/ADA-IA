@@ -28,6 +28,7 @@ Este directorio contiene el registro modular de mejoras, correcciones de segurid
 | **ARQ-04** | Arquitectura | Registro único de tools y routing estructurado sin regex | 🟡 Propuesto | Diseño 2026-08 | [12-registro-de-tools-y-routing.md](12-registro-de-tools-y-routing.md) |
 | **ARQ-09** | Model Routing | Selector de modelos para LiteLLM informado por el router | ✅ Implementado | `f78bf75` | [12-registro-de-tools-y-routing.md](12-registro-de-tools-y-routing.md) |
 | **MEM-01** | Memoria | Compactador local de conversaciones largas con retención configurable | ✅ Implementado | `En este branch` | [13-compactador-de-memoria.md](13-compactador-de-memoria.md) |
+| **MEM-02** | Memoria | MCP para agregar, modificar, eliminar y consultar recuerdos persistentes | ✅ Implementado | `Pendiente de commit` | [14-mcp-gestion-memoria.md](14-mcp-gestion-memoria.md) |
 
 ---
 
@@ -46,3 +47,4 @@ Este directorio contiene el registro modular de mejoras, correcciones de segurid
 11. [11. Performance y resiliencia](11-performance-y-resiliencia.md)
 12. [12. Registro de tools y routing](12-registro-de-tools-y-routing.md)
 13. [13. Compactador de memoria](13-compactador-de-memoria.md)
+14. [14. MCP de gestión de memoria](14-mcp-gestion-memoria.md)

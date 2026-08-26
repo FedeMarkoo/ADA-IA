@@ -160,6 +160,12 @@ class MCPManager:
                         args=["-m", "ada.mcps.servers.system"],
                         description="Ejecutor en allowlist",
                     ),
+                    "memory": MCPServerInfo(
+                        name="memory",
+                        command="python",
+                        args=["-m", "mcps.memory.server"],
+                        description="Gestión de la memoria persistente de ADA",
+                    ),
                     "google-gmail": MCPServerInfo(
                         name="google-gmail",
                         transport="sse",
@@ -167,6 +173,18 @@ class MCPManager:
                         description="Google Gmail MCP",
                     ),
                 }
+
+            # Memory is an ADA built-in and must remain available even when a
+            # user-provided mcps/config.json defines only external servers.
+            self._servers.setdefault(
+                "memory",
+                MCPServerInfo(
+                    name="memory",
+                    command="python",
+                    args=["-m", "mcps.memory.server"],
+                    description="Gestión de la memoria persistente de ADA",
+                ),
+            )
 
             self._discover_tools()
 
@@ -211,6 +229,25 @@ class MCPManager:
                     )
             except Exception as exc:
                 logger.exception("mcp_web_search_discovery_failed error=%s", exc)
+
+        # 2b. Persistent memory tools
+        if "memory" in self._servers:
+            try:
+                from mcps.memory.server import create_memory_server
+
+                srv = create_memory_server()
+                for tname, tmeta in srv.tools.items():
+                    self._tools[tname] = ToolDefinition(
+                        name=tname,
+                        server="memory",
+                        category="memory",
+                        description=tmeta["description"],
+                        parameters=tmeta["inputSchema"],
+                        risk_level=tmeta.get("risk_level", "safe"),
+                        requires_confirmation=tmeta.get("requires_confirmation", False),
+                    )
+            except Exception as exc:
+                logger.exception("mcp_memory_discovery_failed error=%s", exc)
 
         # 3. Photography tools
         if "photography" in self._servers:
@@ -724,6 +761,14 @@ class MCPManager:
                     if name in srv.handlers:
                         res = srv.handlers[name](parameters)
                         return {"ok": "error" not in res, "result": res}
+
+                elif name.startswith("memory."):
+                    from mcps.memory.server import create_memory_server
+
+                    memory = getattr(agent, "mem", None) if agent is not None else None
+                    srv = create_memory_server(memory)
+                    if name in srv.handlers:
+                        return srv.handlers[name](parameters)
 
                 elif name == "transport.get_status":
                     from mcps.transport.server import create_transport_server

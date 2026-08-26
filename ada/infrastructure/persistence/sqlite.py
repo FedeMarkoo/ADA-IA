@@ -521,6 +521,71 @@ class Memory:
             )
             self.conn.commit()
 
+    def add_memory_record(self, content, kind="note", meta=None):
+        with self._lock:
+            cursor = self.conn.execute(
+                "INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
+                (self._seal(content), kind, self._seal(self._json(meta or {}))),
+            )
+            self.conn.commit()
+            return cursor.lastrowid
+
+    def search_memory_records(self, query, limit=10, kind=None):
+        terms = [term for term in re.findall(r"[\wáéíóúñü]+", str(query or "").lower()) if len(term) > 2]
+        limit = min(max(int(limit), 1), 50)
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT id, created_at, content, kind, meta FROM memories "
+                "WHERE (? IS NULL OR kind=?) ORDER BY id DESC LIMIT 500",
+                (kind, kind),
+            ).fetchall()
+        result = []
+        for row in rows:
+            content = self._open(row["content"])
+            if terms and not all(term in content.lower() for term in terms):
+                continue
+            try:
+                meta = json.loads(self._open(row["meta"] or "{}"))
+            except (TypeError, ValueError):
+                meta = {}
+            result.append(
+                {
+                    "id": row["id"],
+                    "created_at": row["created_at"],
+                    "content": content,
+                    "kind": row["kind"],
+                    "meta": meta,
+                }
+            )
+            if len(result) >= limit:
+                break
+        return result
+
+    def update_memory_record(self, memory_id, content=None, kind=None, meta=None):
+        fields, values = [], []
+        if content is not None:
+            fields.append("content=?")
+            values.append(self._seal(str(content)))
+        if kind is not None:
+            fields.append("kind=?")
+            values.append(str(kind))
+        if meta is not None:
+            fields.append("meta=?")
+            values.append(self._seal(self._json(meta)))
+        if not fields:
+            return False
+        with self._lock:
+            values.append(int(memory_id))
+            cursor = self.conn.execute(f"UPDATE memories SET {', '.join(fields)} WHERE id=?", values)
+            self.conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_memory_record(self, memory_id):
+        with self._lock:
+            cursor = self.conn.execute("DELETE FROM memories WHERE id=?", (int(memory_id),))
+            self.conn.commit()
+            return cursor.rowcount > 0
+
     def add_knowledge(self, name, content, source=None):
         """Persist a trusted reference document for retrieval by the agent."""
         with self._lock:
