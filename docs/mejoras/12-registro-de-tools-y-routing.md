@@ -12,7 +12,7 @@ Reemplazar el muro de regex en español para detectar intenciones por un registr
 | ARQ-05 | Dispatcher exacto para comandos `/v`, `/i`, `/r`, etc. | ✅ Implementado |
 | ARQ-06 | Router pequeño, determinista y sin contexto completo | ✅ Implementado |
 | ARQ-07 | Validación de tool y parámetros antes de ejecutar; fallback a chat | ✅ Implementado |
-| ARQ-08 | Suite de evaluación para comandos, chat, MCPs y seguridad | 🟡 Propuesto |
+| ARQ-08 | Suite de evaluación para comandos, chat, MCPs y seguridad | ✅ Implementado |
 
 ## Flujo de cuatro capas
 
