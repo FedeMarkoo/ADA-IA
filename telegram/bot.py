@@ -253,7 +253,10 @@ class TelegramListener:
 
         if chat_id:
             logger.info("chat_id=%s from=%s (@%s) update_id=%s", chat_id, first_name, username, update_id)
-        if not chat_id or (self.allowed_chat_ids and chat_id not in self.allowed_chat_ids):
+        # An empty allowlist is intentionally fail-closed: no Telegram chat is
+        # authorized until an explicit chat ID is configured.
+        if not chat_id or chat_id not in self.allowed_chat_ids:
+            logger.warning("telegram_chat_not_allowed chat_id=%s", chat_id or "missing")
             return
 
         text = (message.get("text") or message.get("caption") or "").strip()

@@ -12,7 +12,7 @@ class TelegramAdapterTests(unittest.TestCase):
         self.assertEqual(listener.allowed_chat_ids, {"123", "456"})
 
     def test_photo_message_builds_internal_prompt(self):
-        listener = TelegramListener({"telegram": {"enabled": False}})
+        listener = TelegramListener({"telegram": {"enabled": False, "allowed_chat_ids": [7]}})
         listener._download_photo = lambda photo: "/tmp/photo.jpg"
         listener._invoke_internal_chat = lambda text: text
         sent = []
@@ -22,7 +22,7 @@ class TelegramAdapterTests(unittest.TestCase):
         self.assertIn("/tmp/photo.jpg", sent[0][1])
 
     def test_logs_chat_id(self):
-        listener = TelegramListener({"telegram": {"enabled": False}})
+        listener = TelegramListener({"telegram": {"enabled": False, "allowed_chat_ids": [987654321]}})
         listener._invoke_internal_chat = lambda text: text
         listener.send_message = lambda chat_id, text: None
         with self.assertLogs("ada.telegram", level="INFO") as logs:
@@ -30,11 +30,18 @@ class TelegramAdapterTests(unittest.TestCase):
         self.assertIn("chat_id=987654321", "\n".join(logs.output))
 
     def test_commands_are_handled_at_the_edge(self):
-        listener = TelegramListener({"telegram": {"enabled": False}})
+        listener = TelegramListener({"telegram": {"enabled": False, "allowed_chat_ids": [9]}})
         sent = []
         listener.send_message = lambda chat_id, text: sent.append((chat_id, text))
         listener.handle_update({"message": {"chat": {"id": 9}, "text": "/help"}})
         self.assertIn("/status", sent[0][1])
+
+    def test_empty_allowlist_blocks_chat(self):
+        listener = TelegramListener({"telegram": {"enabled": False}})
+        sent = []
+        listener.send_message = lambda chat_id, text: sent.append((chat_id, text))
+        listener.handle_update({"message": {"chat": {"id": 9}, "text": "/help"}})
+        self.assertEqual(sent, [])
 
 
 if __name__ == "__main__":
