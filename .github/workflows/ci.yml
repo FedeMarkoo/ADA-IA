@@ -11,8 +11,94 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # =========================================================================
+  # ETAPA 1: Seguridad & Escaneo de Secretos (Primera barrera)
+  # =========================================================================
+  security-audit:
+    name: 1. Security & Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Scan repository for leaked secrets and sensitive files
+        run: |
+          python - << 'EOF'
+          import subprocess
+          import sys
+          import re
+
+          print(">>> Escaneando archivos rastreados en Git...")
+          tracked = subprocess.check_output(['git', 'ls-files'], text=True).splitlines()
+
+          banned_file_patterns = [
+              r'(^|/)(\.env(\..+)?)$',
+              r'(^|/)(ada/)?config\.json$',
+              r'(^|/)credentials\.json$',
+              r'(^|/)token\.json$',
+              r'(^|/)vault\.db$',
+              r'.*\.(pem|key|p12|pfx|id_rsa|pkcs12)$',
+              r'.*\.(sqlite|sqlite3|db|db-shm|db-wal)$',
+              r'.*\.(gguf|bin)$',
+          ]
+          allowed_files = {'ada/config.example.json', 'mcps/config.json', '.env.example'}
+
+          errors = []
+          for f in tracked:
+              if f in allowed_files:
+                  continue
+              for pat in banned_file_patterns:
+                  if re.search(pat, f):
+                      errors.append(f"Archivo sensible o base de datos rastreada en Git: {f}")
+
+          print(">>> Escaneando contenido de archivos por patrones de tokens / claves privadas...")
+          secret_patterns = [
+              (r'-----BEGIN (RSA|OPENSSH|DSA|EC|PRIVATE) KEY-----', 'Cabecera de clave privada SSH/TLS'),
+              (r'\b[0-9]{8,10}:AA[a-zA-Z0-9_-]{33}\b', 'Token real de bot de Telegram'),
+              (r'\bsk-[a-zA-Z0-9]{32,}\b', 'API Key de OpenAI'),
+              (r'\bsk-ant-[a-zA-Z0-9_-]{32,}\b', 'API Key de Anthropic'),
+              (r'\bAIzaSy[0-9A-Za-z-_]{33}\b', 'API Key de Google'),
+              (r'\bghp_[a-zA-Z0-9]{36}\b', 'Personal Access Token de GitHub'),
+              (r'\bgithub_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}\b', 'Fine-grained Token de GitHub'),
+              (r'\bxox[baprs]-[0-9]{10,13}-[a-zA-Z0-9]{24,34}\b', 'Token de Slack'),
+          ]
+
+          ignore_paths = {'models/benchmarks.json'}
+
+          for f in tracked:
+              if f in ignore_paths or f.endswith(('.png', '.jpg', '.jpeg', '.webp', '.ico', '.woff', '.woff2')):
+                  continue
+              try:
+                  with open(f, 'r', encoding='utf-8', errors='ignore') as fp:
+                      for line_no, line in enumerate(fp, 1):
+                          for pat, desc in secret_patterns:
+                              if re.search(pat, line):
+                                  if any(token in line for token in ['TU_TOKEN', 'your_token', 'sk-...', 'EXAMPLE', 'placeholder', 'dummy']):
+                                      continue
+                                  errors.append(f"{desc} detectado en {f}:{line_no}: {line.strip()[:60]}...")
+              except Exception as exc:
+                  pass
+
+          if errors:
+              print("\n❌ SE DETECTARON VIOLACIONES DE SEGURIDAD:")
+              for err in errors:
+                  print(f"  - {err}")
+              sys.exit(1)
+          else:
+              print("\n✅ Escaneo de seguridad superado: no se encontraron secretos ni archivos sensibles.")
+          EOF
+
+  # =========================================================================
+  # ETAPA 2: Calidad de Código & Tipado (Depende de Seguridad)
+  # =========================================================================
   lint-and-format:
-    name: Lint & Code Style
+    name: 2. Lint & Code Style
+    needs: [security-audit]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -36,7 +122,8 @@ jobs:
         run: ruff check ada mcps telegram utils tests
 
   type-check:
-    name: Static Type Analysis (mypy)
+    name: 2. Static Type Analysis (mypy)
+    needs: [security-audit]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -56,8 +143,12 @@ jobs:
       - name: Run mypy type checker
         run: mypy ada mcps telegram utils --ignore-missing-imports --explicit-package-bases
 
+  # =========================================================================
+  # ETAPA 3: Testing & Evaluación (Depende de Calidad de Código)
+  # =========================================================================
   unit-tests:
-    name: Unit Tests (Python ${{ matrix.python-version }})
+    name: 3. Unit Tests (Python ${{ matrix.python-version }})
+    needs: [lint-and-format, type-check]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -82,7 +173,8 @@ jobs:
         run: python -m unittest discover -s tests -v
 
   evaluation-tests:
-    name: AI Evaluation & Benchmark
+    name: 3. AI Evaluation & Benchmark
+    needs: [lint-and-format, type-check]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -102,8 +194,12 @@ jobs:
       - name: Run evaluation harness
         run: python -m unittest tests.test_evaluation -v
 
+  # =========================================================================
+  # ETAPA 4: Build, Empaquetado & Verificación CLI (Depende de Tests)
+  # =========================================================================
   build-and-package:
-    name: Package Build & CLI Verification
+    name: 4. Package Build & CLI Verification
+    needs: [unit-tests, evaluation-tests]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -128,19 +224,4 @@ jobs:
           pip install dist/*.whl
           ada --help
 
-  security-audit:
-    name: Security & Secret Scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Verify no unencrypted secrets or personal configs are tracked in Git
-        run: |
-          echo "Checking tracked files for sensitive patterns..."
-          if git ls-files | grep -E '(^|/)(\.env|config\.json|ada/config\.json|.*\.pem|.*\.key)$' | grep -v -E '(config\.example\.json|mcps/config\.json)'; then
-            echo "ERROR: Sensitive file tracked in repository!"
-            exit 1
-          fi
-          echo "Security scan passed: no sensitive files tracked."
 
