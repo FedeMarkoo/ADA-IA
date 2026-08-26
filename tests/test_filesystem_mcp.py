@@ -12,6 +12,13 @@ class FilesystemMCPTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             handlers.check_path("/tmp")
 
+    def test_read_file_rejects_content_above_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "large.txt"
+            path.write_text("abcdef")
+            result = FilesystemHandlers([tmp]).read_file({"path": str(path), "max_bytes": 3})
+            self.assertEqual(result["error"], "file_too_large")
+
     def test_list_files_is_non_recursive_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

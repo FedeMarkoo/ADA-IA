@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 class FilesystemHandlers:
     """Safe filesystem operations restricted to allowed roots."""
 
+    DEFAULT_MAX_READ_BYTES = 1_048_576
+
     def __init__(self, allowed_dirs: Optional[List[str]] = None):
         # None means standalone CLI default; [] is an explicit deny-all policy.
         configured = [os.getcwd()] if allowed_dirs is None else allowed_dirs
@@ -79,8 +81,19 @@ class FilesystemHandlers:
         target = self.check_path(args.get("path", ""))
         if not target.is_file():
             return {"error": f"Archivo no encontrado: {target}"}
-        content = target.read_text(encoding="utf-8", errors="replace")
-        return {"path": str(target), "content": content, "size_bytes": len(content)}
+        max_bytes = int(args.get("max_bytes", self.DEFAULT_MAX_READ_BYTES))
+        if max_bytes <= 0:
+            return {"error": "max_bytes debe ser positivo"}
+        size_bytes = target.stat().st_size
+        if size_bytes > max_bytes:
+            return {
+                "error": "file_too_large",
+                "path": str(target),
+                "size_bytes": size_bytes,
+                "max_bytes": max_bytes,
+            }
+        content = target.read_bytes().decode("utf-8", errors="replace")
+        return {"path": str(target), "content": content, "size_bytes": size_bytes}
 
     def write_file(self, args: Dict[str, Any]) -> Dict[str, Any]:
         target = self.check_path(args.get("path", ""))

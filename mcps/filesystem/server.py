@@ -62,7 +62,15 @@ def create_filesystem_server(allowed_dirs: Optional[List[str]] = None) -> StdioM
         description="Lee el contenido de texto de un archivo permitido.",
         parameters={
             "type": "object",
-            "properties": {"path": {"type": "string", "description": "Ruta del archivo a leer"}},
+            "properties": {
+                "path": {"type": "string", "description": "Ruta del archivo a leer"},
+                "max_bytes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": FilesystemHandlers.DEFAULT_MAX_READ_BYTES,
+                    "description": "Límite máximo de bytes a leer",
+                },
+            },
             "required": ["path"],
         },
         handler=handlers.read_file,

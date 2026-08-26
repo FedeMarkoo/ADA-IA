@@ -15,7 +15,7 @@ Para un agente capaz de ejecutar acciones sobre la máquina, el default seguro d
 | SEC-10 | `allowed_chat_ids: []` debe bloquear Telegram | ✅ Implementado | Crítica |
 | SEC-11 | Aplicar `requires_confirmation` dentro de `execute_tool()` | ✅ Implementado | Alta |
 | SEC-12 | Reemplazar `except Exception: pass` por logging y errores explícitos | 🟠 Pendiente | Alta |
-| SEC-13 | Limitar tamaño de `read_file` y revisar permisos de secretos en Windows | 🟡 Pendiente | Media |
+| SEC-13 | Limitar tamaño de `read_file` y revisar permisos de secretos en Windows | ✅ Implementado | Media |
 | SEC-14 | Usar `--` en argumentos del Git MCP | 🟡 Pendiente | Media |
 
 ## SEC-08: `allowed_roots` debe ser fail-closed
