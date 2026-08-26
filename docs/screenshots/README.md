@@ -2,6 +2,8 @@
 
 Esta carpeta contiene las capturas reales utilizadas en la [guía funcional](../user-guide.md). Cada imagen corresponde a una vista del dashboard web; la aplicación de escritorio reutiliza estas mismas vistas dentro de WebKitGTK.
 
+Todas las capturas están en formato horizontal **1366×768 px**, una resolución estándar de notebook.
+
 > Los estados de salud, modelos, procesos y métricas son datos de ejecución y pueden variar entre instalaciones.
 
 ## Galería
@@ -53,4 +55,3 @@ Esta carpeta contiene las capturas reales utilizadas en la [guía funcional](../
 ### Preferencias
 
 ![Preferencias](assets-settings.png)
-
