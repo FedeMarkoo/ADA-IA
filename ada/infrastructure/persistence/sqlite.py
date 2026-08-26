@@ -21,9 +21,11 @@ class Memory:
         self.db_path = ":memory:" if str(db_path) == ":memory:" else str(Path(db_path).expanduser().resolve())
         if self.db_path != ":memory:":
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._thread_local = threading.local()
+        self._connections = []
+        self._connections_lock = threading.Lock()
+        self._primary_conn = self._new_connection()
         self._lock = threading.RLock()
-        self.conn.row_factory = sqlite3.Row
         self._fts_available = False
         self._encrypted = bool(encrypted)
         self._fernet = None
@@ -42,6 +44,26 @@ class Memory:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self._ensure_tables()
+
+    def _new_connection(self):
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        with self._connections_lock:
+            self._connections.append(conn)
+        return conn
+
+    @property
+    def conn(self):
+        """Return one connection per worker thread for file-backed databases."""
+        if self.db_path == ":memory:":
+            return self._primary_conn
+        conn = getattr(self._thread_local, "conn", None)
+        if conn is None:
+            conn = self._new_connection()
+            self._thread_local.conn = conn
+        return conn
 
     def _seal(self, value):
         text = str(value)
@@ -898,10 +920,14 @@ class Memory:
 
     def close(self):
         with self._lock:
-            try:
-                self.conn.close()
-            except Exception:
-                pass
+            with self._connections_lock:
+                connections = list(self._connections)
+                self._connections.clear()
+            for conn in connections:
+                try:
+                    conn.close()
+                except sqlite3.Error:
+                    pass
 
     def __enter__(self):
         return self

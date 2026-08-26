@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import threading
 from pathlib import Path
 
 from ada.application.memory import MemoryLayers
@@ -9,6 +10,16 @@ import sqlite3
 
 
 class MemoryCredentialTests(unittest.TestCase):
+    def test_file_backed_memory_uses_connection_per_thread(self):
+        with tempfile.TemporaryDirectory() as directory:
+            memory = Memory(str(Path(directory) / "memory.db"))
+            connections = []
+            worker = threading.Thread(target=lambda: connections.append(memory.conn))
+            worker.start()
+            worker.join()
+            self.assertEqual(len(connections), 1)
+            self.assertIsNot(memory.conn, connections[0])
+            memory.close()
     def test_memory_layers_and_task_retention(self):
         with tempfile.TemporaryDirectory() as directory:
             memory = Memory(str(Path(directory) / "memory.db"))
