@@ -3,10 +3,18 @@ from unittest.mock import patch
 
 from ada.infrastructure.engines.model_manager import ModelManager
 from ada.infrastructure.runtime.ollama import LocalModelRuntime
+from ada.infrastructure.runtime import resources
 from ada.infrastructure.runtime.resources import hardware_profile
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_hardware_profile_uses_ttl_cache(self):
+        resources.invalidate_hardware_profile_cache()
+        with patch.object(resources, "_compute_hardware_profile", return_value={"tier": "low"}) as compute:
+            self.assertEqual(hardware_profile(ttl_seconds=60), {"tier": "low"})
+            self.assertEqual(hardware_profile(ttl_seconds=60), {"tier": "low"})
+        compute.assert_called_once_with()
+
     def test_hardware_profile_has_portable_shape(self):
         profile = hardware_profile()
         self.assertIn(profile["tier"], {"low", "mid", "high"})

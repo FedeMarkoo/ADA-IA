@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -56,7 +57,34 @@ def wait_for_cpu_budget(config=None):
         time.sleep(float(config.get("cpu_throttle_seconds", 1.0)))
 
 
-def hardware_profile():
+_HARDWARE_CACHE_TTL_SECONDS = 30.0
+_hardware_cache_lock = threading.Lock()
+_hardware_cache_at = 0.0
+_hardware_cache_value = None
+
+
+def hardware_profile(ttl_seconds: float = _HARDWARE_CACHE_TTL_SECONDS):
+    """Return a cached hardware profile, refreshing it after the TTL."""
+    global _hardware_cache_at, _hardware_cache_value
+    now = time.monotonic()
+    with _hardware_cache_lock:
+        if _hardware_cache_value is not None and now - _hardware_cache_at < ttl_seconds:
+            return dict(_hardware_cache_value)
+        value = _compute_hardware_profile()
+        _hardware_cache_value = value
+        _hardware_cache_at = time.monotonic()
+        return dict(value)
+
+
+def invalidate_hardware_profile_cache():
+    """Force hardware detection on the next request."""
+    global _hardware_cache_at, _hardware_cache_value
+    with _hardware_cache_lock:
+        _hardware_cache_at = 0.0
+        _hardware_cache_value = None
+
+
+def _compute_hardware_profile():
     """Return a portable hardware profile for model selection and diagnostics."""
     cores = os.cpu_count() or 1
     ram_gb = 0.0
