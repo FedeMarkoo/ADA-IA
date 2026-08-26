@@ -26,6 +26,7 @@ Bienvenido a la documentación técnica de **ADA-IA**, un ecosistema modular de 
 - [**Guía funcional y capturas**](user-guide.md): Todas las pantallas, acciones y procedimientos de uso.
 - [**Catálogo completo de funcionalidades**](functional-catalog.md): Capacidades, MCPs, rutas API y relación con el código.
 - [**Aplicación de escritorio**](desktop.md): Shell GTK/WebKit, requisitos y ejecución.
+- [**Galería de capturas**](screenshots/README.md): Índice visual de todas las pantallas documentadas.
 
 ### 🧠 4. Modelos de Lenguaje & Visión (`models/`)
 - [**Catálogo de Modelos & Benchmarks**](models/README.md): Asignación de roles por hardware, catálogo y métricas de velocidad.
