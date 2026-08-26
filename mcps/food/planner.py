@@ -1,7 +1,7 @@
 """Meal planning and weekly schedule engine."""
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 
 class PlannerManager:

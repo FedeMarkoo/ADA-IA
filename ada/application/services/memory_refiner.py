@@ -9,7 +9,6 @@ Periodically:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import threading
@@ -141,7 +140,6 @@ class MemoryRefiner:
                 continue
 
             u_text = user_msg.get("text", "").strip()
-            a_text = assistant_msg.get("text", "").strip()
 
             # Pattern 1: User explicitly stating a preference / permanent fact
             # e.g., "mi nombre es Juan", "preferí siempre formato markdown", "guardo las fotos en ..."

@@ -1,12 +1,11 @@
 import json
-import os
 import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import threading
 import urllib.parse
 import urllib.request

@@ -1,17 +1,11 @@
 """Conservative burst detection for photo batches."""
 
 from datetime import datetime
-import json
 import re
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
-from PIL import Image
 
-from mcps.photography.raw_engine import RawEngine, RAW_EXTENSIONS
 
 SEQUENCE_KEYS = ("SequenceNumber", "SequenceFileNumber", "ContinuousNumber", "ShotOrder")
 BURST_KEYS = ("ReleaseMode", "DriveMode", "BurstMode", "ContinuousShooting", "ShootingMode")

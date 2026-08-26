@@ -3,7 +3,7 @@
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 DEFAULT_KEYWORDS = {
     "wedding": "Weddings",

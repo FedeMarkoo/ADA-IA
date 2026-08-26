@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock, patch
 from ada.ollama.client import OllamaClient
 from ada.models.catalog import ModelCatalog
-from ada.models.benchmark import ModelBenchmark
 from ada.mcps.manager import MCPManager
 
 

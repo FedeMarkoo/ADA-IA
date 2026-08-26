@@ -1,7 +1,7 @@
 """Camera RAW image decoding and metadata extraction engine."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Tuple
 from PIL import Image
 
 RAW_EXTENSIONS = {".raw", ".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2"}

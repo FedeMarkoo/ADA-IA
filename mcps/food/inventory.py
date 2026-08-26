@@ -1,7 +1,7 @@
 """Pantry inventory and low-stock management."""
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 
 class InventoryManager:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 
 from ada.infrastructure.runtime.presence import PresenceStore
 

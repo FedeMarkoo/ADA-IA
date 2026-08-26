@@ -1,7 +1,6 @@
 """Prompt construction kept independent from model/provider execution."""
 
 import logging
-import time
 
 logger = logging.getLogger("ada.prompts")
 

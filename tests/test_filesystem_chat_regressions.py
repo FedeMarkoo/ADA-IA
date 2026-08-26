@@ -1,5 +1,4 @@
 import unittest
-from types import SimpleNamespace
 
 from ada.application.services.responses import text_from_result
 from ada.application.services.web_chat import WebChatService

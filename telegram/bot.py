@@ -330,7 +330,6 @@ class TelegramListener:
                             if act.get("status") == "working":
                                 label = act.get("label") or "Procesando"
                                 detail = act.get("detail") or ""
-                                component = act.get("component") or ""
                                 text_parts = [f"⚙️ {label}"]
                                 if detail and detail != label:
                                     text_parts.append(f"({detail})")

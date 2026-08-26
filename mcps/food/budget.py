@@ -1,7 +1,7 @@
 """Food budget management and expense tracking."""
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 
 class BudgetManager:

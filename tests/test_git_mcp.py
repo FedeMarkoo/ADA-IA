@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from mcps.git.manager import GitManager
 from mcps.git.server import create_git_server

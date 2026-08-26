@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from ada.models.benchmark import BENCHMARK_PROMPTS, ModelBenchmark
+from ada.models.benchmark import ModelBenchmark
 
 
 class TestModelBenchmark(unittest.TestCase):
