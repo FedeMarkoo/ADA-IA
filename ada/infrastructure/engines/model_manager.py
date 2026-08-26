@@ -71,6 +71,8 @@ class ModelManager:
         self._ollama_activity_lock = threading.RLock()
         self._policy_cache = {}
         self._policy_cache_lock = threading.RLock()
+        self._openai_clients = {}
+        self._openai_clients_lock = threading.RLock()
         self._ollama_reaper_stop = threading.Event()
         self._installed_cache = (0.0, [])
         self._apply_config(config or {})
@@ -836,7 +838,14 @@ class ModelManager:
             self._mark_ollama_finished(model)
 
     def _call_openai(self, prompt, **kwargs):
-        client = OpenAI(api_key=kwargs.get("api_key") or self.openai_key, base_url=kwargs.get("base_url"))
+        api_key = kwargs.get("api_key") or self.openai_key
+        base_url = kwargs.get("base_url")
+        cache_key = (api_key, base_url)
+        with self._openai_clients_lock:
+            client = self._openai_clients.get(cache_key)
+            if client is None:
+                client = OpenAI(api_key=api_key, base_url=base_url)
+                self._openai_clients[cache_key] = client
         response = client.chat.completions.create(
             model=kwargs.get("openai_model", self.config.get("openai_model", "gpt-4o-mini")),
             messages=[{"role": "user", "content": prompt}],

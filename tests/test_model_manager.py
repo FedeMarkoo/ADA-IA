@@ -44,6 +44,17 @@ class TestModelManager(unittest.TestCase):
         self.assertEqual(self.manager.provider, "gemini")
         self.assertEqual(self.manager.config["privacy_default"], "high")
 
+    def test_openai_client_is_reused_for_same_provider_endpoint(self):
+        class FakeCompletions:
+            def create(self, **_kwargs):
+                return type("Response", (), {"choices": [type("Choice", (), {"message": type("Message", (), {"content": "ok"})()})()]})()
+
+        fake_client = type("Client", (), {"chat": type("Chat", (), {"completions": FakeCompletions()})()})()
+        with patch("ada.infrastructure.engines.model_manager.OpenAI", return_value=fake_client) as factory:
+            self.assertEqual(self.manager._call_openai("one", api_key="key"), "ok")
+            self.assertEqual(self.manager._call_openai("two", api_key="key"), "ok")
+        factory.assert_called_once_with(api_key="key", base_url=None)
+
     def test_automatic_policy_is_cached_until_reload(self):
         manager = ModelManager({"model_selection_mode": "light", "local_runtime": {"auto_start": False}})
         with patch.object(manager, "automatic_policy", return_value={"chat": {"preferred": "small"}}) as build:
