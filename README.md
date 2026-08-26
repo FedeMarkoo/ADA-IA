@@ -32,12 +32,12 @@ reversibilidad y uso responsable de CPU, memoria, batería y red.
 
 ```text
 ADA/
+├── ada/          código de aplicación, agentes, capabilities e infraestructura
+├── mcps/         servidores MCP modulares (archivos, fotos, git, comida, búsqueda, transporte)
+├── telegram/     bot y adaptador independiente de Telegram
+├── dashboard/    interfaz web y panel de control
 ├── docs/         documentación separada por responsabilidad
-│   ├── project/  producto, arquitectura, funcionalidades y roadmap
-│   └── capabilities/ contratos y uso de capacidades individuales
-├── src/ada/      código de aplicación, agentes, capabilities e infraestructura
-├── tests/        pruebas automatizadas
-└── ui/           interfaz web
+└── tests/        pruebas automatizadas
 ```
 
 ## Índices de documentación

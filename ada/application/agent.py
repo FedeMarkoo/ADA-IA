@@ -35,10 +35,8 @@ class Agent:
             encrypted=bool(self.cfg.get("memory_encryption", False)),
             encryption_key=os.environ.get("ADA_MEMORY_KEY"),
         )
-        # Legacy in-process capabilities are opt-in. Normal execution goes
-        # through MCP so integrations remain independently controllable.
-        self.capabilities_enabled = bool(self.cfg.get("capabilities_enabled", False))
-        self.skills = load_capabilities() if self.capabilities_enabled else {}
+        self.capabilities_enabled = bool(self.cfg.get("capabilities_enabled", True))
+        self.skills = load_capabilities()
         self.coordinator = MultiAgentCoordinator(self.cfg)
         self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem, mcp_manager=mcp_manager)
         self.policy = PolicyEngine(self.cfg)

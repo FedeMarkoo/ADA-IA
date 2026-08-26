@@ -1,7 +1,6 @@
 """Git operations manager for ADA MCP."""
 
 import os
-import shlex
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,10 +15,12 @@ class GitManager:
     def _run_git(self, args: List[str], timeout: int = 15) -> Dict[str, Any]:
         """Execute a git command with environment variables and safe execution."""
         env = os.environ.copy()
-        if "GIT_EXEC_PATH" not in env and Path("/home/fedemarkoo/.local/usr/lib/git-core").exists():
-            env["GIT_EXEC_PATH"] = "/home/fedemarkoo/.local/usr/lib/git-core"
-        if "GIT_TEMPLATE_DIR" not in env and Path("/home/fedemarkoo/.local/usr/share/git-core/templates").exists():
-            env["GIT_TEMPLATE_DIR"] = "/home/fedemarkoo/.local/usr/share/git-core/templates"
+        local_git_core = Path.home() / ".local/usr/lib/git-core"
+        local_git_templates = Path.home() / ".local/usr/share/git-core/templates"
+        if "GIT_EXEC_PATH" not in env and local_git_core.exists():
+            env["GIT_EXEC_PATH"] = str(local_git_core)
+        if "GIT_TEMPLATE_DIR" not in env and local_git_templates.exists():
+            env["GIT_TEMPLATE_DIR"] = str(local_git_templates)
 
         try:
             res = subprocess.run(

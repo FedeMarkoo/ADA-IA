@@ -1,5 +1,8 @@
+config.json
 /config.json
+ada/config.json
 !mcps/config.json
+!ada/config.example.json
 memory.db
 memory.db-shm
 memory.db-wal
