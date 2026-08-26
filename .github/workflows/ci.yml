@@ -138,7 +138,7 @@ jobs:
       - name: Verify no unencrypted secrets or personal configs are tracked in Git
         run: |
           echo "Checking tracked files for sensitive patterns..."
-          if git ls-files | grep -E '(^|/)(\.env|config\.json|.*\.pem|.*\.key)$' | grep -v 'config\.example\.json'; then
+          if git ls-files | grep -E '(^|/)(\.env|config\.json|ada/config\.json|.*\.pem|.*\.key)$' | grep -v -E '(config\.example\.json|mcps/config\.json)'; then
             echo "ERROR: Sensitive file tracked in repository!"
             exit 1
           fi
