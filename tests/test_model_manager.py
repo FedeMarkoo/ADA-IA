@@ -47,7 +47,11 @@ class TestModelManager(unittest.TestCase):
     def test_openai_client_is_reused_for_same_provider_endpoint(self):
         class FakeCompletions:
             def create(self, **_kwargs):
-                return type("Response", (), {"choices": [type("Choice", (), {"message": type("Message", (), {"content": "ok"})()})()]})()
+                return type(
+                    "Response",
+                    (),
+                    {"choices": [type("Choice", (), {"message": type("Message", (), {"content": "ok"})()})()]},
+                )()
 
         fake_client = type("Client", (), {"chat": type("Chat", (), {"completions": FakeCompletions()})()})()
         with patch("ada.infrastructure.engines.model_manager.OpenAI", return_value=fake_client) as factory:

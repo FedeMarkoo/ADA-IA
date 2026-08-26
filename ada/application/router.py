@@ -83,9 +83,7 @@ class IntentRouter:
             return "(sin MCPs disponibles)"
         try:
             tools = [
-                tool
-                for tool in self.tool_registry.all(category=category)
-                if not tool.get("requires_confirmation")
+                tool for tool in self.tool_registry.all(category=category) if not tool.get("requires_confirmation")
             ]
             return (
                 "\n".join(

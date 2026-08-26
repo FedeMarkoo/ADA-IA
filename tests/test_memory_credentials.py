@@ -20,6 +20,7 @@ class MemoryCredentialTests(unittest.TestCase):
             self.assertEqual(len(connections), 1)
             self.assertIsNot(memory.conn, connections[0])
             memory.close()
+
     def test_memory_layers_and_task_retention(self):
         with tempfile.TemporaryDirectory() as directory:
             memory = Memory(str(Path(directory) / "memory.db"))

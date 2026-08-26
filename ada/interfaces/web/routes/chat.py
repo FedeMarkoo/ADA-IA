@@ -97,7 +97,9 @@ def chat():
         res, status_code = future.result(timeout=float(runtime["cfg"].get("chat_timeout_seconds", 900)))
     except TimeoutError:
         future.cancel()
-        logger.error("chat_request_timeout id=%s timeout_seconds=%s", request_id, runtime["cfg"].get("chat_timeout_seconds", 900))
+        logger.error(
+            "chat_request_timeout id=%s timeout_seconds=%s", request_id, runtime["cfg"].get("chat_timeout_seconds", 900)
+        )
         return jsonify({"error": "chat_timeout", "message": "La tarea excedió el tiempo límite."}), 504
 
     RESPONSES.labels(source, str(status_code)).inc()

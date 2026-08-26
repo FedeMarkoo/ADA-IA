@@ -5,7 +5,7 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from pathlib import Path
 from dataclasses import dataclass, field
 from ada.infrastructure.runtime.duplicates import detect_duplicates
