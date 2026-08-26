@@ -23,6 +23,9 @@ Este directorio contiene el registro modular de mejoras, correcciones de segurid
 | **JARV-01**| Visión Futura | Hoja de ruta de autonomía asistida (JARVIS) | 🚀 En Roadmap | Fase 1-4 | [07-roadmap-jarvis.md](07-roadmap-jarvis.md) |
 | **UPD-01** | Infraestructura | Actualización automática y reinicio coordinado | ✅ Implementado | `ada/infrastructure/update` | [08-auto-update.md](08-auto-update.md) |
 | **CTX-01** | Memoria | Shared Context y Dynamic Memory para multi-modelo | ✅ Implementado | `ada/application/context_manager` | [09-shared-context-memory.md](09-shared-context-memory.md) |
+| **SEC-08** | Seguridad | Defaults fail-closed y defensa en profundidad para tools/API | 🔴 Prioritario | Auditoría 2026-08 | [10-seguridad-fail-closed.md](10-seguridad-fail-closed.md) |
+| **PERF-01** | Performance | Concurrencia, cachés, streaming y resiliencia del runtime | 🟠 Priorizado | Auditoría 2026-08 | [11-performance-y-resiliencia.md](11-performance-y-resiliencia.md) |
+| **ARQ-04** | Arquitectura | Registro único de tools y routing estructurado sin regex | 🟡 Propuesto | Diseño 2026-08 | [12-registro-de-tools-y-routing.md](12-registro-de-tools-y-routing.md) |
 
 ---
 
@@ -37,4 +40,6 @@ Este directorio contiene el registro modular de mejoras, correcciones de segurid
 7. [07. Roadmap de autonomía (JARVIS)](07-roadmap-jarvis.md)
 8. [08. Actualización automática y reinicio](08-auto-update.md)
 9. [09. Shared Context y Dynamic Memory](09-shared-context-memory.md)
-
+10. [10. Seguridad fail-closed](10-seguridad-fail-closed.md)
+11. [11. Performance y resiliencia](11-performance-y-resiliencia.md)
+12. [12. Registro de tools y routing](12-registro-de-tools-y-routing.md)
