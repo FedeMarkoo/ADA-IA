@@ -174,8 +174,13 @@ class IntentRouter:
                     "confidence": 0.0,
                 }
             return fallback
-        prompt = self._mcp_prompt(text) if external_hint else self._prompt(text, history)
-        logger.debug("router request=%r history_chars=%d", text, len(history))
+        # The router is a classifier, not the conversational model. Keep it
+        # context-free unless the current wording explicitly refers back.
+        router_history = ""
+        if contextual_reference and history:
+            router_history = "\n".join(str(history).splitlines()[-2:])
+        prompt = self._mcp_prompt(text) if external_hint else self._prompt(text, router_history)
+        logger.debug("router request=%r history_chars=%d", text, len(router_history))
         try:
             raw = self.model_manager.call(
                 provider,
@@ -234,7 +239,7 @@ class IntentRouter:
                     "vianda",
                 )
                 if any(clue in text.lower() for clue in food_clues):
-                    food = self._route_food(provider, text, history)
+                    food = self._route_food(provider, text, router_history)
                     if food:
                         return food
             logger.info(
