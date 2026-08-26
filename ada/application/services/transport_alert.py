@@ -20,10 +20,16 @@ class TransportTelegramAlert:
         presence = self.presence.get(required)
         if not presence.get("active"):
             return {"ok": True, "status": "presence_inactive", "presence": presence}
-        result = self.agent.run_skill(
-            "transport_status",
+        manager = getattr(self.agent, "mcp_manager", None)
+        if manager is None:
+            return {"ok": False, "status": "missing_transport_mcp", "error": "missing_transport_mcp"}
+        result = manager.execute_tool(
+            "transport.get_status",
             {"line": "sarmiento", "config": self.config},
+            self.agent,
         )
+        if isinstance(result, dict) and result.get("ok") and isinstance(result.get("result"), dict):
+            result = result["result"]
         if isinstance(result, dict):
             text = result.get("message") or "Estado del Sarmiento disponible para revisar."
             alerts = result.get("alerts") or []

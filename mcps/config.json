@@ -32,6 +32,14 @@
       "description": "Gestor de recetas, inventario de comida, lista de compras y alacena",
       "status": "active"
     },
+    "transport": {
+      "command": "python",
+      "args": [
+        "mcps/transport/server.py"
+      ],
+      "description": "Estado y alertas de transporte público de Buenos Aires",
+      "status": "active"
+    },
     "system-runner": {
       "command": "python",
       "args": [

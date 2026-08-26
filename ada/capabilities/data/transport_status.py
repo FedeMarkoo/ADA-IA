@@ -35,6 +35,11 @@ CAPABILITY_SPEC = {
     },
 }
 
+# Kept as a compatibility import for existing callers/tests. The public
+# registry skips this module because transport_status is now exposed by the
+# transport MCP as transport.get_status.
+MCP_ONLY = True
+
 
 def _config(args: Dict[str, Any]) -> Dict[str, Any]:
     config = args.get("config") if isinstance(args.get("config"), dict) else {}
