@@ -12,7 +12,13 @@ class PolicyViolation(ValueError):
 class PolicyEngine:
     def __init__(self, config=None):
         self.config = config or {}
-        roots = self.config.get("allowed_roots") or [self.config.get("photo_root"), Path.home() / "Desktop"]
+        # An explicitly configured empty allowlist is intentionally fail-closed.
+        # Only a missing key uses the legacy safe defaults.
+        roots = (
+            self.config["allowed_roots"]
+            if "allowed_roots" in self.config
+            else [self.config.get("photo_root"), Path.home() / "Desktop"]
+        )
         self.allowed_roots = [self._path(item) for item in roots if item]
         self.allowed_commands = set(self.config.get("allowed_commands", []))
 
@@ -24,7 +30,7 @@ class PolicyEngine:
         if not value:
             return False
         if not self.allowed_roots:
-            return True
+            return False
         try:
             candidate = self._path(value)
             return any(candidate == root or root in candidate.parents for root in self.allowed_roots)

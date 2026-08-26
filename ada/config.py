@@ -65,6 +65,8 @@ def load_config(path: Path | str | None = None, project_root: Path | str | None 
     if not isinstance(config["allowed_roots"], list):
         raise ValueError("allowed_roots debe ser una lista de carpetas.")
     config["allowed_roots"] = [_path(item, root) for item in config["allowed_roots"] if item]
+    if not config["allowed_roots"]:
+        logger.warning("allowed_roots_empty_fail_closed path=%s", config_path)
     config.setdefault("confirm_risky", True)
     config.setdefault("memory_encryption", False)
     config.setdefault("allowed_commands", [])

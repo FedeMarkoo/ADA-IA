@@ -29,6 +29,12 @@ class TestPolicyEngine(unittest.TestCase):
         with self.assertRaises(PolicyViolation):
             self.policy.validate_command("rm -rf /")
 
+    def test_empty_allowed_roots_denies_every_path(self):
+        policy = PolicyEngine({"allowed_roots": []})
+        self.assertFalse(policy.path_allowed("/tmp"))
+        with self.assertRaises(PolicyViolation):
+            policy.validate_paths(["/tmp"])
+
 
 if __name__ == "__main__":
     unittest.main()
