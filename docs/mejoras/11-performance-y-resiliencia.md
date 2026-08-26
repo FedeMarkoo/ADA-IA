@@ -17,7 +17,7 @@ La regla de oro es medir antes de optimizar. ADA ya expone métricas Prometheus 
 | PERF-05 | Streaming real de tokens hacia SSE | 🟠 Pendiente | Alto en percepción | Medio |
 | PERF-06 | Servidor productivo y `/api/chat` fuera del thread de request | 🟠 Pendiente | Medio-alto | Medio |
 | PERF-07 | SSE basado en pub/sub, `Queue` o `Condition` | 🟡 Pendiente | Medio | Medio |
-| PERF-08 | HealthDoctor con TTL y chequeos paralelos | 🟡 Pendiente | Medio | Bajo |
+| PERF-08 | HealthDoctor con TTL y chequeos paralelos | ✅ Implementado | Medio | Bajo |
 | PERF-09 | LRU/TTL para `session_states` y lazy-load del historial | ✅ Implementado | Medio | Medio |
 | PERF-10 | No mantener locks MCP durante sleeps/restarts | ✅ Implementado | Bajo-medio | Bajo |
 

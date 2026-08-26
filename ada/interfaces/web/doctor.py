@@ -2,6 +2,9 @@
 
 import logging
 import sqlite3
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -46,35 +49,29 @@ class HealthDoctor:
         self.config = config or getattr(agent, "cfg", {})
         self.mcp_manager = mcp_manager
         self.ollama_client = ollama_client
+        self._diagnosis_cache = None
+        self._diagnosis_cached_at = 0.0
+        self._diagnosis_lock = threading.Lock()
 
     def diagnose(self) -> Dict[str, Any]:
         """Perform comprehensive diagnosis of all subsystems."""
-        items: List[HealthCheckItem] = []
+        now = time.monotonic()
+        with self._diagnosis_lock:
+            if self._diagnosis_cache is not None and now - self._diagnosis_cached_at < 10:
+                return self._diagnosis_cache
 
-        # 1. Check Ollama Runtime
-        items.append(self._check_ollama())
-
-        # 2. Check Installed Models
-        items.append(self._check_models())
-
-        # 3. Check ADA Agent Core
-        items.append(self._check_agent())
-
-        # 4. Check MCP Subsystem
-        items.append(self._check_mcps())
-
-        # 5. Check SQLite Memory
-        items.append(self._check_memory())
-
-        # 6. Check Hardware Resources
-        items.append(self._check_hardware())
-
-        # 7. Check Telegram Bot Service
-        items.append(self._check_telegram())
-
-        # 8. Detect duplicate listeners and runtimes before they cause 409s
-        # or port conflicts.
-        items.append(self._check_duplicates())
+        checks = (
+            self._check_ollama,
+            self._check_models,
+            self._check_agent,
+            self._check_mcps,
+            self._check_memory,
+            self._check_hardware,
+            self._check_telegram,
+            self._check_duplicates,
+        )
+        with ThreadPoolExecutor(max_workers=len(checks), thread_name_prefix="ada-health") as executor:
+            items = list(executor.map(lambda check: check(), checks))
 
         # Calculate Overall Health Score
         total = len(items)
@@ -94,7 +91,7 @@ class HealthDoctor:
             if i.can_auto_fix and i.fix_action_id and i.status in {"warning", "error"}
         ]
 
-        return {
+        result = {
             "overall_status": overall_status,
             "score": score,
             "total_checks": total,
@@ -105,6 +102,15 @@ class HealthDoctor:
             "available_fixes": available_fixes,
             "can_auto_heal_all": len(available_fixes) > 0,
         }
+        with self._diagnosis_lock:
+            self._diagnosis_cache = result
+            self._diagnosis_cached_at = time.monotonic()
+        return result
+
+    def invalidate_cache(self):
+        with self._diagnosis_lock:
+            self._diagnosis_cache = None
+            self._diagnosis_cached_at = 0.0
 
     def _check_duplicates(self) -> HealthCheckItem:
         report = detect_duplicates()
