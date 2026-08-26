@@ -19,7 +19,7 @@ La regla de oro es medir antes de optimizar. ADA ya expone métricas Prometheus 
 | PERF-07 | SSE basado en pub/sub, `Queue` o `Condition` | 🟡 Pendiente | Medio | Medio |
 | PERF-08 | HealthDoctor con TTL y chequeos paralelos | 🟡 Pendiente | Medio | Bajo |
 | PERF-09 | LRU/TTL para `session_states` y lazy-load del historial | 🟠 Pendiente | Medio | Medio |
-| PERF-10 | No mantener locks MCP durante sleeps/restarts | 🟢 Pendiente | Bajo-medio | Bajo |
+| PERF-10 | No mantener locks MCP durante sleeps/restarts | ✅ Implementado | Bajo-medio | Bajo |
 
 ## Priorización
 

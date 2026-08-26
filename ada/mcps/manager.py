@@ -520,18 +520,18 @@ class MCPManager:
 
     def restart_server(self, name: str) -> Dict[str, Any]:
         with self._lock:
-            if name in self._servers:
-                self.stop_server(name)
-                time.sleep(0.1)
-                return self.start_server(name)
+            exists = name in self._servers
+        if not exists:
             return {"ok": False, "error": f"Server {name} not found"}
+        self.stop_server(name)
+        time.sleep(0.1)
+        return self.start_server(name)
 
     def restart_all_servers(self) -> Dict[str, Any]:
         with self._lock:
-            results = {}
-            for name in self._servers:
-                results[name] = self.restart_server(name)
-            return {"ok": True, "results": results, "servers": self.list_servers()}
+            names = list(self._servers)
+        results = {name: self.restart_server(name) for name in names}
+        return {"ok": True, "results": results, "servers": self.list_servers()}
 
     def ping_server(self, name: str) -> Dict[str, Any]:
         with self._lock:
