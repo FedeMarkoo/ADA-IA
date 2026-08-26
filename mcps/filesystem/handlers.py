@@ -10,7 +10,9 @@ class FilesystemHandlers:
     """Safe filesystem operations restricted to allowed roots."""
 
     def __init__(self, allowed_dirs: Optional[List[str]] = None):
-        self.allowed = [Path(d).resolve() for d in (allowed_dirs or [os.getcwd()])]
+        # None means standalone CLI default; [] is an explicit deny-all policy.
+        configured = [os.getcwd()] if allowed_dirs is None else allowed_dirs
+        self.allowed = [Path(d).resolve() for d in configured if d]
 
     def check_path(self, path_str: str) -> Path:
         p = Path(path_str).resolve()

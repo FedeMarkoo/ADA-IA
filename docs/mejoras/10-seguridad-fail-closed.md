@@ -11,7 +11,7 @@ Para un agente capaz de ejecutar acciones sobre la máquina, el default seguro d
 | ID | Mejora / Corrección | Estado | Prioridad |
 |---|---|---|---|
 | SEC-08 | `allowed_roots: []` debe denegar todo | ✅ Implementado | Crítica |
-| SEC-09 | Propagar `allowed_roots` al MCP filesystem | 🔴 Pendiente | Crítica |
+| SEC-09 | Propagar `allowed_roots` al MCP filesystem | ✅ Implementado | Crítica |
 | SEC-10 | `allowed_chat_ids: []` debe bloquear Telegram | 🔴 Pendiente | Crítica |
 | SEC-11 | Aplicar `requires_confirmation` dentro de `execute_tool()` | 🔴 Pendiente | Alta |
 | SEC-12 | Reemplazar `except Exception: pass` por logging y errores explícitos | 🟠 Pendiente | Alta |

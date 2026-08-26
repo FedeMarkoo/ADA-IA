@@ -7,6 +7,11 @@ from mcps.filesystem.server import create_filesystem_server
 
 
 class FilesystemMCPTests(unittest.TestCase):
+    def test_empty_allowlist_denies_filesystem_access(self):
+        handlers = FilesystemHandlers([])
+        with self.assertRaises(PermissionError):
+            handlers.check_path("/tmp")
+
     def test_list_files_is_non_recursive_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -176,7 +176,7 @@ class MCPManager:
             try:
                 from mcps.filesystem.server import create_filesystem_server
 
-                srv = create_filesystem_server()
+                srv = create_filesystem_server(self.config.get("allowed_roots", []))
                 for tname, tmeta in srv.tools.items():
                     self._tools[tname] = ToolDefinition(
                         name=tname,
@@ -689,7 +689,7 @@ class MCPManager:
                 if name.startswith("filesystem."):
                     from mcps.filesystem.server import create_filesystem_server
 
-                    srv = create_filesystem_server()
+                    srv = create_filesystem_server(self.config.get("allowed_roots", []))
                     if name in srv.handlers:
                         res = srv.handlers[name](parameters)
                         return {"ok": "error" not in res, "result": res}
