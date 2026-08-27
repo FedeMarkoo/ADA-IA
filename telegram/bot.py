@@ -77,7 +77,45 @@ def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
                             return val
             except Exception as exc:
                 logger.warning("telegram_env_read_failed path=%s error=%s", env_path, exc)
-    return ""
+def resolve_allowed_chat_ids(config: Optional[Dict[str, Any]] = None) -> Set[str]:
+    env_ids = os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "").strip()
+    if env_ids:
+        return TelegramListener._allowed_chat_ids(env_ids)
+    if config:
+        tg_cfg = config.get("telegram", {}) if isinstance(config.get("telegram"), dict) else {}
+        cfg_ids = tg_cfg.get("allowed_chat_ids") or config.get("allowed_chat_ids")
+        if cfg_ids:
+            return TelegramListener._allowed_chat_ids(cfg_ids)
+    try:
+        from ada.infrastructure.credentials import SecureVault as AdaVault
+
+        v_ids = AdaVault().get("telegram_allowed_chat_ids")
+        if v_ids:
+            return TelegramListener._allowed_chat_ids(v_ids)
+    except Exception as exc:
+        logger.warning("telegram_allowed_chat_ids_vault_read_failed error=%s", exc)
+    try:
+        from utils.credentials import SecureVault
+
+        v_ids = SecureVault().get("telegram_allowed_chat_ids")
+        if v_ids:
+            return TelegramListener._allowed_chat_ids(v_ids)
+    except Exception as exc:
+        logger.warning("telegram_allowed_chat_ids_utils_vault_read_failed error=%s", exc)
+
+    cfg_file = PROJECT_ROOT / "ada" / "config.json"
+    if not cfg_file.is_file():
+        cfg_file = PROJECT_ROOT / "config.json"
+    if cfg_file.is_file():
+        try:
+            c = json.loads(cfg_file.read_text(encoding="utf-8"))
+            tg_c = c.get("telegram", {}) if isinstance(c.get("telegram"), dict) else {}
+            c_ids = tg_c.get("allowed_chat_ids") or c.get("allowed_chat_ids")
+            if c_ids:
+                return TelegramListener._allowed_chat_ids(c_ids)
+        except Exception as exc:
+            logger.warning("telegram_allowed_chat_ids_config_read_failed path=%s error=%s", cfg_file, exc)
+    return set()
 
 
 class TelegramListener:
@@ -95,9 +133,7 @@ class TelegramListener:
         )
         self.typing_enabled = bool(telegram.get("typing_indicator", True))
         self.typing_interval = max(1.0, float(telegram.get("typing_interval_seconds", 4.0)))
-        self.allowed_chat_ids = self._allowed_chat_ids(
-            os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "") or telegram.get("allowed_chat_ids", [])
-        )
+        self.allowed_chat_ids = resolve_allowed_chat_ids(self.config)
         self.inbox = Path(os.path.expanduser(str(telegram.get("inbox", "~/Desktop/ADA_Data/telegram_inbox"))))
         health_path = os.environ.get("ADA_TRIGGER_HEALTH_PATH") or telegram.get("health_path")
         self.health_path = Path(health_path).expanduser() if health_path else None

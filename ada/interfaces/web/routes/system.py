@@ -333,10 +333,23 @@ def telegram_service_config():
         if isinstance(allowed_chat_ids, str):
             allowed_chat_ids = [s.strip() for s in allowed_chat_ids.split(",") if s.strip()]
         cfg_data["telegram"]["allowed_chat_ids"] = allowed_chat_ids
+        try:
+            vault = SecureVault()
+            vault.set(
+                "telegram_allowed_chat_ids",
+                ",".join(str(cid) for cid in allowed_chat_ids),
+                meta={"service": "telegram", "updated_at": time.time()},
+            )
+        except Exception as exc:
+            pass
 
     cfg_data["telegram"]["enabled"] = True
-    if target_cfg_path:
-        Path(target_cfg_path).write_text(json.dumps(cfg_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    save_path = Path(target_cfg_path) if target_cfg_path else (PROJECT_ROOT / "ada" / "config.json")
+    try:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        save_path.write_text(json.dumps(cfg_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
 
     runtime["cfg"]["telegram"] = dict(cfg_data["telegram"])
     if runtime.get("trigger_manager"):
