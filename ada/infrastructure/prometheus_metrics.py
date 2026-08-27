@@ -11,6 +11,7 @@ import os
 import subprocess
 import time
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 import psutil
@@ -18,6 +19,20 @@ from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Proc
 
 REGISTRY = CollectorRegistry(auto_describe=True)
 ProcessCollector(registry=REGISTRY)
+
+PIPELINE_STAGE_DURATION = Histogram(
+    "ada_pipeline_stage_duration_seconds",
+    "Duration of pipeline stages and internal processing layers in seconds.",
+    ("stage", "status"),
+    buckets=(0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
+    registry=REGISTRY,
+)
+PIPELINE_STAGE_LAST = Gauge(
+    "ada_pipeline_stage_last_seconds",
+    "Latest execution duration of pipeline stages and layers in seconds.",
+    ("stage",),
+    registry=REGISTRY,
+)
 
 REQUESTS = Counter(
     "ada_http_requests_total",
@@ -267,6 +282,35 @@ def reset_llm_token_usage(max_context=None) -> None:
 
 # Initialize default gauges
 reset_llm_token_usage()
+
+
+@contextmanager
+def measure_stage(stage: str):
+    """Context manager to record duration of a pipeline stage in Prometheus."""
+    started = time.monotonic()
+    status = "ok"
+    try:
+        yield
+    except Exception:
+        status = "error"
+        raise
+    finally:
+        duration = max(0.0, time.monotonic() - started)
+        try:
+            PIPELINE_STAGE_DURATION.labels(stage=stage, status=status).observe(duration)
+            PIPELINE_STAGE_LAST.labels(stage=stage).set(duration)
+        except Exception:
+            pass
+
+
+def record_stage_duration(stage: str, duration: float, status: str = "ok") -> None:
+    """Explicitly record a duration for a pipeline stage."""
+    try:
+        sec = max(0.0, float(duration))
+        PIPELINE_STAGE_DURATION.labels(stage=stage, status=status).observe(sec)
+        PIPELINE_STAGE_LAST.labels(stage=stage).set(sec)
+    except Exception:
+        pass
 
 
 

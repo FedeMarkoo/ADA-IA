@@ -2,7 +2,14 @@ from collections import defaultdict, deque
 import threading
 import time
 
-from ada.infrastructure.prometheus_metrics import EVENTS, OPERATIONS
+from ada.infrastructure.prometheus_metrics import (
+    EVENTS,
+    OPERATIONS,
+    PIPELINE_STAGE_DURATION,
+    PIPELINE_STAGE_LAST,
+    measure_stage,
+    record_stage_duration,
+)
 
 
 class Metrics:

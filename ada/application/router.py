@@ -11,7 +11,7 @@ import re
 from datetime import date
 from ada.application.tool_registry import ToolRegistry
 from ada.application.services.prompts import PromptWithUsage
-from ada.infrastructure.prometheus_metrics import estimate_token_count
+from ada.infrastructure.prometheus_metrics import estimate_token_count, measure_stage
 
 logger = logging.getLogger("ada.router")
 
@@ -144,80 +144,82 @@ class IntentRouter:
         }
 
     def route(self, text, history=""):
-        if is_capability_discussion(text):
-            return {"action": "ask", "complexity": 4, "confidence": 0.98}
-        fallback = self._fallback(text)
-        # A plain conversational question with no capability keyword does not
-        # need a model call just to be classified as chat. This removes an
-        # entire cold start from the most common path.
-        contextual_reference = bool(
-            history
-            and re.search(
-                r"\b(eso|esto|esa|ese|ah[ií]|adentro|anterior|antes|lo\s+que|me\s+refiero|resumen|listar)\b|^(?:y|tamb[ié]n)\b",
-                text.lower(),
+        with measure_stage("intent_routing"):
+            if is_capability_discussion(text):
+                return {"action": "ask", "complexity": 4, "confidence": 0.98}
+            fallback = self._fallback(text)
+            # A plain conversational question with no capability keyword does not
+            # need a model call just to be classified as chat. This removes an
+            # entire cold start from the most common path.
+            contextual_reference = bool(
+                history
+                and re.search(
+                    r"\b(eso|esto|esa|ese|ah[ií]|adentro|anterior|antes|lo\s+que|me\s+refiero|resumen|listar)\b|^(?:y|tamb[ié]n)\b",
+                    text.lower(),
+                )
             )
-        )
-        external_hint = bool(
-            self.mcp_manager
-            and re.search(
-                r"\b(calendar|calendario|evento|gmail|correo|mails?|drive|internet|fuente|d[oó]lar|"
-                r"busc[aá]|investig[aá]|verific[aá]|confirm[aá]|actual|hoy|últim[oa]|noticia|precio|"
-                r"no\s+(?:sé|se)|duda|qué\s+pas[oó]|qui[eé]n\s+es)\b",
-                text.lower(),
+            external_hint = bool(
+                self.mcp_manager
+                and re.search(
+                    r"\b(calendar|calendario|evento|gmail|correo|mails?|drive|internet|fuente|d[oó]lar|"
+                    r"busc[aá]|investig[aá]|verific[aá]|confirm[aá]|actual|hoy|últim[oa]|noticia|precio|"
+                    r"no\s+(?:sé|se)|duda|qué\s+pas[oó]|qui[eé]n\s+es)\b",
+                    text.lower(),
+                )
             )
-        )
-        if (
-            fallback.get("action") == "ask"
-            and fallback.get("confidence") == 0.0
-            and not contextual_reference
-            and not external_hint
-        ):
-            return fallback
-        provider = self.model_manager.choose(
-            {
-                "complexity": 4,
-                "privacy": self.config.get("privacy_default", "normal"),
-            }
-        )
-        if not provider:
-            if external_hint and self.mcp_manager:
-                return {
-                    "action": "ask",
-                    "routing_error": "mcp_router_unavailable",
+            if (
+                fallback.get("action") == "ask"
+                and fallback.get("confidence") == 0.0
+                and not contextual_reference
+                and not external_hint
+            ):
+                return fallback
+            provider = self.model_manager.choose(
+                {
                     "complexity": 4,
-                    "confidence": 0.0,
+                    "privacy": self.config.get("privacy_default", "normal"),
                 }
-            return fallback
-        # The router is a classifier, not the conversational model. Keep it
-        # context-free unless the current wording explicitly refers back.
-        router_history = ""
-        if contextual_reference and history:
-            router_history = "\n".join(str(history).splitlines()[-2:])
-        memory_candidates = self.memory.retrieve_memory_candidates(
-            text, limit=self.config.get("memory_router_candidates", 20)
-        )
-        prompt = self._mcp_prompt(text) if external_hint else self._prompt(text, router_history, memory_candidates)
-        logger.debug("router request=%r history_chars=%d", text, len(router_history))
-        try:
-            raw = self.model_manager.call(
-                provider,
-                prompt,
-                ollama_model=self.model_manager.select_model("router", role="router"),
-                temperature=0,
-                max_tokens=180 if external_hint else 180,
-                token_usage=getattr(prompt, "token_usage", None),
-                timeout=(
-                    max(self.config.get("router_timeout", 30), 60)
-                    if external_hint
-                    else self.config.get("router_timeout", 30)
-                ),
-                format=self._mcp_schema() if external_hint else self._schema("router"),
             )
-            logger.info("router raw=%s", str(raw)[:1000])
-            normalized = self._normalize(self._decode(raw), fallback, memory_candidates)
-            if external_hint and normalized.get("action") != "mcp_call":
-                return {
-                    "action": "ask",
+            if not provider:
+                if external_hint and self.mcp_manager:
+                    return {
+                        "action": "ask",
+                        "routing_error": "mcp_router_unavailable",
+                        "complexity": 4,
+                        "confidence": 0.0,
+                    }
+                return fallback
+            # The router is a classifier, not the conversational model. Keep it
+            # context-free unless the current wording explicitly refers back.
+            router_history = ""
+            if contextual_reference and history:
+                router_history = "\n".join(str(history).splitlines()[-2:])
+            memory_candidates = self.memory.retrieve_memory_candidates(
+                text, limit=self.config.get("memory_router_candidates", 20)
+            )
+            prompt = self._mcp_prompt(text) if external_hint else self._prompt(text, router_history, memory_candidates)
+            logger.debug("router request=%r history_chars=%d", text, len(router_history))
+            try:
+                with measure_stage("router_llm_inference"):
+                    raw = self.model_manager.call(
+                        provider,
+                        prompt,
+                        ollama_model=self.model_manager.select_model("router", role="router"),
+                        temperature=0,
+                        max_tokens=180 if external_hint else 180,
+                        token_usage=getattr(prompt, "token_usage", None),
+                        timeout=(
+                            max(self.config.get("router_timeout", 30), 60)
+                            if external_hint
+                            else self.config.get("router_timeout", 30)
+                        ),
+                        format=self._mcp_schema() if external_hint else self._schema("router"),
+                    )
+                logger.info("router raw=%s", str(raw)[:1000])
+                normalized = self._normalize(self._decode(raw), fallback, memory_candidates)
+                if external_hint and normalized.get("action") != "mcp_call":
+                    return {
+                        "action": "ask",
                     "routing_error": "external_request_not_grounded",
                     "complexity": 4,
                     "confidence": 0.0,

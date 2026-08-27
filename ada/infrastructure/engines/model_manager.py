@@ -24,6 +24,7 @@ from ada.infrastructure.prometheus_metrics import (
     OLLAMA_EXECUTIONS,
     OLLAMA_IN_FLIGHT,
     estimate_token_count,
+    record_stage_duration,
     reset_llm_token_usage,
     set_llm_token_usage,
 )
@@ -938,6 +939,7 @@ class ModelManager:
             duration = time.monotonic() - started
             self._record_model_stat(model_tag, duration, error=failed)
             self.metrics.observe("provider.duration", duration, tags)
+            record_stage_duration("llm_inference", duration, status="error" if failed else "ok")
             if provider in self.LOCAL_PROVIDERS:
                 status = "error" if failed else "ok"
                 OLLAMA_EXECUTIONS.labels(model=str(model_tag), status=status).inc()

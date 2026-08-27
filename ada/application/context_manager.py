@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
+from ada.infrastructure.prometheus_metrics import measure_stage
+
 
 def estimate_tokens(text: str) -> int:
     """Conservative tokenizer-free estimate; real tokenizers remain optional."""
@@ -80,39 +82,40 @@ class ContextManager:
     def build(
         self, conversation_id="main", query="", messages=None, role="chat", complexity=3, task_state=None
     ) -> ContextPacket:
-        budget = self.budget_for(role, complexity)
-        source = list(messages or [])
-        if not source and self.memory and hasattr(self.memory, "conversation"):
-            source = self.memory.conversation(conversation_id, limit=100)
-        summary = (
-            self.memory.get_conversation_summary(conversation_id)
-            if self.memory and hasattr(self.memory, "get_conversation_summary")
-            else ""
-        )
-        memories = (
-            self.memory.search_text(query, k=5) if query and self.memory and hasattr(self.memory, "search_text") else []
-        )
-        profile = (
-            self.memory.knowledge(query, limit=3) if query and self.memory and hasattr(self.memory, "knowledge") else []
-        )
-        packet = ContextPacket(
-            conversation_id=str(conversation_id),
-            summary=str(summary or ""),
-            recent_messages=self._recent(source, max(1024, budget // 2)),
-            memories=[str(item) for item in memories[:5]],
-            profile=[str(item) for item in profile[:3]],
-            task_state=dict(task_state or {}),
-            token_budget=budget,
-        )
-        rendered = packet.render()
-        packet.estimated_tokens = estimate_tokens(rendered)
-        if packet.estimated_tokens > budget:
-            packet.memories = packet.memories[:2]
-            packet.profile = packet.profile[:1]
-            packet.recent_messages = self._recent(packet.recent_messages, max(1024, budget // 3))
-            packet.truncated = True
-            packet.estimated_tokens = estimate_tokens(packet.render())
-        return packet
+        with measure_stage("context_build"):
+            budget = self.budget_for(role, complexity)
+            source = list(messages or [])
+            if not source and self.memory and hasattr(self.memory, "conversation"):
+                source = self.memory.conversation(conversation_id, limit=100)
+            summary = (
+                self.memory.get_conversation_summary(conversation_id)
+                if self.memory and hasattr(self.memory, "get_conversation_summary")
+                else ""
+            )
+            memories = (
+                self.memory.search_text(query, k=5) if query and self.memory and hasattr(self.memory, "search_text") else []
+            )
+            profile = (
+                self.memory.knowledge(query, limit=3) if query and self.memory and hasattr(self.memory, "knowledge") else []
+            )
+            packet = ContextPacket(
+                conversation_id=str(conversation_id),
+                summary=str(summary or ""),
+                recent_messages=self._recent(source, max(1024, budget // 2)),
+                memories=[str(item) for item in memories[:5]],
+                profile=[str(item) for item in profile[:3]],
+                task_state=dict(task_state or {}),
+                token_budget=budget,
+            )
+            rendered = packet.render()
+            packet.estimated_tokens = estimate_tokens(rendered)
+            if packet.estimated_tokens > budget:
+                packet.memories = packet.memories[:2]
+                packet.profile = packet.profile[:1]
+                packet.recent_messages = self._recent(packet.recent_messages, max(1024, budget // 3))
+                packet.truncated = True
+                packet.estimated_tokens = estimate_tokens(packet.render())
+            return packet
 
     def save_summary(self, conversation_id, summary):
         if self.memory and hasattr(self.memory, "save_conversation_summary"):

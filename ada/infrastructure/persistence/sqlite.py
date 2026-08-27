@@ -13,6 +13,8 @@ import threading
 import unicodedata
 from pathlib import Path
 
+from ada.infrastructure.prometheus_metrics import measure_stage
+
 
 class Memory:
     SCHEMA_VERSION = 2
@@ -616,70 +618,72 @@ class Memory:
 
     def retrieve_memory_candidates(self, query, limit=20, session=None):
         """Return bounded, scored memory candidates for router reranking."""
-        terms = [term for term in re.findall(r"[\wáéíóúñü]+", str(query or "").lower()) if len(term) > 2]
-        limit = min(max(int(limit), 1), 30)
-        with self._lock:
-            rows = self.conn.execute(
-                "SELECT id, created_at, summary, content, kind, meta FROM memories ORDER BY id DESC LIMIT 500"
-            ).fetchall()
-        candidates = []
-        for row in rows:
-            content = self._open(row["content"])
-            summary = self._open(row["summary"] or "")
-            lowered = f"{summary} {content}".lower()
-            overlap = sum(lowered.count(term) for term in terms)
-            if terms and not overlap:
-                continue
-            try:
-                meta = json.loads(self._open(row["meta"] or "{}"))
-            except (TypeError, ValueError):
-                meta = {}
-            if session and meta.get("session") not in {None, session}:
-                continue
-            layer_boost = {"knowledge": 0.25, "profile": 0.2, "semantic": 0.1}.get(row["kind"], 0.0)
-            score = min(1.0, overlap / max(1, len(terms)) * 0.7 + layer_boost)
-            candidates.append(
-                {
-                    "id": row["id"],
-                    "kind": row["kind"],
-                    "summary": summary,
-                    "score": round(score, 4),
-                    "source": "memory",
-                    "created_at": row["created_at"],
-                }
-            )
-        candidates.sort(key=lambda item: (item["score"], item["id"]), reverse=True)
-        return candidates[:limit]
+        with measure_stage("memory_candidates_retrieval"):
+            terms = [term for term in re.findall(r"[\wáéíóúñü]+", str(query or "").lower()) if len(term) > 2]
+            limit = min(max(int(limit), 1), 30)
+            with self._lock:
+                rows = self.conn.execute(
+                    "SELECT id, created_at, summary, content, kind, meta FROM memories ORDER BY id DESC LIMIT 500"
+                ).fetchall()
+            candidates = []
+            for row in rows:
+                content = self._open(row["content"])
+                summary = self._open(row["summary"] or "")
+                lowered = f"{summary} {content}".lower()
+                overlap = sum(lowered.count(term) for term in terms)
+                if terms and not overlap:
+                    continue
+                try:
+                    meta = json.loads(self._open(row["meta"] or "{}"))
+                except (TypeError, ValueError):
+                    meta = {}
+                if session and meta.get("session") not in {None, session}:
+                    continue
+                layer_boost = {"knowledge": 0.25, "profile": 0.2, "semantic": 0.1}.get(row["kind"], 0.0)
+                score = min(1.0, overlap / max(1, len(terms)) * 0.7 + layer_boost)
+                candidates.append(
+                    {
+                        "id": row["id"],
+                        "kind": row["kind"],
+                        "summary": summary,
+                        "score": round(score, 4),
+                        "source": "memory",
+                        "created_at": row["created_at"],
+                    }
+                )
+            candidates.sort(key=lambda item: (item["score"], item["id"]), reverse=True)
+            return candidates[:limit]
 
     def memory_records_by_ids(self, memory_ids, limit=3):
         """Resolve only selected memory ids for the current request."""
-        ids = []
-        for value in memory_ids or []:
-            try:
-                value = int(value)
-            except (TypeError, ValueError):
-                continue
-            if value not in ids:
-                ids.append(value)
-        ids = ids[: max(1, min(int(limit), 10))]
-        if not ids:
-            return []
-        placeholders = ",".join("?" for _ in ids)
-        with self._lock:
-            rows = self.conn.execute(
-                f"SELECT id, summary, content, kind FROM memories WHERE id IN ({placeholders})", ids
-            ).fetchall()
-        by_id = {row["id"]: row for row in rows}
-        return [
-            {
-                "id": memory_id,
-                "summary": self._open(by_id[memory_id]["summary"] or ""),
-                "content": self._open(by_id[memory_id]["content"]),
-                "kind": by_id[memory_id]["kind"],
-            }
-            for memory_id in ids
-            if memory_id in by_id
-        ]
+        with measure_stage("memory_records_fetch"):
+            ids = []
+            for value in memory_ids or []:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if value not in ids:
+                    ids.append(value)
+            ids = ids[: max(1, min(int(limit), 10))]
+            if not ids:
+                return []
+            placeholders = ",".join("?" for _ in ids)
+            with self._lock:
+                rows = self.conn.execute(
+                    f"SELECT id, summary, content, kind FROM memories WHERE id IN ({placeholders})", ids
+                ).fetchall()
+            by_id = {row["id"]: row for row in rows}
+            return [
+                {
+                    "id": memory_id,
+                    "summary": self._open(by_id[memory_id]["summary"] or ""),
+                    "content": self._open(by_id[memory_id]["content"]),
+                    "kind": by_id[memory_id]["kind"],
+                }
+                for memory_id in ids
+                if memory_id in by_id
+            ]
 
     def update_memory_record(self, memory_id, content=None, kind=None, meta=None, summary=None):
         fields, values = [], []
@@ -721,8 +725,9 @@ class Memory:
             self.conn.commit()
 
     def knowledge(self, query=None, limit=3):
-        with self._lock:
-            return self._knowledge_locked(query, limit)
+        with measure_stage("memory_knowledge"):
+            with self._lock:
+                return self._knowledge_locked(query, limit)
 
     def _knowledge_locked(self, query=None, limit=3):
         if query and self._fts_available:
@@ -750,8 +755,9 @@ class Memory:
         return [content for score, content in scored[:limit] if score]
 
     def search_text(self, vector_or_query, k=5, kind=None):
-        with self._lock:
-            return self._search_text_locked(vector_or_query, k, kind)
+        with measure_stage("memory_search"):
+            with self._lock:
+                return self._search_text_locked(vector_or_query, k, kind)
 
     def _search_text_locked(self, vector_or_query, k=5, kind=None):
         query = vector_or_query if isinstance(vector_or_query, str) else ""
