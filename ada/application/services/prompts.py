@@ -52,12 +52,15 @@ class PromptBuilder:
         query = task.get("prompt", "")
         system_tokens = estimate_token_count(prompt)
         memory_tokens = 0
-        knowledge = self.memory.knowledge(query, limit=2)
+        selected_records = self.memory.memory_records_by_ids(task.get("memory_ids"), limit=3)
+        knowledge = [item["content"] for item in selected_records]
+        procedures = [] if selected_records else self.memory.find_procedures(query)
+        if not selected_records:
+            knowledge = self.memory.knowledge(query, limit=2)
         if knowledge:
             memory_text = "\nReferencias confiables del proyecto; respetalas y no inventes reglas:\n" + "\n---\n".join(knowledge)
             prompt += memory_text
             memory_tokens += estimate_token_count(memory_text)
-        procedures = self.memory.find_procedures(query)
         if procedures:
             memory_text = "\nProcedimientos aprendidos relevantes:\n" + "\n".join(
                 f"- {item['name']}: {item['instructions']}" for item in procedures

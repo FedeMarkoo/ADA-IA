@@ -121,6 +121,8 @@ class IntentRouter:
                     "latency": {"type": "string", "enum": ["fast", "balanced", "quality"]},
                     "requires_tool_calling": {"type": "boolean"},
                     "estimated_output_tokens": {"type": "integer", "minimum": 1},
+                    "memory_ids": {"type": "array", "items": {"type": "integer"}, "maxItems": 3},
+                    "memory_confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 }
             )
         return schema
@@ -188,7 +190,10 @@ class IntentRouter:
         router_history = ""
         if contextual_reference and history:
             router_history = "\n".join(str(history).splitlines()[-2:])
-        prompt = self._mcp_prompt(text) if external_hint else self._prompt(text, router_history)
+        memory_candidates = self.memory.retrieve_memory_candidates(
+            text, limit=self.config.get("memory_router_candidates", 20)
+        )
+        prompt = self._mcp_prompt(text) if external_hint else self._prompt(text, router_history, memory_candidates)
         logger.debug("router request=%r history_chars=%d", text, len(router_history))
         try:
             raw = self.model_manager.call(
@@ -205,7 +210,7 @@ class IntentRouter:
                 format=self._mcp_schema() if external_hint else self._schema("router"),
             )
             logger.info("router raw=%s", str(raw)[:1000])
-            normalized = self._normalize(self._decode(raw), fallback)
+            normalized = self._normalize(self._decode(raw), fallback, memory_candidates)
             if external_hint and normalized.get("action") != "mcp_call":
                 return {
                     "action": "ask",
@@ -373,11 +378,15 @@ class IntentRouter:
             logger.warning("food classifier failed: %s", exc)
             return None
 
-    def _prompt(self, text, history):
+    def _prompt(self, text, history, memory_candidates=None):
         template = self._template(
             "router",
             "Clasificá la solicitud y devolvé SOLO JSON. Acciones: {actions}. Historial: {history}\nPedido: {text}",
         )
+        candidates_text = "\n".join(
+            f"- id={item['id']} kind={item['kind']} score={item['score']}: {item['content']}"
+            for item in (memory_candidates or [])
+        ) or "(sin candidatos relevantes)"
         return (
             template.replace("{actions}", self._actions_text())
             .replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))
@@ -388,6 +397,9 @@ class IntentRouter:
             + "\nSi corresponde a una consulta externa, elegí mcp_call con esta forma exacta: "
             + '{"action":"mcp_call","tool":"nombre.del.inventario","parameters":{}}. '
             + "No uses method, params ni nombres inventados; no inventes resultados."
+            + "\nMemorias candidatas; seleccioná solo ids de esta lista si son relevantes:\n"
+            + candidates_text
+            + "\nSi seleccionás memoria, devolvé memory_ids y memory_confidence."
         )
 
     def _mcp_prompt(self, text):
@@ -432,10 +444,17 @@ class IntentRouter:
                 return {"action": action.group(1), "tool": tool.group(1), "parameters": {}}
             return {}
 
-    def _normalize(self, candidate, fallback):
+    def _normalize(self, candidate, fallback, memory_candidates=None):
         if not isinstance(candidate, dict):
             return fallback
         candidate = dict(candidate)
+        allowed_memory_ids = {item["id"] for item in (memory_candidates or [])}
+        raw_memory_ids = candidate.get("memory_ids") if isinstance(candidate.get("memory_ids"), list) else []
+        candidate["memory_ids"] = [
+            int(value) for value in raw_memory_ids
+            if str(value).isdigit() and int(value) in allowed_memory_ids
+        ][:3]
+        candidate["memory_confidence"] = self._confidence(candidate.get("memory_confidence"))
         action = str(candidate.get("action") or "").lower()
         if action.startswith("food/"):
             candidate["action"] = "food"

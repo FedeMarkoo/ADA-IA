@@ -631,6 +631,7 @@ class WebChatService:
                 "use_memory": True,
                 "mode": "agent",
                 "conversation_context": conversation_context,
+                "memory_ids": parsed.get("memory_ids", []),
             }
             manager = getattr(self.agent, "model_manager", None)
             model_role = manager.role_for_task(model_task) if manager and hasattr(manager, "role_for_task") else "chat"

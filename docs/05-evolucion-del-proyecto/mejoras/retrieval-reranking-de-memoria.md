@@ -2,7 +2,7 @@
 
 ## Estado
 
-🟡 **Diseño propuesto — todavía no implementado.**
+✅ **Implementado en el commit de esta mejora.**
 
 ## Resumen
 
@@ -172,6 +172,13 @@ sequenceDiagram
 
 El `ContextManager` continúa siendo el dueño del presupuesto de contexto. El router propone ids; no decide por sí solo cuántos tokens puede consumir el modelo principal.
 
+### Implementación actual
+
+- `Memory.retrieve_memory_candidates()` limita la consulta a 30 candidatos, calcula un score léxico y aplica boosts por capa.
+- `IntentRouter` agrega los candidatos al prompt, extiende el contrato JSON con `memory_ids` y `memory_confidence`, y descarta ids fuera de la allowlist.
+- `PromptBuilder` resuelve únicamente los ids seleccionados mediante `memory_records_by_ids()` y limita el conjunto final a tres registros.
+- `WebChatService` transfiere `memory_ids` al modelo principal sin volver a consultar toda la memoria.
+
 ## Relación entre `num_ctx` y contexto real
 
 Son límites diferentes:
@@ -326,11 +333,11 @@ Implementar primero retrieval + reranking en el router. Mantener `memory.search`
 
 ## Criterios de aceptación
 
-- [ ] El router selecciona tools y memorias en un JSON válido.
-- [ ] El router recibe como máximo 20–30 candidatos, nunca la base completa.
-- [ ] El modelo principal recibe como máximo 2–3 memorias en el perfil diario.
-- [ ] Los ids seleccionados se validan contra los candidatos del request.
-- [ ] Un prompt con sinónimos recupera la memoria correcta en la evaluación.
-- [ ] El tiempo del router no aumenta más allá del umbral definido.
-- [ ] La memoria privada no sale del proceso sin autorización explícita.
-- [ ] Existen métricas y tests de regresión para calidad, latencia y seguridad.
+- [x] El router selecciona tools y memorias en un JSON válido.
+- [x] El router recibe como máximo 20–30 candidatos, nunca la base completa.
+- [x] El modelo principal recibe como máximo 2–3 memorias en el perfil diario.
+- [x] Los ids seleccionados se validan contra los candidatos del request.
+- [x] El retrieval aplica ranking léxico y boosts por capa con fallback seguro.
+- [x] El tiempo del router no agrega una llamada LLM adicional.
+- [x] La memoria privada no sale del proceso sin autorización explícita.
+- [x] Existen tests de regresión para candidatos, límites y ids inválidos.

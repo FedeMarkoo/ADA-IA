@@ -76,6 +76,19 @@ class IntentRouterTests(unittest.TestCase):
         self.assertEqual(len(result["steps"]), 1)
         self.assertEqual(manager.calls[0][2]["temperature"], 0)
 
+    def test_router_reranks_bounded_memory_and_validates_ids(self):
+        selected = self.memory.add_memory_record("Las fotos están en /tmp/fotos", kind="knowledge")
+        other = self.memory.add_memory_record("dato irrelevante sobre recetas", kind="note")
+        manager = FakeModelManager(
+            '{"action":"ask","memory_ids":[%d,999,%d],"memory_confidence":0.9}' % (selected, other)
+        )
+        result = self.router(manager).route("¿Dónde están mis fotos?")
+        self.assertEqual(result["memory_ids"], [selected])
+        self.assertLessEqual(len(result["memory_ids"]), 3)
+        prompt = manager.calls[0][1]
+        self.assertIn("id=%d" % selected, prompt)
+        self.assertNotIn("id=999", prompt)
+
     def test_model_routes_food_semantically(self):
         manager = FakeModelManager(
             '{"action":"food","domain":"recipes","food_action":"advise","advisor":true,"confidence":0.97}'
