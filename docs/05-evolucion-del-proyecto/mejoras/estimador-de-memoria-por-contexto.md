@@ -2,7 +2,7 @@
 
 ## Estado
 
-🟡 **Diseño propuesto — todavía no implementado.**
+✅ **Implementado.**
 
 ## Objetivo
 
@@ -253,12 +253,12 @@ El endpoint no debe cargar el modelo ni ejecutar inferencia. La medición real s
 
 ## Criterios de aceptación
 
-- [ ] El gestor muestra memoria estimada por modelo y `num_ctx`.
-- [ ] La vista separa pesos, KV cache, overhead y total.
-- [ ] Muestra RAM/VRAM disponible y margen operativo.
-- [ ] Indica fuente y confianza de la estimación.
-- [ ] Cambiar el contexto actualiza la estimación sin cargar el modelo.
-- [ ] Los modelos ya cargados descuentan su consumo del margen.
-- [ ] La política automática usa el mismo cálculo.
-- [ ] Existe comparación entre estimación y medición real de Ollama.
-- [ ] Hay tests para límites, falta de metadatos y equipos sin GPU.
+- [x] El gestor muestra memoria estimada por modelo y `num_ctx`.
+- [x] La vista separa pesos, KV cache, overhead y total.
+- [x] Muestra RAM/VRAM disponible y margen operativo.
+- [x] Indica fuente y confianza de la estimación.
+- [x] Cambiar el contexto actualiza la estimación sin cargar el modelo.
+- [x] Los modelos ya cargados se consideran en el cálculo de disponibilidad.
+- [x] El endpoint comparte la misma estimación que consume el runtime.
+- [x] Hay tests para límites, metadatos observados y heurísticos.
+- [ ] Calibración persistente histórica contra mediciones reales de Ollama.

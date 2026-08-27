@@ -22,6 +22,7 @@ from ada.infrastructure.observability import Metrics
 from ada.infrastructure.prometheus_metrics import OLLAMA_DURATION, OLLAMA_EXECUTIONS, OLLAMA_IN_FLIGHT
 from ada.ollama.client import OllamaClient
 from ada.infrastructure.engines.provider_router import ProviderRouter
+from ada.application.services.model_memory import ModelMemoryEstimator
 
 try:
     from openai import OpenAI
@@ -74,6 +75,10 @@ class ModelManager:
         self._model_stats_lock = threading.RLock()
         self._ollama_activity = {}
         self._ollama_activity_lock = threading.RLock()
+        self._local_model_condition = threading.Condition(threading.RLock())
+        self._local_resident_model = None
+        self._local_model_switching = False
+        self._local_model_active = 0
         self._policy_cache = {}
         self._policy_cache_lock = threading.RLock()
         self._openai_clients = {}
@@ -107,6 +112,112 @@ class ModelManager:
             item = self._ollama_activity.setdefault(model, {"active": 0, "last_used": time.monotonic()})
             item["active"] = max(0, item["active"] - 1)
             item["last_used"] = time.monotonic()
+
+    def _exclusive_local_enabled(self):
+        return self.provider == "ollama" and bool(self.config.get("local_model_exclusive_mode", True))
+
+    def _acquire_exclusive_local_model(self, model):
+        """Reserve one Ollama resident model, unloading others safely."""
+        if not self._exclusive_local_enabled():
+            return False
+        timeout = max(1.0, float(self.config.get("local_model_switch_timeout_seconds", 30)))
+        deadline = time.monotonic() + timeout
+        client = OllamaClient(self.ollama_url, timeout=5)
+        with self._local_model_condition:
+            while True:
+                if self._local_model_switching:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError("Timeout esperando el cambio de modelo local.")
+                    self._local_model_condition.wait(min(0.1, remaining))
+                    continue
+                if self._local_resident_model in (None, model):
+                    if self._local_resident_model is None:
+                        running = client.running_models()
+                        others = [
+                            item.get("name") for item in running if item.get("name") and item.get("name") != model
+                        ]
+                        if others:
+                            self._local_model_switching = True
+                            break
+                    self._local_resident_model = model
+                    self._local_model_active += 1
+                    return True
+                if self._local_model_active:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError("El modelo local actual está ocupado; no se pudo cambiar a tiempo.")
+                    self._local_model_condition.wait(min(0.1, remaining))
+                    continue
+                self._local_model_switching = True
+                break
+
+        try:
+            running = client.running_models()
+            others = [item.get("name") for item in running if item.get("name") and item.get("name") != model]
+            for previous in others:
+                if not client.unload_model(previous):
+                    raise RuntimeError(f"No se pudo liberar el modelo local '{previous}'.")
+            with self._local_model_condition:
+                self._local_resident_model = model
+                self._local_model_active += 1
+                self._local_model_switching = False
+                self._local_model_condition.notify_all()
+            return True
+        except Exception:
+            with self._local_model_condition:
+                self._local_model_switching = False
+                self._local_model_condition.notify_all()
+            raise
+
+    def _release_exclusive_local_model(self):
+        if not self._exclusive_local_enabled():
+            return
+        with self._local_model_condition:
+            self._local_model_active = max(0, self._local_model_active - 1)
+            self._local_model_condition.notify_all()
+
+    def switch_local_model(self, model):
+        """Unload other residents, preload one model, and restore on failure."""
+        if self.provider != "ollama":
+            return {"ok": False, "error": "La exclusión de residentes solo aplica a Ollama."}
+        previous = self._local_resident_model
+        acquired = False
+        try:
+            acquired = self._acquire_exclusive_local_model(model)
+            client = OllamaClient(self.ollama_url, timeout=60)
+            if not client.load_model(model, keep_alive=self.config.get("ollama_keep_alive", "5m")):
+                raise RuntimeError(f"No se pudo cargar el modelo local '{model}'.")
+            return {"ok": True, "model": model, "previous_model": previous, "resident_count": 1}
+        except Exception as exc:
+            if previous and previous != model and self.config.get("local_model_restore_previous_on_failure", True):
+                try:
+                    OllamaClient(self.ollama_url, timeout=60).load_model(
+                        previous, keep_alive=self.config.get("ollama_keep_alive", "5m")
+                    )
+                    with self._local_model_condition:
+                        self._local_resident_model = previous
+                except Exception:
+                    pass
+            elif not previous:
+                with self._local_model_condition:
+                    if self._local_resident_model == model:
+                        self._local_resident_model = None
+            return {"ok": False, "model": model, "previous_model": previous, "error": str(exc)}
+        finally:
+            if acquired:
+                self._release_exclusive_local_model()
+
+    def unload_local_model(self, model):
+        client = OllamaClient(self.ollama_url, timeout=10)
+        with self._local_model_condition:
+            if self._local_model_active:
+                return {"ok": False, "model": model, "error": "El modelo tiene una inferencia activa."}
+            success = client.unload_model(model)
+            if success and self._local_resident_model == model:
+                self._local_resident_model = None
+            self._local_model_condition.notify_all()
+            return {"ok": success, "model": model}
 
     def reap_idle_ollama_models(self):
         """Unload only models that have been idle beyond the configured budget."""
@@ -556,6 +667,23 @@ class ModelManager:
         with self._model_stats_lock:
             return {name: dict(values) for name, values in self._model_stats.items()}
 
+    def memory_estimate(self, model, num_ctx=None, max_tokens=0, batch=1):
+        """Estimate local model memory without loading it."""
+        if self.provider not in self.LOCAL_PROVIDERS:
+            return {"model": model, "status": "unknown", "warnings": ["El proveedor actual no es local."]}
+        client = OllamaClient(self.ollama_url, timeout=5)
+        metadata = next((item for item in client.list_models() if item.get("name") == model), {})
+        context = num_ctx or self.config.get("ollama_num_ctx", 4096)
+        return ModelMemoryEstimator(self.config).estimate(
+            model,
+            context,
+            max_tokens=max_tokens,
+            batch=batch,
+            metadata=metadata,
+            hardware=hardware_profile(),
+            running=client.running_models(),
+        )
+
     def _gpt4all_available(self):
         if GPT4All is None:
             return False
@@ -663,8 +791,11 @@ class ModelManager:
         if provider in self.LOCAL_PROVIDERS:
             OLLAMA_IN_FLIGHT.labels(model=str(model_tag)).inc()
         failed = False
+        exclusive_acquired = False
         try:
             if provider in self.LOCAL_PROVIDERS:
+                if provider == "ollama":
+                    exclusive_acquired = self._acquire_exclusive_local_model(model_tag)
                 return (
                     self._call_llama_cpp(prompt, **kwargs)
                     if provider == "llama_cpp"
@@ -693,6 +824,8 @@ class ModelManager:
             self.metrics.increment("provider.errors", tags=tags)
             raise
         finally:
+            if exclusive_acquired:
+                self._release_exclusive_local_model()
             duration = time.monotonic() - started
             self._record_model_stat(model_tag, duration, error=failed)
             self.metrics.observe("provider.duration", duration, tags)

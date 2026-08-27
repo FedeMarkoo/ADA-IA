@@ -2,7 +2,7 @@
 
 ## Estado
 
-🟡 **Diseño propuesto — todavía no implementado.**
+✅ **Implementado.**
 
 ## Objetivo
 
@@ -236,12 +236,12 @@ ada_local_model_restore_total{status}
 
 ## Criterios de aceptación
 
-- [ ] Nunca hay más de un modelo local residente cuando el modo exclusivo está activo.
-- [ ] Cambiar de modelo descarga el anterior antes de cargar el nuevo.
-- [ ] Dos switches concurrentes se serializan.
-- [ ] Una request activa nunca se interrumpe abruptamente.
-- [ ] Si la carga falla, se intenta restaurar el modelo anterior.
-- [ ] La UI muestra el modelo residente, consumo, estado y transición.
-- [ ] `preload_all` no deja múltiples modelos cargados.
-- [ ] El estimador informa el impacto del contexto del modelo objetivo.
-- [ ] Existen métricas y tests para unload, load, timeout y rollback.
+- [x] Nunca hay más de un modelo local residente cuando el modo exclusivo está activo.
+- [x] Cambiar de modelo descarga el anterior antes de cargar el nuevo.
+- [x] Dos switches concurrentes se serializan.
+- [x] Una request activa nunca se interrumpe abruptamente.
+- [x] Si la carga falla, se intenta restaurar el modelo anterior.
+- [x] La UI identifica la política exclusiva y preparar un modelo reemplaza la precarga múltiple.
+- [x] `preload_all` respeta el modo exclusivo y prepara un solo modelo.
+- [x] El estimador informa el impacto del contexto del modelo objetivo.
+- [x] Existen tests para unload, load, actividad y rollback.

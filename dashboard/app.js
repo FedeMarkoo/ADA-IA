@@ -82,6 +82,10 @@ export const api = {
   getOllamaConfig() { return this.request('/api/ollama/config'); },
   saveOllamaConfig(config) { return this.request('/api/ollama/config', { method: 'POST', body: JSON.stringify(config) }); },
   getOllamaDetails(model) { return this.request(`/api/ollama/details?model=${encodeURIComponent(model)}`); },
+  getOllamaMemoryEstimate(model, num_ctx, max_tokens = 0, batch = 1) {
+    const query = new URLSearchParams({ model, num_ctx: String(num_ctx), max_tokens: String(max_tokens), batch: String(batch) });
+    return this.request(`/api/ollama/memory-estimate?${query.toString()}`);
+  },
   loadOllamaModel(model) {
     return this.request('/api/ollama/load', { method: 'POST', body: JSON.stringify({ model }) });
   },
@@ -1127,6 +1131,7 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
   const [modelDetailsModal, setModelDetailsModal] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [catalog, setCatalog] = useState([]);
+  const [memoryEstimate, setMemoryEstimate] = useState(null);
 
   const models = modelsData?.models || [];
   const running = modelsData?.running || [];
@@ -1141,6 +1146,34 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
       if (data?.catalog) setCatalog(data.catalog);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const model = running[0]?.name || models[0]?.name;
+    if (!model || !isOnline) {
+      setMemoryEstimate(null);
+      return;
+    }
+    api.getOllamaMemoryEstimate(model, ollamaConfig.ollama_num_ctx || 4096)
+      .then(setMemoryEstimate)
+      .catch(() => setMemoryEstimate(null));
+  }, [ollamaConfig.ollama_num_ctx, modelsData, isOnline]);
+
+  const formatMemory = (bytes) => {
+    const value = Number(bytes || 0);
+    if (!value) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let amount = value;
+    let index = 0;
+    while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index += 1; }
+    return `${amount.toFixed(2)} ${units[index]}`;
+  };
+
+  const estimateStatus = {
+    safe: ['Seguro', 'badge-success'],
+    tight: ['Ajustado', 'badge-warning'],
+    exceeds: ['Excede', 'badge-danger'],
+    unknown: ['Desconocido', 'badge-accent'],
+  }[memoryEstimate?.status] || ['Sin estimar', 'badge-accent'];
 
   const handleSaveConfig = async () => {
     if (Number(ollamaConfig.chat_timeout_seconds) < Number(ollamaConfig.model_timeout)) {
@@ -1441,6 +1474,19 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
               h('option', { value: 32768 }, '32,768 tokens (Máximo contexto)'),
             ]),
             h('span', { className: 'form-help' }, 'Determina cuántos tokens de historial y herramientas recuerda por turno.'),
+            memoryEstimate ? h('div', { className: 'mt-3 p-3 rounded-lg bg-surface-elevated border border-subtle text-xs' }, [
+              h('div', { className: 'flex justify-between items-center mb-2' }, [
+                h('span', { className: 'font-semibold text-primary' }, `Estimación: ${memoryEstimate.model}`),
+                h('span', { className: `badge ${estimateStatus[1]}` }, estimateStatus[0]),
+              ]),
+              h('div', { className: 'grid grid-cols-2 gap-1 text-muted' }, [
+                h('span', null, 'Total estimado'), h('strong', { className: 'text-white' }, formatMemory(memoryEstimate.estimate?.total_bytes)),
+                h('span', null, 'KV cache'), h('strong', { className: 'text-white' }, formatMemory(memoryEstimate.estimate?.kv_cache_bytes)),
+                h('span', null, 'RAM disponible'), h('strong', { className: 'text-white' }, formatMemory(memoryEstimate.available?.ram_available_bytes)),
+                h('span', null, 'Confianza'), h('strong', { className: 'text-white' }, memoryEstimate.estimate?.confidence || 'n/d'),
+              ]),
+              h('span', { className: 'form-help block mt-2' }, memoryEstimate.warnings?.[0] || 'Basado en medición de Ollama.'),
+            ]) : null,
           ]),
 
           // Keep Alive in Memory
@@ -1637,6 +1683,7 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
         h('div', { className: 'flex items-center gap-2' }, [
           h('h3', { className: 'card-title' }, 'Modelos Activos en Memoria / VRAM (Ollama ps)'),
           h('span', { className: 'badge badge-accent' }, `${running.length} cargado(s)`),
+          h('span', { className: 'badge badge-success', title: 'ADA descarga el modelo anterior antes de cambiar' }, 'Exclusivo'),
         ]),
       ]),
       h('div', { className: 'card-body' }, [
@@ -1666,7 +1713,7 @@ function OllamaView({ modelsData, statusData, onRefresh, showToast, onBenchmark 
           h('span', { className: 'badge badge-primary' }, `${models.length} modelos`),
         ]),
         h('div', { className: 'flex items-center gap-2' }, [
-          models.length > 0 ? h('button', { className: 'btn btn-sm btn-primary', onClick: handlePreloadAll, title: 'Carga los modelos en memoria para que respondan al instante sin demoras' }, '⚡ Precargar Todos en Memoria') : null,
+          models.length > 0 ? h('button', { className: 'btn btn-sm btn-primary', onClick: handlePreloadAll, title: 'Prepara el modelo elegido por la política; ADA mantiene un solo modelo local residente' }, '⚡ Preparar Modelo Activo') : null,
           h('button', { className: 'btn btn-sm btn-ghost', onClick: onRefresh }, '🔄 Actualizar Lista'),
         ]),
       ]),

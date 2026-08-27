@@ -71,9 +71,8 @@ def ollama_unload():
     if not model_name:
         return jsonify({"error": "model_required"}), 400
     runtime = get_runtime()
-    client = runtime.get("ollama_client") or OllamaClient()
-    success = client.unload_model(model_name)
-    return jsonify({"ok": success, "model": model_name})
+    manager = runtime["agent"].model_manager
+    return jsonify(manager.unload_local_model(model_name))
 
 
 @models_bp.route("/api/ollama/load", methods=["POST"])
@@ -83,11 +82,8 @@ def ollama_load():
     if not model_name:
         return jsonify({"error": "model_required"}), 400
     runtime = get_runtime()
-    client = runtime.get("ollama_client") or OllamaClient()
-    cfg_data = runtime.get("cfg", {})
-    keep_alive = data.get("keep_alive") or cfg_data.get("ollama_keep_alive", "2m")
-    success = client.load_model(model_name, keep_alive=keep_alive)
-    return jsonify({"ok": success, "model": model_name})
+    manager = runtime["agent"].model_manager
+    return jsonify(manager.switch_local_model(model_name))
 
 
 @models_bp.route("/api/ollama/preload_all", methods=["POST"])
@@ -116,8 +112,12 @@ def ollama_preload_all():
                 models_to_load.add(m["name"])
 
     results = {}
-    for m_name in models_to_load:
-        results[m_name] = client.load_model(m_name, keep_alive=keep_alive)
+    if models_to_load and active_agent.model_manager.config.get("local_model_exclusive_mode", True):
+        selected = next(iter(models_to_load))
+        results[selected] = active_agent.model_manager.switch_local_model(selected).get("ok", False)
+    else:
+        for m_name in models_to_load:
+            results[m_name] = client.load_model(m_name, keep_alive=keep_alive)
 
     return jsonify(
         {
@@ -187,6 +187,15 @@ def ollama_config_api():
             candidate["ollama_idle_unload_seconds"] = max(30, int(data["ollama_idle_unload_seconds"]))
         if "ollama_temperature" in data:
             candidate["ollama_temperature"] = float(data["ollama_temperature"])
+        if "local_model_exclusive_mode" in data:
+            candidate["local_model_exclusive_mode"] = bool(data["local_model_exclusive_mode"])
+        if "local_model_switch_policy" in data:
+            policy = str(data["local_model_switch_policy"]).lower()
+            if policy not in {"wait", "reject", "queue"}:
+                return jsonify({"error": "invalid_local_model_switch_policy"}), 400
+            candidate["local_model_switch_policy"] = policy
+        if "local_model_switch_timeout_seconds" in data:
+            candidate["local_model_switch_timeout_seconds"] = max(1, int(data["local_model_switch_timeout_seconds"]))
 
         requested_profile = str(data.get("timeout_profile", candidate.get("timeout_profile", "patient"))).lower()
         if requested_profile in TIMEOUT_PRESETS:
@@ -228,6 +237,24 @@ def ollama_details():
     runtime = get_runtime()
     client = runtime.get("ollama_client") or OllamaClient()
     return jsonify(client.show_model(model_name))
+
+
+@models_bp.route("/api/ollama/memory-estimate")
+def ollama_memory_estimate():
+    model_name = request.args.get("model")
+    if not model_name:
+        return jsonify({"error": "model_required"}), 400
+    try:
+        num_ctx = int(request.args.get("num_ctx", 4096))
+        max_tokens = int(request.args.get("max_tokens", 0))
+        batch = int(request.args.get("batch", 1))
+        if not 512 <= num_ctx <= 131072 or not 0 <= max_tokens <= 32768 or not 1 <= batch <= 16:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid_memory_parameters"}), 400
+    runtime = get_runtime()
+    manager = runtime["agent"].model_manager
+    return jsonify(manager.memory_estimate(model_name, num_ctx=num_ctx, max_tokens=max_tokens, batch=batch))
 
 
 @models_bp.route("/api/models/catalog", methods=["GET", "POST", "DELETE"])

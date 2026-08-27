@@ -73,6 +73,11 @@ def load_config(path: Path | str | None = None, project_root: Path | str | None 
     config.setdefault("memory_compaction_threshold_messages", 100)
     config.setdefault("memory_compaction_keep_messages", 40)
     config.setdefault("memory_compaction_max_summary_chars", 6000)
+    config.setdefault("local_model_exclusive_mode", True)
+    config.setdefault("local_model_switch_policy", "wait")
+    config.setdefault("local_model_switch_timeout_seconds", 30)
+    config.setdefault("local_model_switch_queue_limit", 1)
+    config.setdefault("local_model_restore_previous_on_failure", True)
     config.setdefault("allowed_commands", [])
     # Agent work is allowed to take minutes. These limits are intentionally
     # independent from the selected model/performance mode.
@@ -109,7 +114,13 @@ def validate_config(config):
     ):
         if key in config and not isinstance(config[key], dict):
             raise ValueError(f"{key} debe ser un objeto.")
-    bool_keys = ("confirm_risky", "adaptive_models", "auto_pull_models")
+    bool_keys = (
+        "confirm_risky",
+        "adaptive_models",
+        "auto_pull_models",
+        "local_model_exclusive_mode",
+        "local_model_restore_previous_on_failure",
+    )
     for key in bool_keys:
         if key in config and not isinstance(config[key], bool):
             raise ValueError(f"{key} debe ser booleano.")
