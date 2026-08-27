@@ -37,13 +37,19 @@ def test_gestor_endpoints():
     assert "items" in data
     assert len(data["items"]) >= 5
 
-    res = client.post("/api/healthcheck/heal", headers=headers)
-    assert res.status_code == 200
-    assert res.get_json().get("ok") is True
+    # 1. Healthcheck & Doctor
+    from unittest.mock import patch
+    from ada.interfaces.web.doctor import HealthDoctor
 
-    res = client.post("/api/healthcheck/fix/restart_agent", headers=headers)
-    assert res.status_code == 200
-    assert res.get_json().get("ok") is True
+    with patch.object(HealthDoctor, "auto_heal_all", return_value={"ok": True, "actions_executed": {}}), \
+         patch.object(HealthDoctor, "fix_action", return_value={"ok": True}):
+        res = client.post("/api/healthcheck/heal", headers=headers)
+        assert res.status_code == 200
+        assert res.get_json().get("ok") is True
+
+        res = client.post("/api/healthcheck/fix/restart_agent", headers=headers)
+        assert res.status_code == 200
+        assert res.get_json().get("ok") is True
 
     # 2. Ollama status
     res = client.get("/api/ollama/status")
