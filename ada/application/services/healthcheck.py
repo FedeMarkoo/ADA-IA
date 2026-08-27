@@ -5,6 +5,7 @@ import re
 import sqlite3
 import threading
 import urllib.request
+from pathlib import Path
 
 FUNCTIONAL_CATEGORY_LABELS = {
     "commands": "Sistema",
@@ -252,6 +253,45 @@ HEALTHCHECK_PROMPTS = [
         [r"(permiso|acceso)", r"(leer|escribir|ejecutar)"],
     ),
 ]
+
+
+def _load_legacy_cases():
+    """Restore the original functional cases while keeping one unified catalog."""
+    catalog_path = Path(__file__).resolve().parents[3] / "ai_testing" / "prompts.json"
+    if not catalog_path.is_file():
+        return []
+    try:
+        source_cases = json.loads(catalog_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    existing = {item["id"] for item in HEALTHCHECK_PROMPTS}
+    imported = []
+    for item in source_cases:
+        if item.get("id") in existing or not item.get("prompt") or not item.get("category"):
+            continue
+        criteria = list(item.get("must_match") or [])
+        criteria.extend(re.escape(str(value)) for value in item.get("must_contain") or [])
+        imported.append(_case(
+            item["category"], item["id"], item["id"].replace("_", " ").title(), item["category"],
+            item["prompt"], criteria or [r".+"], [item["category"], "readonly", "restored"],
+        ))
+    return imported
+
+
+HEALTHCHECK_PROMPTS.extend(_load_legacy_cases())
+
+# Regression cases added after the original 52-case run.
+HEALTHCHECK_PROMPTS.extend([
+    _case("agent", "judge_ai_required", "Evaluación semántica con IA", "agent",
+          "Explicá cómo se determina si una prueba funcional de ADA cumplió realmente el pedido, sin aprobar solo por palabras coincidentes.",
+          [r"(IA|juez|sem[aá]ntic)", r"(criterio|cumpl|respuesta)"], tags=["agent", "readonly"], required_mcp="none"),
+    _case("agent", "judge_mcp_evidence", "Evaluación de evidencia MCP", "agent",
+          "Explicá cómo debería evaluarse una prueba que requiere un MCP y qué significa que la herramienta haya sido invocada con éxito.",
+          [r"(MCP|herramienta)", r"(evidencia|invoc|[eé]xit)"], tags=["agent", "readonly"], required_mcp="none"),
+    _case("diagnostics", "missing_required_mcp", "MCP requerido ausente", "diagnostics",
+          "Si una prueba requiere web_search.search pero ADA no invocó ese MCP, indicá si debe aprobarse y por qué.",
+          [r"(no|nunca|debe)" , r"(aprobar|fallar|rechazar)", r"MCP"], tags=["diagnostics", "readonly"], required_mcp="none"),
+])
 
 
 class HealthcheckStore:
