@@ -1,7 +1,6 @@
 """Functional ADA healthchecks, backed by the same SQLite memory database."""
 
 import json
-import re
 import sqlite3
 import threading
 import urllib.request
@@ -591,22 +590,15 @@ class HealthcheckStore:
 
 
 def evaluate(item, reply, elapsed, error=None):
+    """Record execution metadata; the IA judge is the only pass/fail authority."""
     reply = str(reply or "")
-    missing = [pattern for pattern in item.get("must_match", []) if not re.search(pattern, reply, re.I)]
-    passed = not error and bool(reply) and not missing
     return {
-        "passed": passed,
-        "missing": missing,
+        "passed": False,
+        "evaluation_source": "llm_required",
         "reply_chars": len(reply),
         "elapsed_seconds": round(elapsed, 3),
         "error": error,
     }
-
-
-FAILURE_MARKERS = re.compile(
-    r"\b(no pude|no puedo|no tengo acceso|sin acceso|no est[aá] conectado|no encontr[eé]|no fue posible|error de conexi[oó]n|permiso denegado)\b",
-    re.I,
-)
 
 
 def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b", mcp_evidence=None, execution_error=None):
@@ -636,7 +628,6 @@ def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b
         f"CASO: {item.get('name')}\nPEDIDO: {item.get('prompt')}\nRESPUESTA DE ADA: {reply or '(sin respuesta)'}"
         f"\nMCPS EJECUTADOS: {json.dumps(mcp_evidence or [], ensure_ascii=False)}"
         f"\nESPERADO: {item.get('expected') or _default_expected(category)}"
-        f"\nCRITERIOS AUXILIARES: {item.get('must_match', [])}"
         f"\nERROR DE EJECUCIÓN: {execution_error or 'ninguno'}"
     )
     payload = json.dumps(

@@ -42,13 +42,12 @@ def test_cases_can_be_added_to_an_existing_category():
     assert case["tags"] == ["web", "readonly"]
 
 
-def test_healthcheck_evaluation_requires_all_capability_signals():
+def test_healthcheck_evaluation_does_not_use_regex():
     item = {"must_match": [r"fuente", r"IA"]}
     result = evaluate(item, "Encontré una fuente sobre IA", 0.4)
-    assert result["passed"] is True
-    failed = evaluate(item, "No pude consultar internet", 0.4)
-    assert failed["passed"] is False
-    assert failed["missing"] == [r"fuente", r"IA"]
+    assert result["passed"] is False
+    assert result["evaluation_source"] == "llm_required"
+    assert "missing" not in result
 
 
 def test_external_healthchecks_require_mcp_grounding():
