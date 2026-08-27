@@ -325,11 +325,12 @@ Implementar primero retrieval + reranking en el router. Mantener `memory.search`
 - Incorporar perfil diario y perfil largo bajo demanda.
 - Verificar RAM en equipos con 16 GB.
 
-### Fase 5 — Evaluación de `memory-as-a-tool`
+### Fase 5 — `memory-as-a-tool` implementado
 
-- Medir uso real y latencia del tool-calling.
-- Limitar vueltas y resultados.
-- Adoptarlo solo si mejora calidad sin degradar la experiencia.
+- El modelo principal puede solicitar `memory.search` con un contrato JSON explícito.
+- ADA ejecuta como máximo una búsqueda por respuesta y limita sus resultados a tres.
+- El resultado se inyecta en una continuación que prohíbe otra búsqueda, evitando loops.
+- La función se puede desactivar con `memory_as_tool: false`.
 
 ## Criterios de aceptación
 

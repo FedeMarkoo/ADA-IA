@@ -55,6 +55,42 @@ class Agent:
         logger.exception("agent_operation_failed error_id=%s", error_id)
         return {"error": message, "error_id": error_id}
 
+    @staticmethod
+    def _memory_tool_request(result):
+        """Decode the single bounded memory-as-a-tool request, if present."""
+        try:
+            candidate = result if isinstance(result, dict) else json.loads(str(result).strip())
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+        call = candidate.get("tool_call") if isinstance(candidate, dict) else None
+        if not isinstance(call, dict) or call.get("name") != "memory.search":
+            return None
+        arguments = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
+        query = str(arguments.get("query") or "").strip()
+        if not query:
+            return None
+        try:
+            limit = int(arguments.get("limit", 3) or 3)
+        except (TypeError, ValueError):
+            limit = 3
+        return {"query": query, "limit": min(3, max(1, limit))}
+
+    def _complete_with_memory_tool(self, provider, prompt, result, call_options):
+        """Execute at most one explicit memory lookup, then resume generation."""
+        request = self._memory_tool_request(result)
+        if not request or not self.mcp_manager or not self.cfg.get("memory_as_tool", True):
+            return result
+        lookup = self.mcp_manager.execute_tool(
+            "memory.search", {**request, "_request": request["query"]}, self
+        )
+        continuation = (
+            str(prompt)
+            + "\n\nResultado de memory.search (usalo como fuente, no inventes otros recuerdos):\n"
+            + json.dumps(lookup, ensure_ascii=False)
+            + "\nRespondé ahora al usuario sin volver a pedir otra herramienta."
+        )
+        return self.model_manager.call(provider, continuation, **call_options)
+
     def plan_request(self, text):
         """Turn a routed request into a validated, non-executing plan."""
         parsed = self.parse_prompt(text)
@@ -195,6 +231,7 @@ class Agent:
                 token_usage=getattr(prompt, "token_usage", None),
                 **call_options,
             )
+            result = self._complete_with_memory_tool(provider, prompt, result, call_options)
             self.mem.record_task(task, result, provider=provider, success=True)
             self.mem.add_text(
                 f"Tarea: {task.get('prompt', task)}\nResultado: {result}",
