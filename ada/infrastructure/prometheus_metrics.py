@@ -280,8 +280,10 @@ def reset_llm_token_usage(max_context=None) -> None:
     LLM_TOKEN_USAGE.labels(component="libre").set(ctx_limit)
 
 
-# Initialize default gauges
+# Initialize default gauges and counters
 reset_llm_token_usage()
+for _c in ("memory", "tools", "tool_response", "system", "prompt", "response", "total"):
+    LLM_TOKENS_TOTAL.labels(component=_c).inc(0)
 
 
 @contextmanager

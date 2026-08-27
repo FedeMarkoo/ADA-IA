@@ -71,3 +71,23 @@ def test_ollama_resources_are_attributed_to_loaded_model(monkeypatch):
     assert metrics.OLLAMA_MODEL_CPU.labels(model=model)._value.get() == 0.25
     assert metrics.OLLAMA_MODEL_VRAM.labels(model=model)._value.get() == 256
     assert metrics.OLLAMA_MODEL_LOADED.labels(model=model)._value.get() == 1
+
+
+def test_model_manager_call_preserves_token_metrics(monkeypatch):
+    from ada.infrastructure.engines.model_manager import ModelManager
+    from ada.application.services.prompts import PromptWithUsage
+
+    manager = ModelManager({"engine_provider": "ollama"})
+    monkeypatch.setattr(manager, "_call_ollama", lambda prompt, **kw: "respuesta de prueba generada")
+
+    prompt = PromptWithUsage("Hola mundo", token_usage={"system": 50, "prompt": 12, "memory": 20, "tools": 5})
+    result = manager.call("ollama", prompt, ollama_model="test-model")
+
+    assert result == "respuesta de prueba generada"
+    assert metrics.LLM_TOKEN_USAGE.labels(component="system")._value.get() == 50
+    assert metrics.LLM_TOKEN_USAGE.labels(component="prompt")._value.get() == 12
+    assert metrics.LLM_TOKEN_USAGE.labels(component="memory")._value.get() == 20
+    assert metrics.LLM_TOKEN_USAGE.labels(component="tools")._value.get() == 5
+    assert metrics.LLM_TOKEN_USAGE.labels(component="response")._value.get() > 0
+    assert metrics.LLM_TOKEN_USAGE.labels(component="total")._value.get() > 80
+    assert metrics.LLM_TOKEN_USAGE.labels(component="libre")._value.get() > 0

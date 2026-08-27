@@ -25,7 +25,6 @@ from ada.infrastructure.prometheus_metrics import (
     OLLAMA_IN_FLIGHT,
     estimate_token_count,
     record_stage_duration,
-    reset_llm_token_usage,
     set_llm_token_usage,
 )
 from ada.ollama.client import OllamaClient
@@ -945,7 +944,6 @@ class ModelManager:
                 OLLAMA_EXECUTIONS.labels(model=str(model_tag), status=status).inc()
                 OLLAMA_DURATION.labels(model=str(model_tag), status=status).observe(duration)
                 OLLAMA_IN_FLIGHT.labels(model=str(model_tag)).dec()
-            reset_llm_token_usage(max_context=ctx_limit)
 
     def call_vision(self, provider, prompt, image_base64, **kwargs):
         if provider == "gemini":
