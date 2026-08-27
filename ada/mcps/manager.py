@@ -21,6 +21,7 @@ from ada.infrastructure.prometheus_metrics import (
     MCP_RUNNING,
     MCP_SERVER_IN_FLIGHT,
     MCP_TOOL_ENABLED,
+    record_stage_duration,
 )
 import psutil
 
@@ -631,6 +632,7 @@ class MCPManager:
             raise
         finally:
             duration = time.monotonic() - started
+            record_stage_duration("mcp_tool_call", duration, status=status)
             MCP_EXECUTIONS.labels(mcp=mcp, tool=name, status=status).inc()
             MCP_DURATION.labels(mcp=mcp, tool=name, status=status).observe(duration)
             MCP_IN_FLIGHT.labels(mcp=mcp, tool=name).dec()

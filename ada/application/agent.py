@@ -21,7 +21,7 @@ from ada.infrastructure.observability import Metrics
 from ada.application.services.complexity import ComplexityEstimator
 from ada.application.services.knowledge import KnowledgeLoader
 from ada.application.services.prompts import PromptBuilder, PromptWithUsage
-from ada.infrastructure.prometheus_metrics import estimate_token_count
+from ada.infrastructure.prometheus_metrics import estimate_token_count, measure_stage
 
 logger = logging.getLogger("ada.agent")
 
@@ -94,17 +94,18 @@ class Agent:
         request = self._memory_tool_request(result)
         if not request or not self.mcp_manager or not self.cfg.get("memory_as_tool", True):
             return result
-        lookup = self.mcp_manager.execute_tool("memory.search", {**request, "_request": request["query"]}, self)
-        lookup_str = (
-            "\n\nResultado de memory.search (usalo como fuente, no inventes otros recuerdos):\n"
-            + json.dumps(lookup, ensure_ascii=False)
-            + "\nRespondé ahora al usuario sin volver a pedir otra herramienta."
-        )
-        continuation_text = str(prompt) + lookup_str
-        usage = dict(getattr(prompt, "token_usage", {}))
-        usage["tool_response"] = usage.get("tool_response", 0) + estimate_token_count(lookup_str)
-        continuation = PromptWithUsage(continuation_text, usage)
-        return self.model_manager.call(provider, continuation, token_usage=usage, **call_options)
+        with measure_stage("memory_tool_lookup"):
+            lookup = self.mcp_manager.execute_tool("memory.search", {**request, "_request": request["query"]}, self)
+            lookup_str = (
+                "\n\nResultado de memory.search (usalo como fuente, no inventes otros recuerdos):\n"
+                + json.dumps(lookup, ensure_ascii=False)
+                + "\nRespondé ahora al usuario sin volver a pedir otra herramienta."
+            )
+            continuation_text = str(prompt) + lookup_str
+            usage = dict(getattr(prompt, "token_usage", {}))
+            usage["tool_response"] = usage.get("tool_response", 0) + estimate_token_count(lookup_str)
+            continuation = PromptWithUsage(continuation_text, usage)
+            return self.model_manager.call(provider, continuation, token_usage=usage, **call_options)
 
     def plan_request(self, text):
         """Turn a routed request into a validated, non-executing plan."""

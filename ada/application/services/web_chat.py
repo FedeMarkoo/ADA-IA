@@ -19,6 +19,7 @@ from ada.application.services.folder_resolver import FolderResolver
 from ada.application.context_manager import ContextManager
 from ada.application.commands import Command, CommandDispatcher
 from ada.application.router import is_capability_discussion
+from ada.infrastructure.prometheus_metrics import measure_stage
 
 logger = logging.getLogger("ada.web_chat")
 
@@ -371,6 +372,10 @@ class WebChatService:
         return action, payload
 
     def handle(self, text, state, lang=None, progress=None):
+        with measure_stage("chat_turn_total"):
+            return self._handle_internal(text, state, lang=lang, progress=progress)
+
+    def _handle_internal(self, text, state, lang=None, progress=None):
         text = str(text or "").strip()
         if not text:
             return {"error": "empty_message", "message": tr("empty_message", lang)}, 400

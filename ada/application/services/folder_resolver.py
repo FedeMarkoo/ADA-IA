@@ -10,6 +10,8 @@ import time
 import unicodedata
 from pathlib import Path
 
+from ada.infrastructure.prometheus_metrics import measure_stage
+
 
 class FolderResolver:
     """Resolve human folder references without blocking a web worker on GVFS."""
@@ -245,6 +247,10 @@ class FolderResolver:
         }
 
     def resolve(self, text, context_path=None):
+        with measure_stage("folder_resolver"):
+            return self._resolve_internal(text, context_path=context_path)
+
+    def _resolve_internal(self, text, context_path=None):
         started = time.monotonic()
         key = self._key(text)
         terms = self._terms(text)

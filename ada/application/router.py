@@ -220,65 +220,65 @@ class IntentRouter:
                 if external_hint and normalized.get("action") != "mcp_call":
                     return {
                         "action": "ask",
-                    "routing_error": "external_request_not_grounded",
-                    "complexity": 4,
-                    "confidence": 0.0,
-                }
-            if normalized.get("action") == "food" and normalized.get("food_action") in FOOD_MUTATIONS:
-                verified = self._verify_food_mutation(provider, text, normalized)
-                if not verified:
-                    normalized = {
-                        "action": "food",
-                        "domain": "recipes",
-                        "food_action": "advise",
-                        "advisor": True,
+                        "routing_error": "external_request_not_grounded",
                         "complexity": 4,
-                        "confidence": normalized.get("confidence", 0.0),
+                        "confidence": 0.0,
                     }
-            if normalized.get("action") in {"ask", "suggest"}:
-                food_clues = (
-                    "comida",
-                    "comidas",
-                    "receta",
-                    "recetas",
-                    "cocinar",
-                    "cocina",
-                    "compras",
-                    "supermercado",
-                    "ingredientes",
-                    "comer",
-                    "cena",
-                    "almuerzo",
-                    "desayuno",
-                    "heladera",
-                    "alacena",
-                    "despensa",
-                    "plato",
-                    "menú",
-                    "menu",
-                    "vianda",
+                if normalized.get("action") == "food" and normalized.get("food_action") in FOOD_MUTATIONS:
+                    verified = self._verify_food_mutation(provider, text, normalized)
+                    if not verified:
+                        normalized = {
+                            "action": "food",
+                            "domain": "recipes",
+                            "food_action": "advise",
+                            "advisor": True,
+                            "complexity": 4,
+                            "confidence": normalized.get("confidence", 0.0),
+                        }
+                if normalized.get("action") in {"ask", "suggest"}:
+                    food_clues = (
+                        "comida",
+                        "comidas",
+                        "receta",
+                        "recetas",
+                        "cocinar",
+                        "cocina",
+                        "compras",
+                        "supermercado",
+                        "ingredientes",
+                        "comer",
+                        "cena",
+                        "almuerzo",
+                        "desayuno",
+                        "heladera",
+                        "alacena",
+                        "despensa",
+                        "plato",
+                        "menú",
+                        "menu",
+                        "vianda",
+                    )
+                    if any(clue in text.lower() for clue in food_clues):
+                        food = self._route_food(provider, text, router_history)
+                        if food:
+                            return food
+                logger.info(
+                    "router normalized action=%s food_action=%s confidence=%s",
+                    normalized.get("action"),
+                    normalized.get("food_action"),
+                    normalized.get("confidence"),
                 )
-                if any(clue in text.lower() for clue in food_clues):
-                    food = self._route_food(provider, text, router_history)
-                    if food:
-                        return food
-            logger.info(
-                "router normalized action=%s food_action=%s confidence=%s",
-                normalized.get("action"),
-                normalized.get("food_action"),
-                normalized.get("confidence"),
-            )
-            return normalized
-        except Exception as exc:
-            logger.warning("router failed: %s", exc)
-            if external_hint and self.mcp_manager:
-                return {
-                    "action": "ask",
-                    "routing_error": "mcp_router_failed",
-                    "complexity": 4,
-                    "confidence": 0.0,
-                }
-            return fallback
+                return normalized
+            except Exception as exc:
+                logger.warning("router failed: %s", exc)
+                if external_hint and self.mcp_manager:
+                    return {
+                        "action": "ask",
+                        "routing_error": "mcp_router_failed",
+                        "complexity": 4,
+                        "confidence": 0.0,
+                    }
+                return fallback
 
     def _verify_food_mutation(self, provider, text, intent):
         template = self._template(
