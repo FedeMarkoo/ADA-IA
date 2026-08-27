@@ -486,11 +486,22 @@ class TelegramListener:
             headers={"Content-Type": "application/json", "X-ADA-Source": "telegram"},
             method="POST",
         )
-        # Allow the local agent budget to finish before the Telegram adapter
-        # gives up and reports a misleading connection failure.
-        with urllib.request.urlopen(request, timeout=max(60, self.request_timeout + 60)) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
+        try:
+            with urllib.request.urlopen(request, timeout=max(60, self.request_timeout + 60)) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            return result.get("reply") or result.get("error") or "ADA no devolvió una respuesta."
+        except urllib.error.HTTPError as exc:
+            try:
+                err_data = json.loads(exc.read().decode("utf-8", "replace"))
+                return err_data.get("reply") or err_data.get("message") or err_data.get("error") or f"⚠️ Error del servidor ADA ({exc.code}): {exc.reason}"
+            except Exception:
+                return f"⚠️ Error del servidor ADA ({exc.code}): {exc.reason}"
+        except urllib.error.URLError as exc:
+            logger.warning("telegram_internal_chat_url_error error=%s", exc)
+            return "⚠️ No se pudo comunicar con el núcleo de ADA (conexión rechazada o tiempo agotado)."
+        except Exception as exc:
+            logger.warning("telegram_internal_chat_failed error=%s", exc)
+            return f"⚠️ Error al procesar la solicitud: {exc}"
 
     def send_message(self, chat_id: str, text: str) -> Optional[int]:
         # Web chat replies may contain Markdown, while Telegram is sent as
