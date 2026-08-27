@@ -14,7 +14,7 @@ class SearchBudget:
     """Reserve provider requests without ever exceeding the local monthly cap."""
 
     def __init__(self, path: Optional[Union[str, Path]] = None, monthly_limit: Optional[int] = None):
-        default_path = Path.home() / "Desktop" / "ADA_Data" / "web-search-usage.db"
+        default_path = Path.home() / "Desktop" / "ADA_Data" / "mcp_data" / "web_search" / "web_search.db"
         self.path = Path(path or os.environ.get("ADA_WEB_SEARCH_USAGE_PATH", default_path)).expanduser()
         self.monthly_limit = int(
             monthly_limit if monthly_limit is not None else os.environ.get("ADA_WEB_SEARCH_MONTHLY_LIMIT", "900")

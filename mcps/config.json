@@ -74,7 +74,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-sqlite",
-        "~/Desktop/ADA_Data/memory.db"
+        "~/Desktop/ADA_Data/mcp_data/sqlite/sqlite.db"
       ],
       "description": "Servidor MCP de base de datos SQLite estándar",
       "status": "active"
@@ -85,6 +85,15 @@
         "mcps/git/server.py"
       ],
       "description": "Servidor MCP modular de control de versiones Git para ADA",
+      "status": "active"
+    },
+    "memory": {
+      "command": "python",
+      "args": [
+        "-m",
+        "mcps.memory.server"
+      ],
+      "description": "Gestión de la memoria persistente de ADA",
       "status": "active"
     }
   }

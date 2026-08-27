@@ -17,12 +17,13 @@ from mcps.food.inventory import InventoryManager
 
 
 def _resolve_default_db() -> str:
+    from ada.infrastructure.persistence.paths import DatabasePaths
     from ada.config import load_config
 
     try:
-        return load_config().get("db_path", str(Path.home() / "Desktop" / "ADA_Data" / "memory.db"))
+        return str(DatabasePaths.from_config(load_config()).mcp_database("food"))
     except Exception:
-        return str(Path.home() / "Desktop" / "ADA_Data" / "memory.db")
+        return str(Path.home() / "Desktop" / "ADA_Data" / "mcp_data" / "food" / "food.db")
 
 
 def get_db(db_path: Optional[str] = None) -> sqlite3.Connection:

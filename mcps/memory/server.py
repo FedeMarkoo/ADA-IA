@@ -29,9 +29,16 @@ def create_memory_server(memory=None) -> StdioMCPServer:
         if error := _memory_or_error(memory, "agregar"):
             return error
         content = str(args.get("content", "")).strip()
+        if not content and args.get("detail"):
+            content = str(args["detail"]).strip()
         if not content:
             return {"ok": False, "error": "content no puede estar vacío."}
-        memory_id = memory.add_memory_record(content, kind=args.get("kind", "note"), meta=args.get("meta"))
+        memory_id = memory.add_memory_record(
+            content,
+            summary=args.get("summary", args.get("short")),
+            kind=args.get("kind", "note"),
+            meta=args.get("meta"),
+        )
         return {"ok": True, "id": memory_id}
 
     def update(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -40,7 +47,11 @@ def create_memory_server(memory=None) -> StdioMCPServer:
         if not args.get("id"):
             return {"ok": False, "error": "id es obligatorio."}
         changed = memory.update_memory_record(
-            int(args["id"]), content=args.get("content"), kind=args.get("kind"), meta=args.get("meta")
+            int(args["id"]),
+            content=args.get("content", args.get("detail")),
+            summary=args.get("summary", args.get("short")),
+            kind=args.get("kind"),
+            meta=args.get("meta"),
         )
         return {"ok": changed, "id": int(args["id"]), "error": None if changed else "Memoria no encontrada."}
 
@@ -72,7 +83,12 @@ def create_memory_server(memory=None) -> StdioMCPServer:
         "Agrega un recuerdo explícito a la memoria persistente de ADA.",
         {
             "type": "object",
-            "properties": {"content": {"type": "string"}, "kind": common_kind, "meta": {"type": "object"}},
+            "properties": {
+                "summary": {"type": "string", "description": "Texto corto usado para seleccionar la memoria."},
+                "content": {"type": "string", "description": "Detalle completo de la memoria."},
+                "kind": common_kind,
+                "meta": {"type": "object"},
+            },
             "required": ["content"],
         },
         add,
@@ -86,6 +102,7 @@ def create_memory_server(memory=None) -> StdioMCPServer:
             "type": "object",
             "properties": {
                 "id": {"type": "integer"},
+                "summary": {"type": "string", "description": "Texto corto usado para seleccionar la memoria."},
                 "content": {"type": "string"},
                 "kind": common_kind,
                 "meta": {"type": "object"},

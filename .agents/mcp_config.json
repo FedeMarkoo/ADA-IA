@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "grafana": {
+      "command": "/home/fedemarkoo/.gemini/antigravity-ide/scratch/ADA-IA/.venv/bin/python",
+      "args": [
+        "/home/fedemarkoo/.gemini/antigravity-ide/scratch/ADA-IA/tools/grafana_mcp_server.py"
+      ],
+      "env": {
+        "GRAFANA_URL": "http://127.0.0.1:3000",
+        "GRAFANA_USER": "admin",
+        "GRAFANA_PASSWORD": "admin"
+      }
+    },
+    "sqlite": {
+      "command": "/home/fedemarkoo/.gemini/antigravity-ide/scratch/ADA-IA/.venv/bin/python",
+      "args": [
+        "/home/fedemarkoo/.gemini/antigravity-ide/scratch/ADA-IA/tools/sqlite_mcp_server.py"
+      ],
+      "env": {
+        "SQLITE_DEFAULT_DB": "/home/fedemarkoo/.gemini/antigravity-ide/scratch/ADA-IA/models.db"
+      }
+    },
+    "ada": {
+      "command": "/home/fedemarkoo/.gemini/antigravity-ide/scratch/ADA-IA/.venv/bin/python",
+      "args": [
+        "/home/fedemarkoo/.gemini/antigravity-ide/scratch/ADA-IA/tools/ada_mcp_server.py"
+      ],
+      "env": {
+        "ADA_API_URL": "http://127.0.0.1:5005"
+      }
+    }
+  }
+}
