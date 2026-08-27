@@ -19,6 +19,27 @@
   "links": [],
   "panels": [
     {
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 4096 }, { "color": "red", "value": 8192 }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 79 },
+      "id": 28,
+      "options": { "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
+      "targets": [{ "editorMode": "code", "expr": "ada_llm_tokens{component!=\"total\"}", "legendFormat": "{{component}}", "range": true, "refId": "A" }],
+      "title": "Tokens por componente (última llamada)",
+      "type": "gauge"
+    },
+    {
       "collapsed": false,
       "datasource": null,
       "gridPos": {

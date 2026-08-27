@@ -26,6 +26,7 @@ from ada.interfaces.web.routes import register_blueprints
 from ada.interfaces.web.state import (
     ADA_VERSION,
     DASHBOARD_DIR,
+    DEPLOYED_COMMIT,
     PROJECT_ROOT,
     PROCESS_STARTED_AT,
     WebSessionState,
@@ -108,6 +109,7 @@ def create_app(
         "memory_refiner": mem_refiner,
         "identity": {
             "version": ADA_VERSION,
+            "deployed_commit": DEPLOYED_COMMIT,
             "started_at": PROCESS_STARTED_AT,
             "reloaded_at": None,
             "hot_reload": False,

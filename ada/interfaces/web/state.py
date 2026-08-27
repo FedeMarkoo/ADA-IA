@@ -41,6 +41,42 @@ PROJECT_ROOT = find_project_root()
 DASHBOARD_DIR = PROJECT_ROOT / "dashboard" if (PROJECT_ROOT / "dashboard").is_dir() else PROJECT_ROOT / "ui"
 
 
+def _deployed_commit() -> Dict[str, Any]:
+    """Resolve the commit that started this process, with container support."""
+    configured = os.environ.get("ADA_DEPLOYED_COMMIT") or os.environ.get("GIT_COMMIT")
+    source = "environment" if configured else "git"
+    sha = str(configured or "").strip()
+    message = os.environ.get("ADA_DEPLOYED_COMMIT_MESSAGE", "").strip()
+    if not sha:
+        try:
+            sha = subprocess.run(
+                ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=1,
+                check=True,
+            ).stdout.strip()
+            if not message:
+                message = subprocess.run(
+                    ["git", "-C", str(PROJECT_ROOT), "log", "-1", "--format=%s"],
+                    capture_output=True,
+                    text=True,
+                    timeout=1,
+                    check=True,
+                ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            source = "unavailable"
+    return {
+        "sha": sha[:12] if sha else "unknown",
+        "full_sha": sha or "unknown",
+        "message": message or "Commit no disponible",
+        "source": source if sha else "unavailable",
+    }
+
+
+DEPLOYED_COMMIT = _deployed_commit()
+
+
 def ollama_config_payload(config: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "cpu_limit_percent": config.get("cpu_limit_percent", 50),

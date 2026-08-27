@@ -360,6 +360,7 @@ function Header({ title, subtitle, onWarmup, onRefresh, onRestartAll, isRefreshi
           h('div', { className: 'action-menu-meta' }, [
             h('strong', null, `ADA ${identity?.version ? `v${identity.version}` : ''}`),
             h('span', null, identity?.started_at ? `Activa desde ${new Date(identity.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Instancia local'),
+            h('span', { className: 'commit-identity' }, identity?.deployed_commit?.sha ? `Deploy: ${identity.deployed_commit.sha}` : 'Deploy: desconocido'),
           ]),
           h('button', { onClick: () => { setMenuOpen(false); onWarmup(); } }, [h(Icon, { name: 'bolt' }), h('span', null, 'Preparar motor')]),
           h('button', { onClick: () => { setMenuOpen(false); onToggleDebug(); } }, [h(Icon, { name: 'bug' }), h('span', null, debugEnabled ? 'Desactivar diagnóstico' : 'Activar diagnóstico')]),

@@ -12,6 +12,7 @@ from ada.infrastructure.runtime.resources import hardware_profile
 from ada.interfaces.web.state import (
     ADA_VERSION,
     DASHBOARD_DIR,
+    DEPLOYED_COMMIT,
     PROCESS_STARTED_AT,
     activity_snapshot,
     get_runtime,
@@ -40,7 +41,7 @@ def favicon():
 
 @core_bp.route("/api/health")
 def health():
-    return jsonify({"status": "healthy", "version": ADA_VERSION, "timestamp": time.time()})
+    return jsonify({"status": "healthy", "version": ADA_VERSION, "deployed_commit": DEPLOYED_COMMIT, "timestamp": time.time()})
 
 
 @core_bp.route("/api/status")
@@ -80,6 +81,7 @@ def status():
                 "identity",
                 {
                     "version": ADA_VERSION,
+                    "deployed_commit": DEPLOYED_COMMIT,
                     "started_at": PROCESS_STARTED_AT,
                     "reloaded_at": None,
                     "hot_reload": False,
@@ -112,6 +114,7 @@ def core_state_api():
     summary = runtime["agent"].model_manager.selection_summary()
     return jsonify(
         {
+            "identity": runtime.get("identity", {"version": ADA_VERSION, "deployed_commit": DEPLOYED_COMMIT}),
             "activity": activity_snapshot(runtime),
             "models": {"mode": summary.get("mode", "manual"), "active": summary.get("active", {})},
             "connectors": {

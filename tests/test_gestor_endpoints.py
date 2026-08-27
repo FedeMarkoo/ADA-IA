@@ -56,6 +56,8 @@ def test_gestor_endpoints():
     res = client.get("/api/core/state")
     assert res.status_code == 200
     core = res.get_json()
+    assert core["identity"]["deployed_commit"]["sha"]
+    assert core["identity"]["deployed_commit"]["message"]
     assert "activity" in core
     assert "active" in core["models"]
     assert "telegram" in core["connectors"]
