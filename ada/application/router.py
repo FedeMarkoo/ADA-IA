@@ -383,10 +383,13 @@ class IntentRouter:
             "router",
             "Clasificá la solicitud y devolvé SOLO JSON. Acciones: {actions}. Historial: {history}\nPedido: {text}",
         )
-        candidates_text = "\n".join(
-            f"- id={item['id']} kind={item['kind']} score={item['score']}: {item['content']}"
-            for item in (memory_candidates or [])
-        ) or "(sin candidatos relevantes)"
+        candidates_text = (
+            "\n".join(
+                f"- id={item['id']} kind={item['kind']} score={item['score']}: {item['content']}"
+                for item in (memory_candidates or [])
+            )
+            or "(sin candidatos relevantes)"
+        )
         return (
             template.replace("{actions}", self._actions_text())
             .replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))
@@ -451,8 +454,7 @@ class IntentRouter:
         allowed_memory_ids = {item["id"] for item in (memory_candidates or [])}
         raw_memory_ids = candidate.get("memory_ids") if isinstance(candidate.get("memory_ids"), list) else []
         candidate["memory_ids"] = [
-            int(value) for value in raw_memory_ids
-            if str(value).isdigit() and int(value) in allowed_memory_ids
+            int(value) for value in raw_memory_ids if str(value).isdigit() and int(value) in allowed_memory_ids
         ][:3]
         candidate["memory_confidence"] = self._confidence(candidate.get("memory_confidence"))
         action = str(candidate.get("action") or "").lower()

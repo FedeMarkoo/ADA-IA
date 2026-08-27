@@ -80,9 +80,7 @@ class Agent:
         request = self._memory_tool_request(result)
         if not request or not self.mcp_manager or not self.cfg.get("memory_as_tool", True):
             return result
-        lookup = self.mcp_manager.execute_tool(
-            "memory.search", {**request, "_request": request["query"]}, self
-        )
+        lookup = self.mcp_manager.execute_tool("memory.search", {**request, "_request": request["query"]}, self)
         continuation = (
             str(prompt)
             + "\n\nResultado de memory.search (usalo como fuente, no inventes otros recuerdos):\n"

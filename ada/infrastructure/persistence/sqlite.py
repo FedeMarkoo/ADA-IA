@@ -525,7 +525,12 @@ class Memory:
         """Return compact memory counters for the manager and diagnostics."""
         with self._lock:
             counts = {}
-            for table, key in (("memories", "memory_count"), ("conversation_messages", "conversation_count"), ("tasks", "task_count"), ("audit_log", "audit_count")):
+            for table, key in (
+                ("memories", "memory_count"),
+                ("conversation_messages", "conversation_count"),
+                ("tasks", "task_count"),
+                ("audit_log", "audit_count"),
+            ):
                 counts[key] = int(self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
         counts["db_path"] = self.db_path
         return counts
@@ -593,10 +598,16 @@ class Memory:
                 continue
             layer_boost = {"knowledge": 0.25, "profile": 0.2, "semantic": 0.1}.get(row["kind"], 0.0)
             score = min(1.0, overlap / max(1, len(terms)) * 0.7 + layer_boost)
-            candidates.append({
-                "id": row["id"], "kind": row["kind"], "content": content[:600],
-                "score": round(score, 4), "source": "memory", "created_at": row["created_at"],
-            })
+            candidates.append(
+                {
+                    "id": row["id"],
+                    "kind": row["kind"],
+                    "content": content[:600],
+                    "score": round(score, 4),
+                    "source": "memory",
+                    "created_at": row["created_at"],
+                }
+            )
         candidates.sort(key=lambda item: (item["score"], item["id"]), reverse=True)
         return candidates[:limit]
 
@@ -621,7 +632,8 @@ class Memory:
         by_id = {row["id"]: row for row in rows}
         return [
             {"id": memory_id, "content": self._open(by_id[memory_id]["content"]), "kind": by_id[memory_id]["kind"]}
-            for memory_id in ids if memory_id in by_id
+            for memory_id in ids
+            if memory_id in by_id
         ]
 
     def update_memory_record(self, memory_id, content=None, kind=None, meta=None):

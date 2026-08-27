@@ -25,7 +25,9 @@ class ModelMemoryEstimator:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
-        configured_path = self.config.get("model_memory_calibration_path") or os.environ.get("ADA_MODEL_MEMORY_CALIBRATION")
+        configured_path = self.config.get("model_memory_calibration_path") or os.environ.get(
+            "ADA_MODEL_MEMORY_CALIBRATION"
+        )
         if not configured_path:
             configured_path = str(Path.home() / "Desktop" / "ADA_Data" / "model_memory_calibration.json")
         self.calibration_path = Path(configured_path).expanduser() if configured_path else None

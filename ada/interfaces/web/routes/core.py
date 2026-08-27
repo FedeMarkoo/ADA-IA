@@ -41,7 +41,9 @@ def favicon():
 
 @core_bp.route("/api/health")
 def health():
-    return jsonify({"status": "healthy", "version": ADA_VERSION, "deployed_commit": DEPLOYED_COMMIT, "timestamp": time.time()})
+    return jsonify(
+        {"status": "healthy", "version": ADA_VERSION, "deployed_commit": DEPLOYED_COMMIT, "timestamp": time.time()}
+    )
 
 
 @core_bp.route("/api/status")

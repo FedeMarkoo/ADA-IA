@@ -39,7 +39,9 @@ class ModelMemoryEstimatorTests(unittest.TestCase):
             config = {"model_memory_calibration_path": path}
             estimator = ModelMemoryEstimator(config)
             baseline = estimator.estimate("demo:3b", 4096, metadata={})
-            calibration = estimator.calibrate("demo:3b", baseline["estimate"]["total_bytes"], baseline["estimate"]["total_bytes"] * 2)
+            calibration = estimator.calibrate(
+                "demo:3b", baseline["estimate"]["total_bytes"], baseline["estimate"]["total_bytes"] * 2
+            )
             self.assertEqual(calibration["samples"], 1)
             restored = ModelMemoryEstimator(config).estimate("demo:3b", 4096, metadata={})
             self.assertEqual(restored["estimate"]["calibration_samples"], 1)

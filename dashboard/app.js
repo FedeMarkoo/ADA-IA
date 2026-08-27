@@ -666,7 +666,57 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   ]);
 }
 
+function DesktopMetricsFallback() {
+  const [metrics, setMetrics] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const response = await fetch('/metrics', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        const values = {};
+        text.split('\n').forEach((line) => {
+          if (!line || line.startsWith('#')) return;
+          const match = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{[^}]*\})?\s+([-+0-9.eE]+)$/);
+          if (match && values[match[1]] == null) values[match[1]] = Number(match[2]);
+        });
+        if (mounted) { setMetrics(values); setError(''); }
+      } catch (loadError) {
+        if (mounted) setError(loadError.message || 'No se pudieron leer las métricas');
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
+
+  const value = (name, format = (item) => item.toLocaleString('es-AR', { maximumFractionDigits: 1 })) => {
+    const item = metrics?.[name];
+    return item == null || Number.isNaN(item) ? '—' : format(item);
+  };
+  const cards = [
+    ['ada_up', 'ADA', (item) => item === 1 ? 'Operativo' : 'Sin datos'],
+    ['process_resident_memory_bytes', 'Memoria ADA', (item) => `${(item / 1024 / 1024).toFixed(0)} MB`],
+    ['process_cpu_seconds_total', 'CPU acumulada', (item) => `${item.toFixed(1)} s`],
+    ['ada_http_requests_total', 'Requests totales'],
+  ];
+  return h('section', { className: 'tab-view active metrics-view metrics-dashboard' }, [
+    h('div', { className: 'metrics-hero' }, [
+      h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Métricas'), h('p', null, 'Vista local compatible con la aplicación de escritorio.')]),
+      h('div', { className: 'metrics-freshness' }, [h('span', { className: 'status-dot online' }), h('span', null, error ? `Error: ${error}` : 'Lectura activa · cada 5 segundos')]),
+    ]),
+    h('div', { className: 'metrics-kpis metrics-kpis-wide' }, cards.map(([name, label, formatter]) => h('article', { className: 'metric-kpi', key: name }, [h('span', null, label), h('strong', null, value(name, formatter)), h('small', null, name)]))),
+    h('div', { className: 'metrics-empty-panel' }, [h('strong', null, 'Grafana no es compatible con el motor WebKit de esta ventana'), h('span', null, 'Se muestran las métricas reales de ADA directamente desde su endpoint Prometheus.')]),
+  ]);
+}
+
 function MetricsView() {
+  // The native desktop shell uses WebKitGTK. Grafana's SPA is not reliable
+  // there, while Chromium can keep the full interactive dashboard.
+  if (/ADA\/1\.0/.test(navigator.userAgent)) return h(DesktopMetricsFallback);
   const grafanaBaseUrl = (window.__ADA_GRAFANA_URL__ || `${window.location.protocol}//${window.location.hostname}:3000`).replace(/\/$/, '');
   const grafanaDashboardUrl = `${grafanaBaseUrl}/d/ada-overview/ada-operaciones?orgId=1&kiosk=tv&refresh=10s`;
   return h('section', { className: 'tab-view active metrics-view' }, [

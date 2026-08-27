@@ -8,6 +8,7 @@ SQLite time-series database is needed.
 
 import json
 import os
+import subprocess
 import time
 import urllib.request
 from pathlib import Path
@@ -205,12 +206,40 @@ COMPONENT_RUNNING = Gauge(
     ("component",),
     registry=REGISTRY,
 )
+LLM_TOKEN_USAGE = Gauge(
+    "ada_llm_tokens",
+    "Latest LLM token usage split by context component.",
+    ("component",),
+    registry=REGISTRY,
+)
 UP = Gauge("ada_up", "Whether the ADA web process is alive.", registry=REGISTRY)
 UP.set(1)
 
 _process = psutil.Process(os.getpid())
 _process_started = time.time()
 _observed_ollama_models = set()
+TOKEN_COMPONENTS = ("memory", "tools", "system", "prompt", "response", "total")
+
+
+def estimate_token_count(value) -> int:
+    """Estimate tokens without requiring a provider-specific tokenizer."""
+    return max(0, (len(str(value or "")) + 3) // 4)
+
+
+def set_llm_token_usage(usage=None, response=None) -> dict:
+    """Publish the latest request breakdown and return normalized values."""
+    values = {component: 0 for component in TOKEN_COMPONENTS}
+    for component in ("memory", "tools", "system", "prompt"):
+        if usage and component in usage:
+            values[component] = max(0, int(usage[component] or 0))
+    if usage and usage.get("response"):
+        values["response"] = max(0, int(usage["response"]))
+    if response is not None:
+        values["response"] = estimate_token_count(response)
+    values["total"] = sum(values[component] for component in TOKEN_COMPONENTS[:-1])
+    for component, value in values.items():
+        LLM_TOKEN_USAGE.labels(component=component).set(value)
+    return values
 
 
 def _ollama_manifest_path(model: str, models_root: str = "") -> Path:
@@ -257,6 +286,70 @@ def _running_ollama_models():
         return []
 
 
+def _gpu_stats():
+    """Read GPU utilization from NVIDIA CLI or Intel iGPU frequency telemetry."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=1.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        result = None
+    if result is not None and result.returncode == 0:
+        rows = []
+        for line in result.stdout.splitlines():
+            values = [value.strip() for value in line.split(",")]
+            if len(values) != 3:
+                continue
+            try:
+                rows.append(tuple(float(value) for value in values))
+            except ValueError:
+                continue
+        if rows:
+            utilization, memory_used, memory_total = zip(*rows)
+            return {
+                "gpus": [
+                    {
+                        "name": f"nvidia:{index}",
+                        "usage_ratio": value / 100.0,
+                        "memory_used": int(used * 1024 * 1024),
+                        "memory_total": int(total * 1024 * 1024),
+                    }
+                    for index, (value, used, total) in enumerate(rows)
+                ]
+            }
+
+    # Intel integrated GPUs do not expose VRAM or utilization through
+    # nvidia-smi. Use i915 GT active/max frequency as a useful load proxy.
+    intel_paths = list(Path("/sys/class/drm").glob("card*/device/gt_act_freq_mhz"))
+    intel_paths += list(Path("/sys/class/drm").glob("card*/device/gt/gt*/gt_act_freq_mhz"))
+    for active_path in intel_paths:
+        try:
+            active = float(active_path.read_text(encoding="utf-8").strip())
+            maximum_path = active_path.with_name("gt_max_freq_mhz")
+            maximum = float(maximum_path.read_text(encoding="utf-8").strip())
+            if maximum > 0:
+                gpu_name = next(
+                    (part for part in active_path.parts if part.startswith("card") and part[4:].isdigit()), "card0"
+                )
+                return {
+                    "gpus": [
+                        {
+                            "name": f"intel:{gpu_name}",
+                            "usage_ratio": max(0.0, min(1.0, active / maximum)),
+                            "memory_used": 0,
+                            "memory_total": 0,
+                        }
+                    ]
+                }
+        except (OSError, ValueError):
+            continue
+    return None
+
+
 def _refresh_ollama_model_resources(ollama_processes) -> None:
     """Split Ollama runner RSS/CPU by loaded model and expose Ollama VRAM."""
     global _observed_ollama_models
@@ -293,6 +386,27 @@ def refresh_resource_metrics() -> None:
         SYSTEM_MEMORY.labels(state="free").set(memory.free)
         SYSTEM_MEMORY.labels(state="percent").set(memory.percent)
         SYSTEM_CPU.set(psutil.cpu_percent(interval=None) / 100.0)
+        gpu = _gpu_stats()
+        if gpu:
+            SYSTEM_GPU_AVAILABLE.set(1)
+            active_gpus = {item["name"] for item in gpu["gpus"]}
+            for item in gpu["gpus"]:
+                name = item["name"]
+                SYSTEM_GPU.labels(gpu=name).set(item["usage_ratio"])
+                SYSTEM_GPU_MEMORY.labels(gpu=name, state="used").set(item["memory_used"])
+                SYSTEM_GPU_MEMORY.labels(gpu=name, state="total").set(item["memory_total"])
+                SYSTEM_GPU_MEMORY.labels(gpu=name, state="free").set(max(0, item["memory_total"] - item["memory_used"]))
+            for name in getattr(refresh_resource_metrics, "_observed_gpus", set()) - active_gpus:
+                SYSTEM_GPU.labels(gpu=name).set(0)
+                for state in ("used", "total", "free"):
+                    SYSTEM_GPU_MEMORY.labels(gpu=name, state=state).set(0)
+            refresh_resource_metrics._observed_gpus = active_gpus
+        else:
+            SYSTEM_GPU_AVAILABLE.set(0)
+            for name in getattr(refresh_resource_metrics, "_observed_gpus", set()):
+                SYSTEM_GPU.labels(gpu=name).set(0)
+                for state in ("used", "total", "free"):
+                    SYSTEM_GPU_MEMORY.labels(gpu=name, state=state).set(0)
         info = _process.memory_info()
         ADA_PROCESS_MEMORY.set(info.rss)
         ADA_PROCESS_CPU.set(_process.cpu_percent(interval=None) / max(1.0, psutil.cpu_count() or 1) / 100.0)

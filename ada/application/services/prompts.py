@@ -48,7 +48,7 @@ class PromptBuilder:
             "\n2. Si el usuario confirma o pide buscar en un rango de fechas ('sí', 'busca en ese rango', 'busca en octubre'), procede de inmediato sin volver a preguntar lo mismo."
             "\n3. Si el pedido es un análisis, explicación o comparación autocontenida, respondelo completo ahora usando supuestos razonables. No pidas rutas, sistema operativo ni datos técnicos innecesarios."
             "\n4. Si no conocés un dato, tenés dudas, o la respuesta puede haber cambiado, usá web_search.search para investigar y basá la respuesta en los resultados; no inventes."
-            "\n5. Si necesitás un recuerdo persistente que no está en el contexto, podés pedir una única búsqueda devolviendo SOLO {\"tool_call\":{\"name\":\"memory.search\",\"arguments\":{\"query\":\"...\",\"limit\":3}}}. No inventes ids ni uses otra herramienta en este mecanismo."
+            '\n5. Si necesitás un recuerdo persistente que no está en el contexto, podés pedir una única búsqueda devolviendo SOLO {"tool_call":{"name":"memory.search","arguments":{"query":"...","limit":3}}}. No inventes ids ni uses otra herramienta en este mecanismo.'
         )
         query = task.get("prompt", "")
         system_tokens = estimate_token_count(prompt)
@@ -59,7 +59,9 @@ class PromptBuilder:
         if not selected_records:
             knowledge = self.memory.knowledge(query, limit=2)
         if knowledge:
-            memory_text = "\nReferencias confiables del proyecto; respetalas y no inventes reglas:\n" + "\n---\n".join(knowledge)
+            memory_text = "\nReferencias confiables del proyecto; respetalas y no inventes reglas:\n" + "\n---\n".join(
+                knowledge
+            )
             prompt += memory_text
             memory_tokens += estimate_token_count(memory_text)
         if procedures:
@@ -100,5 +102,10 @@ class PromptBuilder:
         prompt += request_text
         return PromptWithUsage(
             prompt,
-            {"system": system_tokens, "memory": memory_tokens, "tools": tools_tokens, "prompt": estimate_token_count(request_text)},
+            {
+                "system": system_tokens,
+                "memory": memory_tokens,
+                "tools": tools_tokens,
+                "prompt": estimate_token_count(request_text),
+            },
         )

@@ -702,14 +702,24 @@ class ModelManager:
         metadata = next((item for item in client.list_models() if item.get("name") == model), {})
         estimator = ModelMemoryEstimator(self.config)
         baseline = estimator.estimate(
-            model, context, max_tokens=max_tokens, batch=batch, metadata=metadata,
-            hardware=hardware_profile(), running=[],
+            model,
+            context,
+            max_tokens=max_tokens,
+            batch=batch,
+            metadata=metadata,
+            hardware=hardware_profile(),
+            running=[],
         )
         calibration = estimator.calibrate(model, baseline["estimate"]["total_bytes"], observed_bytes)
         calibration["ok"] = True
         calibration["estimate"] = estimator.estimate(
-            model, context, max_tokens=max_tokens, batch=batch, metadata=metadata,
-            hardware=hardware_profile(), running=running,
+            model,
+            context,
+            max_tokens=max_tokens,
+            batch=batch,
+            metadata=metadata,
+            hardware=hardware_profile(),
+            running=running,
         )
         return calibration
 

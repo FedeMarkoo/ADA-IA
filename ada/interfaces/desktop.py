@@ -88,6 +88,17 @@ def run() -> None:
             webview = WebKit2.WebView()
             webview.set_hexpand(True)
             webview.set_vexpand(True)
+            # Grafana rejects the stock WebKitGTK user agent as an
+            # unsupported browser and renders its "failed to load application
+            # files" page.  The embedded webview supports the APIs Grafana
+            # needs, so advertise the Chromium-compatible surface used by
+            # the local desktop shell.
+            settings = webview.get_settings()
+            settings.set_property(
+                "user-agent",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 ADA/1.0",
+            )
             window.add(webview)
             window_holder["window"] = window
             window.show_all()
