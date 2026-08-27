@@ -116,7 +116,23 @@ def run() -> None:
         else:
             window.present()
 
+    import signal
+
+    def handle_signal(sig, frame):
+        LOGGER.info("Señal de detención recibida en ADA Desktop (%s), cerrando servicios...", sig)
+        close()
+
+    for sig_name in ("SIGTERM", "SIGINT", "SIGHUP"):
+        if hasattr(signal, sig_name):
+            try:
+                signal.signal(getattr(signal, sig_name), handle_signal)
+            except Exception:
+                pass
+
     application.connect("activate", activate)
     LOGGER.info("ADA Desktop disponible en %s", url)
     print(f"ADA Desktop: {url}")
-    application.run([])
+    try:
+        application.run([])
+    finally:
+        close()

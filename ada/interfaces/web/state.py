@@ -526,19 +526,45 @@ def start_telegram_service() -> Dict[str, Any]:
 def stop_telegram_service() -> Dict[str, Any]:
     global telegram_proc
     with telegram_proc_lock:
-        if telegram_proc is None or telegram_proc.poll() is not None:
-            telegram_proc = None
-            return {"ok": True, "message": "El servicio no está en ejecución", "status": get_telegram_service_status()}
-        try:
-            telegram_proc.terminate()
+        terminated_any = False
+        if telegram_proc is not None and telegram_proc.poll() is None:
             try:
-                telegram_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                telegram_proc.kill()
+                telegram_proc.terminate()
+                try:
+                    telegram_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    telegram_proc.kill()
+                terminated_any = True
+            except Exception:
+                pass
             telegram_proc = None
-            return {"ok": True, "message": "Servidor de Telegram detenido", "status": get_telegram_service_status()}
-        except Exception as exc:
-            return {"ok": False, "error": f"Error al detener: {exc}"}
+
+        # Also terminate any running telegram/bot.py processes on the OS
+        try:
+            import psutil
+            cur_pid = os.getpid()
+            for p in psutil.process_iter(["pid", "cmdline"]):
+                try:
+                    if p.info["pid"] == cur_pid:
+                        continue
+                    cmd = " ".join(str(x) for x in (p.info.get("cmdline") or []))
+                    if "telegram/bot.py" in cmd or "telegram\\bot.py" in cmd:
+                        p.terminate()
+                        try:
+                            p.wait(timeout=5)
+                        except psutil.TimeoutExpired:
+                            p.kill()
+                        terminated_any = True
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception:
+            pass
+
+        return {
+            "ok": True,
+            "message": "Servidor de Telegram detenido" if terminated_any else "El servicio no estaba en ejecución",
+            "status": get_telegram_service_status(),
+        }
 
 
 def restart_telegram_service() -> Dict[str, Any]:
