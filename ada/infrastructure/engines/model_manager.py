@@ -690,6 +690,29 @@ class ModelManager:
             running=client.running_models(),
         )
 
+    def calibrate_memory_estimate(self, model, num_ctx=None, max_tokens=0, batch=1):
+        """Persist calibration from the model's current Ollama resident size."""
+        client = OllamaClient(self.ollama_url, timeout=5)
+        running = client.running_models()
+        observed = next((item for item in running if item.get("name") == model), None)
+        observed_bytes = int((observed or {}).get("size_vram") or (observed or {}).get("size") or 0)
+        if not observed_bytes:
+            return {"ok": False, "model": model, "error": "model_not_running"}
+        context = num_ctx or self.config.get("ollama_num_ctx", 4096)
+        metadata = next((item for item in client.list_models() if item.get("name") == model), {})
+        estimator = ModelMemoryEstimator(self.config)
+        baseline = estimator.estimate(
+            model, context, max_tokens=max_tokens, batch=batch, metadata=metadata,
+            hardware=hardware_profile(), running=[],
+        )
+        calibration = estimator.calibrate(model, baseline["estimate"]["total_bytes"], observed_bytes)
+        calibration["ok"] = True
+        calibration["estimate"] = estimator.estimate(
+            model, context, max_tokens=max_tokens, batch=batch, metadata=metadata,
+            hardware=hardware_profile(), running=running,
+        )
+        return calibration
+
     def _gpt4all_available(self):
         if GPT4All is None:
             return False

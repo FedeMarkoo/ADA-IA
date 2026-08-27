@@ -261,4 +261,6 @@ El endpoint no debe cargar el modelo ni ejecutar inferencia. La medición real s
 - [x] Los modelos ya cargados se consideran en el cálculo de disponibilidad.
 - [x] El endpoint comparte la misma estimación que consume el runtime.
 - [x] Hay tests para límites, metadatos observados y heurísticos.
-- [ ] Calibración persistente histórica contra mediciones reales de Ollama.
+- [x] Calibración persistente histórica contra mediciones reales de Ollama mediante `/api/ollama/memory-calibrate`.
+
+La calibración se guarda por defecto en `~/Desktop/ADA_Data/model_memory_calibration.json`; puede sobrescribirse con `model_memory_calibration_path` o `ADA_MODEL_MEMORY_CALIBRATION`.

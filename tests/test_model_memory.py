@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 from ada.application.services.model_memory import ModelMemoryEstimator
 
@@ -30,6 +32,18 @@ class ModelMemoryEstimatorTests(unittest.TestCase):
     def test_invalid_context_is_clamped(self):
         result = ModelMemoryEstimator().estimate("model", 1, metadata={})
         self.assertEqual(result["context"]["num_ctx"], 512)
+
+    def test_calibration_is_persisted_and_applied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "calibration.json")
+            config = {"model_memory_calibration_path": path}
+            estimator = ModelMemoryEstimator(config)
+            baseline = estimator.estimate("demo:3b", 4096, metadata={})
+            calibration = estimator.calibrate("demo:3b", baseline["estimate"]["total_bytes"], baseline["estimate"]["total_bytes"] * 2)
+            self.assertEqual(calibration["samples"], 1)
+            restored = ModelMemoryEstimator(config).estimate("demo:3b", 4096, metadata={})
+            self.assertEqual(restored["estimate"]["calibration_samples"], 1)
+            self.assertGreater(restored["estimate"]["calibration_factor"], 1)
 
 
 if __name__ == "__main__":

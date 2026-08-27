@@ -257,6 +257,22 @@ def ollama_memory_estimate():
     return jsonify(manager.memory_estimate(model_name, num_ctx=num_ctx, max_tokens=max_tokens, batch=batch))
 
 
+@models_bp.route("/api/ollama/memory-calibrate", methods=["POST"])
+def ollama_memory_calibrate():
+    data = request.get_json(silent=True) or {}
+    model_name = data.get("model")
+    if not model_name:
+        return jsonify({"error": "model_required"}), 400
+    runtime = get_runtime()
+    manager = runtime["agent"].model_manager
+    return jsonify(manager.calibrate_memory_estimate(
+        model_name,
+        num_ctx=data.get("num_ctx"),
+        max_tokens=data.get("max_tokens", 0),
+        batch=data.get("batch", 1),
+    ))
+
+
 @models_bp.route("/api/models/catalog", methods=["GET", "POST", "DELETE"])
 def models_catalog_api():
     runtime = get_runtime()

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import re
+import json
+import os
+from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 GB = 1024**3
@@ -22,6 +25,26 @@ class ModelMemoryEstimator:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
+        configured_path = self.config.get("model_memory_calibration_path") or os.environ.get("ADA_MODEL_MEMORY_CALIBRATION")
+        if not configured_path:
+            configured_path = str(Path.home() / "Desktop" / "ADA_Data" / "model_memory_calibration.json")
+        self.calibration_path = Path(configured_path).expanduser() if configured_path else None
+        self.calibrations = self._load_calibrations()
+
+    def _load_calibrations(self):
+        if not self.calibration_path or not self.calibration_path.exists():
+            return {}
+        try:
+            value = json.loads(self.calibration_path.read_text(encoding="utf-8"))
+            return value if isinstance(value, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _save_calibrations(self):
+        if not self.calibration_path:
+            return
+        self.calibration_path.parent.mkdir(parents=True, exist_ok=True)
+        self.calibration_path.write_text(json.dumps(self.calibrations, indent=2), encoding="utf-8")
 
     def estimate(
         self,
@@ -55,7 +78,9 @@ class ModelMemoryEstimator:
         kv_bytes = _bytes(max(0.125, parameters_b * 0.03) * num_ctx * 1024 * batch)
         output_bytes = _bytes(max(0.0625, parameters_b * 0.015) * max_tokens * 1024 * batch)
         overhead_bytes = _bytes(max(0.35 * GB, weights_bytes * 0.08))
-        total_bytes = weights_bytes + kv_bytes + output_bytes + overhead_bytes
+        calibration = self.calibrations.get(model) or {}
+        calibration_factor = float(calibration.get("factor", 1.0))
+        total_bytes = _bytes((weights_bytes + kv_bytes + output_bytes + overhead_bytes) * calibration_factor)
 
         ram_available = _bytes(float(hardware.get("ram_available_gb") or 0) * GB)
         vram_available = _bytes(float(hardware.get("vram_available_gb") or hardware.get("vram_gb") or 0) * GB)
@@ -77,6 +102,8 @@ class ModelMemoryEstimator:
                 "total_bytes": total_bytes,
                 "source": source,
                 "confidence": confidence,
+                "calibration_factor": calibration_factor,
+                "calibration_samples": int(calibration.get("samples", 0)),
             },
             "available": {
                 "ram_available_bytes": ram_available,
@@ -91,6 +118,19 @@ class ModelMemoryEstimator:
                 else ["Estimación aproximada; cargá el modelo para calibrar el consumo real."]
             ),
         }
+
+    def calibrate(self, model: str, predicted_bytes: int, observed_bytes: int) -> Dict[str, Any]:
+        """Persist a bounded correction factor from an observed Ollama load."""
+        predicted_bytes = max(1, int(predicted_bytes))
+        observed_bytes = max(1, int(observed_bytes))
+        raw_factor = max(0.5, min(2.0, observed_bytes / predicted_bytes))
+        previous = self.calibrations.get(model) or {}
+        samples = int(previous.get("samples", 0))
+        old_factor = float(previous.get("factor", raw_factor))
+        factor = (old_factor * samples + raw_factor) / (samples + 1)
+        self.calibrations[model] = {"factor": round(factor, 6), "samples": samples + 1}
+        self._save_calibrations()
+        return {"model": model, "factor": factor, "samples": samples + 1, "observed_bytes": observed_bytes}
 
     @staticmethod
     def _bytes_per_parameter(quantization: str) -> float:
