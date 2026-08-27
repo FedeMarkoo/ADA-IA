@@ -372,7 +372,12 @@ def telegram_service_config():
 @system_bp.route("/api/services/telegram/logs")
 @system_bp.route("/api/telegram/logs")
 def telegram_service_logs():
-    return jsonify({"logs": list(telegram_logs)})
+    mgr = get_runtime().get("trigger_manager")
+    if mgr and hasattr(mgr, "_log_tail"):
+        logs = mgr._log_tail(lines=200)
+    else:
+        logs = list(telegram_logs)
+    return jsonify({"logs": logs})
 
 
 # ==============================================================================

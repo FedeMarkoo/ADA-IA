@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -405,6 +406,24 @@ telegram_proc_lock = threading.RLock()
 telegram_logs: deque = deque(maxlen=200)
 
 
+def _get_trigger_manager(config=None) -> Any:
+    try:
+        runtime = get_runtime()
+        if "trigger_manager" in runtime and runtime["trigger_manager"] is not None:
+            return runtime["trigger_manager"]
+    except Exception:
+        runtime = {}
+    from ada.infrastructure.runtime.triggers import TriggerManager
+
+    cfg = config if config is not None else runtime.get("cfg", {})
+    return TriggerManager(
+        cfg,
+        PROJECT_ROOT,
+        config_path=runtime.get("config_path"),
+        internal_url=f"http://127.0.0.1:{int(os.environ.get('ADA_UI_PORT', '5005'))}",
+    )
+
+
 def resolve_telegram_token(config=None) -> str:
     from telegram.bot import resolve_telegram_token as resolve_token
 
@@ -418,156 +437,63 @@ def resolve_telegram_token(config=None) -> str:
 
 
 def get_telegram_service_status(config=None) -> Dict[str, Any]:
-    global telegram_proc
-    token = resolve_telegram_token(config)
-    with telegram_proc_lock:
-        running = telegram_proc is not None and telegram_proc.poll() is None
-        pid = telegram_proc.pid if running else None
+    mgr = _get_trigger_manager(config)
+    status = mgr.telegram_status()
+    token = resolve_telegram_token(config if config is not None else getattr(mgr, "config", None))
+    token_str = str(token or "").strip()
 
-    last_error = None
-    try:
-        health_path = Path.home() / "Desktop/ADA_Data/runtime/triggers/telegram.json"
-        if health_path.exists():
-            health_info = json.loads(health_path.read_text(encoding="utf-8"))
-            last_error = health_info.get("last_error")
-    except Exception:
-        pass
+    from telegram.bot import resolve_allowed_chat_ids
 
-    allowed_chats = []
-    try:
-        cfg = config if config is not None else get_runtime().get("cfg", {})
-        if isinstance(cfg, dict):
-            allowed_chats = cfg.get("telegram", {}).get("allowed_chat_ids", [])
-        elif hasattr(cfg, "telegram"):
-            tg = getattr(cfg, "telegram")
-            allowed_chats = tg.get("allowed_chat_ids", []) if isinstance(tg, dict) else getattr(tg, "allowed_chat_ids", [])
-    except Exception:
-        pass
-    if not allowed_chats:
-        cfg_file = PROJECT_ROOT / "ada" / "config.json"
-        if not cfg_file.is_file():
-            cfg_file = PROJECT_ROOT / "config.json"
-        if cfg_file.is_file():
-            try:
-                data = json.loads(cfg_file.read_text(encoding="utf-8"))
-                allowed_chats = data.get("telegram", {}).get("allowed_chat_ids", [])
-            except Exception:
-                pass
+    allowed_chats = list(resolve_allowed_chat_ids(config if config is not None else getattr(mgr, "config", None)))
 
     return {
-        "ok": True,
-        "configured": bool(token),
-        "token_set": bool(token),
-        "token_masked": (token[:6] + "..." + token[-4:]) if len(token) > 10 else ("***" if token else None),
-        "running": running,
-        "pid": pid,
-        "status": "running" if running else "stopped",
-        "last_error": last_error,
+        "ok": bool(status.get("ok", True)),
+        "configured": bool(token_str),
+        "token_set": bool(token_str),
+        "token_masked": (token_str[:6] + "..." + token_str[-4:]) if len(token_str) > 10 else ("***" if token_str else None),
+        "running": bool(status.get("running", False)),
+        "pid": status.get("pid"),
+        "status": status.get("status", "stopped"),
+        "desired_state": status.get("desired_state", "stopped"),
+        "last_error": status.get("last_error"),
         "allowed_chat_ids": allowed_chats,
         "survives_dashboard_restart": True,
+        "recent_log": status.get("recent_log", []),
     }
 
 
 def start_telegram_service() -> Dict[str, Any]:
-    global telegram_proc
-    token = resolve_telegram_token()
+    mgr = _get_trigger_manager()
+    token = resolve_telegram_token(getattr(mgr, "config", None))
     if not token:
         return {"ok": False, "error": "No hay token de Telegram configurado en vault.db"}
-    with telegram_proc_lock:
-        if telegram_proc is not None and telegram_proc.poll() is None:
-            return {"ok": True, "message": "El servicio ya está en ejecución", "status": get_telegram_service_status()}
-        try:
-            # Terminate any existing orphan telegram bot processes first
-            try:
-                import psutil
-                cur_pid = os.getpid()
-                for p in psutil.process_iter(["pid", "cmdline"]):
-                    try:
-                        if p.info["pid"] == cur_pid:
-                            continue
-                        cmd = " ".join(str(x) for x in (p.info.get("cmdline") or []))
-                        if "telegram/bot.py" in cmd or "telegram\\bot.py" in cmd:
-                            p.terminate()
-                            try:
-                                p.wait(timeout=2)
-                            except psutil.TimeoutExpired:
-                                p.kill()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
-            except Exception:
-                pass
-
-            bot_script = PROJECT_ROOT / "telegram" / "bot.py"
-            env = os.environ.copy()
-            port = int(os.environ.get("ADA_UI_PORT", "5005"))
-            env["ADA_INTERNAL_URL"] = f"http://127.0.0.1:{port}"
-            telegram_proc = subprocess.Popen(
-                [os.sys.executable, str(bot_script)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                env=env,
-                bufsize=1,
-            )
-
-            def read_logs():
-                if telegram_proc and telegram_proc.stdout:
-                    for line in telegram_proc.stdout:
-                        telegram_logs.append(line.rstrip())
-
-            t = threading.Thread(target=read_logs, daemon=True, name="ada-telegram-logs")
-            t.start()
-            time.sleep(0.5)
-            return {"ok": True, "message": "Servidor de Telegram iniciado", "status": get_telegram_service_status()}
-        except Exception as exc:
-            return {"ok": False, "error": f"Error al iniciar el bot: {exc}"}
+    res = mgr.start("telegram", persist=True)
+    mgr.start_watchdog()
+    if res.get("ok"):
+        return {
+            "ok": True,
+            "message": res.get("message") or "Servidor de Telegram iniciado",
+            "status": get_telegram_service_status(),
+        }
+    return res
 
 
 def stop_telegram_service() -> Dict[str, Any]:
-    global telegram_proc
-    with telegram_proc_lock:
-        terminated_any = False
-        if telegram_proc is not None and telegram_proc.poll() is None:
-            try:
-                telegram_proc.terminate()
-                try:
-                    telegram_proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    telegram_proc.kill()
-                terminated_any = True
-            except Exception:
-                pass
-            telegram_proc = None
-
-        # Also terminate any running telegram/bot.py processes on the OS
-        try:
-            import psutil
-            cur_pid = os.getpid()
-            for p in psutil.process_iter(["pid", "cmdline"]):
-                try:
-                    if p.info["pid"] == cur_pid:
-                        continue
-                    cmd = " ".join(str(x) for x in (p.info.get("cmdline") or []))
-                    if "telegram/bot.py" in cmd or "telegram\\bot.py" in cmd:
-                        p.terminate()
-                        try:
-                            p.wait(timeout=5)
-                        except psutil.TimeoutExpired:
-                            p.kill()
-                        terminated_any = True
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-        except Exception:
-            pass
-
-        return {
-            "ok": True,
-            "message": "Servidor de Telegram detenido" if terminated_any else "El servicio no estaba en ejecución",
-            "status": get_telegram_service_status(),
-        }
+    mgr = _get_trigger_manager()
+    res = mgr.stop("telegram", persist=True)
+    return {
+        "ok": True,
+        "message": res.get("message") or "Servidor de Telegram detenido",
+        "status": get_telegram_service_status(),
+    }
 
 
 def restart_telegram_service() -> Dict[str, Any]:
-    stop_telegram_service()
-    time.sleep(0.5)
-    return start_telegram_service()
+    mgr = _get_trigger_manager()
+    res = mgr.restart("telegram")
+    mgr.start_watchdog()
+    return {
+        "ok": bool(res.get("ok")),
+        "message": res.get("message") or "Servidor de Telegram reiniciado",
+        "status": get_telegram_service_status(),
+    }

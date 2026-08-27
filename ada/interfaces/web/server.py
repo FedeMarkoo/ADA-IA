@@ -78,7 +78,9 @@ def create_app(
         cfg,
         root,
         config_path=cfg_file,
+        state_dir=cfg.get("trigger_state_dir"),
         internal_url=f"http://127.0.0.1:{int(os.environ.get('ADA_UI_PORT', '5005'))}",
+        discover_existing=cfg.get("discover_external_triggers", True),
     )
     mem_refiner = MemoryRefiner(active_agent.mem, agent=active_agent, config=cfg)
     if mem_refiner.enabled:
@@ -217,27 +219,27 @@ def create_app(
     # Register all modular route blueprints
     register_blueprints(app)
 
-    # Auto-start Prometheus in background if available
-    def _auto_start_monitoring():
+    # Start trigger watchdog supervisor if external triggers discovery is enabled
+    if cfg.get("discover_external_triggers", True) and trigger_mgr:
+        trigger_mgr.start_watchdog()
+
+    # Auto-start background services (Telegram and Prometheus) if configured/enabled
+    def _auto_start_services():
         try:
-            time.sleep(1.0)
+            time.sleep(0.5)
+            if cfg.get("discover_external_triggers", True) and trigger_mgr:
+                trigger_mgr.reconcile()
+        except Exception:
+            pass
+
+        try:
+            time.sleep(0.5)
             from ada.infrastructure.runtime.monitoring import start_prometheus
             start_prometheus()
         except Exception:
             pass
 
-    threading.Thread(target=_auto_start_monitoring, daemon=True, name="ada-auto-monitoring").start()
-
-    import atexit
-
-    def _auto_stop_services():
-        try:
-            from ada.interfaces.web.state import stop_telegram_service
-            stop_telegram_service()
-        except Exception:
-            pass
-
-    atexit.register(_auto_stop_services)
+    threading.Thread(target=_auto_start_services, daemon=True, name="ada-auto-services").start()
 
     return app
 

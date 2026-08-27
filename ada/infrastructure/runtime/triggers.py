@@ -178,6 +178,10 @@ class TriggerManager:
             telegram = {}
             self.config["telegram"] = telegram
         telegram["enabled"] = bool(enabled)
+        state = self._read_state()
+        state["desired_state"] = "running" if enabled else "stopped"
+        state["enabled"] = bool(enabled)
+        self._write_state(state)
         if not self.config_path:
             return
         saved = {}
@@ -206,15 +210,22 @@ class TriggerManager:
                         "pid": process.pid,
                         "started_at": datetime.now(timezone.utc).isoformat(),
                         "adopted": True,
+                        "desired_state": "running",
+                        "enabled": True,
                     }
                     self._write_state(state)
             token = self._resolve_token()
-            desired = bool((self.config.get("telegram") or {}).get("enabled", False))
+            cfg_telegram = self.config.get("telegram") if isinstance(self.config.get("telegram"), dict) else {}
+            cfg_enabled = cfg_telegram.get("enabled")
+            if cfg_enabled is not None:
+                desired = bool(cfg_enabled)
+            else:
+                desired = state.get("desired_state") == "running" or state.get("enabled", False)
             running = process is not None
             health = self._health() if running else {}
             exit_reason = None
-            if not running and state.get("pid"):
-                exit_reason = "El proceso terminó; ADA volverá a iniciarlo mientras esté habilitado."
+            if not running and state.get("pid") and desired:
+                exit_reason = "El proceso terminó; ADA volverá a iniciarlo automáticamente mientras esté habilitado."
             reported_status = "running" if running else ("recovering" if desired and token else "stopped")
             if running and health.get("status") == "starting":
                 reported_status = "starting"
@@ -290,6 +301,8 @@ class TriggerManager:
                 "started_at": datetime.now(timezone.utc).isoformat(),
                 "command": self.telegram_command,
                 "log_path": str(self.telegram_log_path),
+                "desired_state": "running",
+                "enabled": True,
             }
             self._write_state(state)
             time.sleep(0.15)
@@ -330,11 +343,12 @@ class TriggerManager:
     def reconcile(self) -> Dict[str, Any]:
         status = self.telegram_status()
         if status["desired_state"] == "running" and status["configured"] and not status["running"]:
-            if time.monotonic() - self._last_start_attempt >= 10:
+            if time.monotonic() - self._last_start_attempt >= 5.0:
+                logger.info("trigger_reconcile_starting trigger=telegram (process was down)")
                 return self.start("telegram", persist=False)
         return status
 
-    def start_watchdog(self, interval: float = 5.0) -> Optional[threading.Thread]:
+    def start_watchdog(self, interval: float = 3.0) -> Optional[threading.Thread]:
         with self._lock:
             if self._watchdog_thread and self._watchdog_thread.is_alive():
                 return self._watchdog_thread
