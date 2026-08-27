@@ -2384,7 +2384,15 @@ function HealthcheckView({ showToast }) {
   const [latestByPrompt, setLatestByPrompt] = useState({});
   const [latestLoaded, setLatestLoaded] = useState(false);
   const [promptsLoaded, setPromptsLoaded] = useState(false);
+  const [expandedCards, setExpandedCards] = useState({});
   const [newCase, setNewCase] = useState({ id: '', category: 'web', name: '', capability: 'web', tags: 'web, readonly', prompt: '', must_match: '(respuesta|fuente)' });
+
+  const toggleCardExpanded = (id) => {
+    setExpandedCards(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -2563,12 +2571,73 @@ function HealthcheckView({ showToast }) {
             const last = check || latestByPrompt[item.id];
             const isExecuting = runInProgress && activeRun?.current_prompt_id === item.id;
             const lastStatus = isExecuting ? 'running' : (last?.status || (last?.passed ? 'passed' : null));
-            return h('article', { className: 'healthcheck-prompt-card', key: item.id }, [
-            h('div', { className: 'healthcheck-prompt-heading' }, [h('strong', null, item.name), h('span', { className: `healthcheck-status ${lastStatus === 'passed' ? 'is-ok' : lastStatus === 'error' ? 'is-error' : lastStatus === 'failed' ? 'is-fail' : lastStatus === 'running' ? 'is-running' : ''}` }, lastStatus === 'passed' ? '✓ Aprobado' : lastStatus === 'error' ? '⚠ Error' : lastStatus === 'failed' ? '✗ Falló' : lastStatus === 'running' ? '⏳ En ejecución' : 'Pendiente')]),
-            h('p', { className: 'healthcheck-prompt-text' }, item.prompt),
-            isExecuting ? h('div', { className: 'text-xs text-secondary' }, 'En ejecución') : last ? h('div', { className: 'text-xs text-secondary' }, `${last.elapsed_seconds || 0}s · ${last.model || 'modelo no registrado'} · ${last.created_at || ''}`) : h('div', { className: 'text-xs text-muted' }, 'Todavía no ejecutado'),
-            h('button', { className: 'healthcheck-run-button', disabled: loading, onClick: () => run([item.id]) }, 'Probar ahora'),
-          ]);
+            const isExpanded = Boolean(expandedCards[item.id]);
+            return h('article', {
+              className: `healthcheck-prompt-card ${isExpanded ? 'is-expanded' : ''}`,
+              key: item.id,
+              onDoubleClick: () => toggleCardExpanded(item.id),
+              title: 'Hacé doble click para ver u ocultar la respuesta y evaluación del evaluador'
+            }, [
+              h('div', { className: 'healthcheck-prompt-heading' }, [
+                h('div', { className: 'flex items-center gap-2' }, [
+                  h('strong', null, item.name),
+                  h('button', {
+                    type: 'button',
+                    className: 'healthcheck-expand-toggle-btn',
+                    onClick: (e) => { e.stopPropagation(); toggleCardExpanded(item.id); },
+                    title: isExpanded ? 'Ocultar detalles' : 'Ver respuesta y evaluación'
+                  }, isExpanded ? '▲ Ocultar' : '▼ Ver respuesta/evaluación')
+                ]),
+                h('span', { className: `healthcheck-status ${lastStatus === 'passed' ? 'is-ok' : lastStatus === 'error' ? 'is-error' : lastStatus === 'failed' ? 'is-fail' : lastStatus === 'running' ? 'is-running' : ''}` }, lastStatus === 'passed' ? '✓ Aprobado' : lastStatus === 'error' ? '⚠ Error' : lastStatus === 'failed' ? '✗ Falló' : lastStatus === 'running' ? '⏳ En ejecución' : 'Pendiente')
+              ]),
+              h('p', { className: 'healthcheck-prompt-text' }, item.prompt),
+              isExecuting
+                ? h('div', { className: 'text-xs text-secondary mb-2' }, '⏳ En ejecución...')
+                : last
+                  ? h('div', { className: 'text-xs text-secondary mb-2' }, `${last.elapsed_seconds || 0}s · ${last.model || 'modelo no registrado'} · ${last.created_at || ''}`)
+                  : h('div', { className: 'text-xs text-muted mb-2' }, 'Todavía no ejecutado (doble click para preparar detalles)'),
+
+              isExpanded ? h('div', { className: 'healthcheck-card-details mt-2 p-3 bg-base rounded border border-subtle' }, [
+                h('div', { className: 'mb-3' }, [
+                  h('div', { className: 'flex justify-between items-center mb-1' }, [
+                    h('strong', { className: 'text-xs uppercase text-muted tracking-wider' }, '💬 Respuesta de ADA:'),
+                    last?.elapsed_seconds ? h('span', { className: 'text-xs text-muted font-mono' }, `${last.elapsed_seconds}s`) : null
+                  ]),
+                  h('div', { className: 'bench-output text-xs' }, last?.response || last?.reply || last?.error || (isExecuting ? '⏳ Generando respuesta...' : 'Sin respuesta registrada aún. Hacé click en "Probar ahora".'))
+                ]),
+                h('div', { className: 'healthcheck-eval-box pt-2 border-t border-subtle' }, [
+                  h('strong', { className: 'text-xs uppercase text-muted tracking-wider block mb-2' }, '⚖️ Evaluación del Evaluador:'),
+                  last ? [
+                    h('div', { key: 'status-eval', className: 'flex items-center gap-2 mb-2' }, [
+                      h('span', { className: `badge ${last.passed ? 'badge-success' : 'badge-danger'}` }, last.passed ? '✓ Superado' : '✗ Falló'),
+                      last.judge?.score !== undefined ? h('span', { className: 'text-xs font-semibold text-primary' }, `Puntaje Juez IA: ${Math.round(last.judge.score * 100)}%`) : (last.score !== undefined ? h('span', { className: 'text-xs font-semibold text-primary' }, `Puntaje: ${Math.round(last.score * 100)}%`) : null),
+                      last.judge?.source ? h('span', { className: 'badge badge-sm badge-accent' }, `Juez: ${last.judge.source}`) : null
+                    ]),
+                    last.judge?.rationale ? h('div', { key: 'rationale', className: 'text-xs text-secondary mb-2 p-2 rounded bg-surface-elevated border border-subtle' }, [
+                      h('strong', { className: 'block mb-1 text-primary' }, 'Dictamen:'),
+                      h('span', null, last.judge.rationale)
+                    ]) : null,
+                    last.judge?.issues?.length ? h('div', { key: 'issues', className: 'text-xs text-danger mb-2 p-2 rounded bg-surface-elevated border border-danger' }, [
+                      h('strong', { className: 'block mb-1 font-semibold' }, 'Problemas detectados:'),
+                      h('ul', { className: 'list-disc pl-4 mt-1' }, last.judge.issues.map((iss, i) => h('li', { key: i }, iss)))
+                    ]) : null,
+                    last.missing?.length ? h('div', { key: 'missing', className: 'text-xs text-warning mb-2 p-2 rounded bg-surface-elevated border border-warning' }, [
+                      h('strong', { className: 'block mb-1' }, 'Expresiones regulares esperadas no encontradas:'),
+                      h('ul', { className: 'list-disc pl-4 mt-1' }, last.missing.map((mis, i) => h('li', { key: i }, mis)))
+                    ]) : null,
+                    !last.judge && (!last.missing || !last.missing.length) ? h('p', { key: 'rule-passed', className: 'text-xs text-success' }, '✓ Cumple todas las reglas y expresiones de coincidencia requeridas.') : null
+                  ] : h('p', { className: 'text-xs text-muted' }, 'Ejecutá esta prueba con "Probar ahora" para visualizar la evaluación.')
+                ])
+              ]) : null,
+
+              h('div', { className: 'flex justify-between items-center mt-3 pt-2 border-t border-subtle' }, [
+                h('button', { className: 'healthcheck-run-button', disabled: loading, onClick: (e) => { e.stopPropagation(); run([item.id]); } }, 'Probar ahora'),
+                h('span', {
+                  className: 'text-xs text-muted cursor-pointer hover:text-primary transition-colors',
+                  onClick: (e) => { e.stopPropagation(); toggleCardExpanded(item.id); }
+                }, isExpanded ? '▲ Ocultar detalles' : '▼ Doble click / Ver respuesta')
+              ])
+            ]);
         })) : h('div', { className: 'healthcheck-empty' }, 'No hay prompts en esta categoría.'),
           ]),
         ]),
