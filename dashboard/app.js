@@ -4225,15 +4225,15 @@ function TelegramView({ showToast }) {
       h('div', { className: 'card stat-card', key: 'stat-chats' }, [
         h('div', { className: 'stat-header' }, [
           h('span', { className: 'stat-label' }, 'Seguridad de Acceso'),
-          h('span', { className: 'badge badge-accent' },
-            (status?.allowed_chat_ids?.length || 0) > 0 ? 'Filtro Activo' : 'Público'
+          h('span', { className: (status?.allowed_chat_ids?.length || 0) > 0 ? 'badge badge-accent' : 'badge badge-warning' },
+            (status?.allowed_chat_ids?.length || 0) > 0 ? 'Filtro Activo' : 'Bloqueado (Fail-Closed)'
           ),
         ]),
         h('div', { className: 'stat-value' },
-          (status?.allowed_chat_ids?.length || 0) > 0 ? `${status.allowed_chat_ids.length} Chat(s)` : 'Acceso Libre'
+          (status?.allowed_chat_ids?.length || 0) > 0 ? `${status.allowed_chat_ids.length} Chat(s)` : 'Sin Acceso'
         ),
         h('div', { className: 'stat-footer' },
-          (status?.allowed_chat_ids?.length || 0) > 0 ? `IDs: ${status.allowed_chat_ids.join(', ')}` : 'Sin restricción de ID'
+          (status?.allowed_chat_ids?.length || 0) > 0 ? `IDs: ${status.allowed_chat_ids.join(', ')}` : 'Requiere al menos 1 Chat ID o *'
         ),
       ]),
 

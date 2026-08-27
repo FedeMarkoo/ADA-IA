@@ -342,6 +342,11 @@ def telegram_service_config():
     if runtime.get("trigger_manager"):
         runtime["trigger_manager"].config = runtime["cfg"]
 
+    from ada.interfaces.web.state import get_telegram_service_status, restart_telegram_service
+    status = get_telegram_service_status()
+    if status.get("running"):
+        restart_telegram_service()
+
     return jsonify(
         {
             "ok": True,
