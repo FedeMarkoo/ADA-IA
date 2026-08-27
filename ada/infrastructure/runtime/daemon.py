@@ -26,7 +26,7 @@ def run(config=None):
     mcp_manager = MCPManager(config)
     agent = Agent(config, mcp_manager=mcp_manager)
     autonomy = AutonomyService(agent, config)
-    bus = EventBus(agent.mem)
+    bus = EventBus(agent.operations)
 
     stop_event = threading.Event()
 
@@ -48,7 +48,7 @@ def run(config=None):
 
     topics = set((config.get("event_rules") or {})) | {"filesystem.file_created"}
     handlers = {topic: (lambda payload, topic=topic: handle_event(topic, payload)) for topic in topics}
-    scheduler = Scheduler(agent.mem, handlers, interval=config.get("scheduler_interval", 2))
+    scheduler = Scheduler(agent.operations, handlers, interval=config.get("scheduler_interval", 2))
     watchers = [FolderWatcher(folder, bus) for folder in config.get("watch_folders", [])]
     backup_interval = max(0.0, float(config.get("backup_interval_seconds", 0)))
     next_backup = time.monotonic() + backup_interval if backup_interval else None

@@ -541,9 +541,21 @@ class Memory:
                 ("tasks", "task_count"),
                 ("audit_log", "audit_count"),
             ):
-                counts[key] = int(self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                try:
+                    counts[key] = int(self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                except sqlite3.OperationalError:
+                    # Operational tables live in operations.db in the clean
+                    # runtime; keep this API useful for memory-only stores.
+                    counts[key] = 0
         counts["db_path"] = self.db_path
         return counts
+
+    def drop_auxiliary_tables(self):
+        """Keep memories.db limited to memory and conversation data."""
+        with self._lock:
+            for table in ("router_catalog", "prompt_templates", "json_schemas", "tasks", "audit_log", "events"):
+                self.conn.execute(f"DROP TABLE IF EXISTS {table}")
+            self.conn.commit()
 
     @staticmethod
     def _memory_summary(content, max_chars=180):

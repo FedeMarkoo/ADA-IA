@@ -23,7 +23,7 @@ class AutonomyService:
         action_name = str(rule["action"])
         if action_name not in self.agent.skills:
             err_result = {"ok": False, "error": "configured_action_unavailable", "action": action_name}
-            self.agent.mem.record_audit(topic, request=rule, result=err_result, success=False)
+            self.agent.operations.record_audit(topic, request=rule, result=err_result, success=False)
             return err_result
         arguments = dict(rule.get("payload") or {})
         if isinstance(payload, dict):
@@ -50,7 +50,7 @@ class AutonomyService:
                 "action": action_name,
                 "result": result,
             }
-        self.agent.mem.record_audit(topic, request=task, result=result, success=bool(result.get("ok")))
+        self.agent.operations.record_audit(topic, request=task, result=result, success=bool(result.get("ok")))
         return result
 
     @staticmethod

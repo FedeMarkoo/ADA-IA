@@ -62,20 +62,21 @@ def is_capability_discussion(text):
 
 
 class IntentRouter:
-    def __init__(self, model_manager, config=None, memory=None, mcp_manager=None):
+    def __init__(self, model_manager, config=None, memory=None, mcp_manager=None, tool_store=None):
         self.model_manager = model_manager
         self.config = config or {}
         if memory is None:
             raise ValueError("IntentRouter requiere una instancia de memoria inyectada.")
         self.memory = memory
+        self.tool_store = tool_store
         self.mcp_manager = mcp_manager
         self.tool_registry = ToolRegistry(mcp_manager)
 
     def _allowed_actions(self):
-        return {row["action"] for row in self.memory.router_actions()}
+        return {row["action"] for row in (self.tool_store or self.memory).router_actions()}
 
     def _actions_text(self):
-        actions = [f"{row['action']} ({row['description']})" for row in self.memory.router_actions()]
+        actions = [f"{row['action']} ({row['description']})" for row in (self.tool_store or self.memory).router_actions()]
         if self.mcp_manager:
             actions.append("mcp_call (ejecutar una herramienta MCP de solo lectura seleccionada del inventario)")
         return ", ".join(actions)
@@ -98,10 +99,10 @@ class IntentRouter:
             return "(inventario MCP no disponible)"
 
     def _template(self, name, fallback):
-        return self.memory.prompt_template(name, fallback)
+        return (self.tool_store or self.memory).prompt_template(name, fallback)
 
     def _schema(self, name):
-        schema = self.memory.json_schema(name)
+        schema = (self.tool_store or self.memory).json_schema(name)
         if name == "router" and isinstance(schema, dict):
             schema = json.loads(json.dumps(schema))
             action = schema.setdefault("properties", {}).setdefault("action", {})
@@ -573,6 +574,8 @@ class IntentRouter:
 
     def _fallback(self, text):
         value = text.lower()
+        if re.search(r"\b(calendar|calendario|evento|eventos)\b", value):
+            return {"action": "ask", "complexity": 4, "confidence": 0.0}
         if (
             re.search(r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes)\b", value)
             or re.search(r"\b(quien|quién)\s+(sos|eres)\b", value)
@@ -603,7 +606,8 @@ class IntentRouter:
             ),
         }
         if self.memory:
-            scores = {row["action"]: tuple(row.get("keywords") or []) for row in self.memory.router_actions()}
+            catalog = self.tool_store or self.memory
+            scores = {row["action"]: tuple(row.get("keywords") or []) for row in catalog.router_actions()}
         matches = {action: sum(1 for phrase in phrases if phrase in value) for action, phrases in scores.items()}
         action, score = max(matches.items(), key=lambda item: item[1])
         if score == 0:

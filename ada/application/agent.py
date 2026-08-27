@@ -10,6 +10,7 @@ from ada.infrastructure.engines.model_manager import ModelManager
 from ada.infrastructure.persistence.sqlite import Memory
 from ada.infrastructure.persistence.paths import DatabasePaths
 from ada.infrastructure.persistence.configurations import ConfigurationStore
+from ada.infrastructure.persistence.auxiliary import ToolStore, OperationsStore
 from ada.capabilities.registry import capability_catalog, load_capabilities
 from ada.agents.coordinator import MultiAgentCoordinator
 from ada.application.router import IntentRouter, is_capability_discussion
@@ -34,6 +35,8 @@ class Agent:
         self.database_paths = DatabasePaths.from_config(self.cfg)
         self.database_paths.ensure_directories()
         self.configurations = ConfigurationStore(self.database_paths.configurations)
+        self.tools = ToolStore(self.database_paths.tools)
+        self.operations = OperationsStore(self.database_paths.operations)
         self.model_manager = ModelManager(self.cfg)
         db_path = self.cfg.get("memories_db_path") or self.cfg.get("database_paths", {}).get("memories")
         db_path = db_path or self.cfg.get("db_path", str(Path.home() / "Desktop" / "ADA_Data" / "memories.db"))
@@ -42,15 +45,19 @@ class Agent:
             encrypted=bool(self.cfg.get("memory_encryption", False)),
             encryption_key=os.environ.get("ADA_MEMORY_KEY"),
         )
+        # Bootstrap generic router templates once, then keep memories.db
+        # strictly limited to memory/conversation data.
+        self.tools.seed_from(self.mem)
+        self.mem.drop_auxiliary_tables()
         self.capabilities_enabled = bool(self.cfg.get("capabilities_enabled", True))
         self.skills = load_capabilities()
         self.coordinator = MultiAgentCoordinator(self.cfg)
-        self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem, mcp_manager=mcp_manager)
+        self.router = IntentRouter(self.model_manager, self.cfg, memory=self.mem, mcp_manager=mcp_manager, tool_store=self.tools)
         self.policy = PolicyEngine(self.cfg)
         self.planner = Planner(self.skills, self.policy)
         self.knowledge_loader = KnowledgeLoader(self.mem)
         self.mcp_manager = mcp_manager
-        self.prompt_builder = PromptBuilder(self.mem, mcp_manager=mcp_manager, configuration_store=self.configurations)
+        self.prompt_builder = PromptBuilder(self.mem, mcp_manager=mcp_manager, configuration_store=self.configurations, tool_store=self.tools)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
@@ -140,7 +147,7 @@ class Agent:
                 if task.get("confirm"):
                     parameters["_confirmed"] = True
                 result = self.mcp_manager.execute_tool(tool, parameters, self)
-            self.mem.record_task(task, result, provider="mcp", success=not bool(result.get("error")))
+            self.operations.record_task(task, result, provider="mcp", success=not bool(result.get("error")))
             return {"model": "mcp", "result": result}
         if skill_name and not self.capabilities_enabled:
             # No in-process action is allowed in the default architecture.
@@ -150,18 +157,18 @@ class Agent:
                 "action": skill_name,
                 "message": "Esta acción debe ejecutarse mediante una herramienta MCP activa.",
             }
-            self.mem.record_task(task, result, provider="mcp", success=False)
+            self.operations.record_task(task, result, provider="mcp", success=False)
             return {"model": "mcp", "result": result}
         if skill_name == "food":
             payload = dict(task.get("payload", {}))
             payload.setdefault("config", self.cfg)
-            payload.setdefault("db_path", self.mem.db_path)
+            payload.setdefault("db_path", str(self.database_paths.mcp_database("food")))
             payload["action"] = payload.pop("food_action", payload.get("action", "list"))
             if payload.get("action") in {"advise", "ask", "suggest"} or payload.get("advisor"):
                 inventory = self.run_skill(
                     "food",
                     {
-                        "db_path": self.mem.db_path,
+                        "db_path": str(self.database_paths.mcp_database("food")),
                         "domain": "inventory",
                         "action": "list",
                         "config": self.cfg,
@@ -182,16 +189,16 @@ class Agent:
                 else:
                     reply = self.advise_food(request) or self._fallback_food_advice(request)
                 result = {"ok": True, "action": "advise", "reply": reply}
-                self.mem.record_task(task, result, provider="food-advisor", success=True)
+                self.operations.record_task(task, result, provider="food-advisor", success=True)
                 return {"model": "food-advisor", "result": result}
             result = self.run_skill("food", payload)
-            self.mem.record_task(task, result, provider="food", success=not bool(result.get("error")))
+            self.operations.record_task(task, result, provider="food", success=not bool(result.get("error")))
             return {"model": "food", "result": result}
         if skill_name == "analyze_photo":
             payload = dict(task.get("payload", {}))
             payload.setdefault("config", self.cfg)
             result = self.coordinator.run({"workflow": "photo_review", **payload})
-            self.mem.record_task(
+            self.operations.record_task(
                 task, result, provider=provider or "multi-agent", success=not bool(result.get("error"))
             )
             return {"model": provider or "multi-agent", "result": result}
@@ -200,13 +207,13 @@ class Agent:
             if task.get("confirm") is not None:
                 skill_args["confirm"] = task.get("confirm")
             result = self.run_skill(skill_name, skill_args, confirm=task.get("confirm"))
-            self.mem.record_audit(
+            self.operations.record_audit(
                 skill_name,
                 request=task,
                 result=result,
                 success=not bool(result.get("error")) if isinstance(result, dict) else True,
             )
-            self.mem.record_task(
+            self.operations.record_task(
                 task,
                 result,
                 provider=provider,
@@ -216,7 +223,7 @@ class Agent:
 
         if not provider:
             result = {"error": "No hay modelos disponibles. Configura llama.cpp, Ollama o una API remota."}
-            self.mem.record_task(task, result, success=False)
+            self.operations.record_task(task, result, success=False)
             return {"model": None, "result": result}
 
         prompt = self.prompt_builder.task(task, self.lang)
@@ -240,7 +247,7 @@ class Agent:
                 **call_options,
             )
             result = self._complete_with_memory_tool(provider, prompt, result, call_options)
-            self.mem.record_task(task, result, provider=provider, success=True)
+            self.operations.record_task(task, result, provider=provider, success=True)
             self.mem.add_text(
                 f"Tarea: {task.get('prompt', task)}\nResultado: {result}",
                 meta={"provider": provider},
@@ -248,7 +255,7 @@ class Agent:
             )
             return {"model": provider, "result": result}
         except Exception as exc:
-            self.mem.record_audit(skill_name or "agent", request=task, result={"error": str(exc)}, success=False)
+            self.operations.record_audit(skill_name or "agent", request=task, result={"error": str(exc)}, success=False)
             # A remote provider can be temporarily unavailable. Fall back to
             # the local model before returning an error to the user.
             local_provider = (
@@ -269,14 +276,14 @@ class Agent:
                         ),
                         timeout=self.cfg.get("model_timeout", 300),
                     )
-                    self.mem.record_task(task, result, provider=local_provider, success=True)
+                    self.operations.record_task(task, result, provider=local_provider, success=True)
                     return {"model": f"{local_provider} (fallback)", "result": result}
                 except Exception as fallback_exc:
                     logger.warning("provider_fallback_failed provider=ollama error=%s", fallback_exc)
                     pass
             result = self._safe_error("El proveedor no pudo completar la solicitud.", exc)
             result["provider"] = provider
-            self.mem.record_task(task, result, provider=provider, success=False)
+            self.operations.record_task(task, result, provider=provider, success=False)
             return {"model": provider, "result": result}
 
     @staticmethod
@@ -327,7 +334,7 @@ class Agent:
         profile = self.mem.knowledge("comidas recetas gustos freezer", limit=2)
         recipes = self.skills.get("food", lambda _: {"recipes": []})(
             {
-                "db_path": self.mem.db_path,
+                "db_path": str(self.database_paths.mcp_database("food")),
                 "domain": "recipes",
                 "action": "list",
                 "config": self.cfg,
@@ -335,7 +342,7 @@ class Agent:
         ).get("recipes", [])
         inventory = self.skills.get("food", lambda _: {"items": []})(
             {
-                "db_path": self.mem.db_path,
+                "db_path": str(self.database_paths.mcp_database("food")),
                 "domain": "inventory",
                 "action": "list",
                 "config": self.cfg,
@@ -353,7 +360,7 @@ class Agent:
         # Previous assistant answers can contain hallucinated steps or menus;
         # only user turns are reliable conversational constraints.
         conversation = "\n".join(f"usuario: {item['text']}" for item in recent if item["role"] == "user")
-        template = self.mem.prompt_template("food_advisor")
+        template = self.tools.prompt_template("food_advisor")
         prompt = (
             template.replace("{profile}", context)
             .replace("{catalog}", catalog)
@@ -379,7 +386,7 @@ class Agent:
                     180,
                     max(5, int(self.cfg.get("chat_timeout_seconds", 900)) - 5),
                 ),
-                format=self.mem.json_schema("food_reply"),
+                format=self.tools.json_schema("food_reply"),
             )
             decoded = result
             if isinstance(result, str):
@@ -432,7 +439,7 @@ class Agent:
             if isinstance(result, dict) and result.get("error"):
                 self.metrics.increment("capability.errors", tags={"name": name})
             if isinstance(result, dict) and result.get("changed"):
-                self.mem.record_audit("operation", request={"skill": name, "args": args}, result=result)
+                self.operations.record_audit("operation", request={"skill": name, "args": args}, result=result)
             return result if isinstance(result, dict) else {"result": result}
         except PolicyViolation as exc:
             self.metrics.increment("capability.policy_denials", tags={"name": name})
@@ -708,7 +715,7 @@ class Agent:
                 continue
             if text.startswith("/history"):
                 limit = int(text.split()[1]) if len(text.split()) > 1 else 10
-                for item in self.mem.recent_tasks(limit):
+                for item in self.operations.recent_tasks(limit):
                     print(item["task"], "→", item["result"][:300])
                 continue
             if text.startswith("/mem list"):

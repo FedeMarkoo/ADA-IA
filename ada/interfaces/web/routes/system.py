@@ -92,7 +92,7 @@ def mcp_restart_all_api():
 @system_bp.route("/api/audit")
 def audit_api():
     limit = min(200, max(1, request.args.get("limit", default=50, type=int)))
-    entries = get_runtime()["agent"].mem.recent_audit(limit)
+    entries = get_runtime()["agent"].operations.recent_audit(limit)
     return jsonify({"entries": entries, "count": len(entries)})
 
 
@@ -100,7 +100,7 @@ def audit_api():
 def memory_stats_api():
     runtime = get_runtime()
     active_agent = runtime["agent"]
-    audit_entries = active_agent.mem.recent_audit(100)
+    audit_entries = active_agent.operations.recent_audit(100)
     sessions = ["main"]
     try:
         cur = active_agent.mem.conn.cursor()
@@ -111,7 +111,8 @@ def memory_stats_api():
     return jsonify(
         {
             **active_agent.mem.stats(),
-            "stats": active_agent.mem.stats(),
+            "operations": active_agent.operations.stats(),
+            "stats": {**active_agent.mem.stats(), **active_agent.operations.stats()},
             "procedures": active_agent.mem.list_procedures(),
             "recent_audit": audit_entries,
             "sessions": sessions,
