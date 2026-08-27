@@ -433,11 +433,26 @@ def get_telegram_service_status(config=None) -> Dict[str, Any]:
     except Exception:
         pass
 
+    allowed_chats = []
     try:
         cfg = config if config is not None else get_runtime().get("cfg", {})
-        allowed_chats = cfg.get("telegram", {}).get("allowed_chat_ids", [])
+        if isinstance(cfg, dict):
+            allowed_chats = cfg.get("telegram", {}).get("allowed_chat_ids", [])
+        elif hasattr(cfg, "telegram"):
+            tg = getattr(cfg, "telegram")
+            allowed_chats = tg.get("allowed_chat_ids", []) if isinstance(tg, dict) else getattr(tg, "allowed_chat_ids", [])
     except Exception:
-        allowed_chats = []
+        pass
+    if not allowed_chats:
+        cfg_file = PROJECT_ROOT / "ada" / "config.json"
+        if not cfg_file.is_file():
+            cfg_file = PROJECT_ROOT / "config.json"
+        if cfg_file.is_file():
+            try:
+                data = json.loads(cfg_file.read_text(encoding="utf-8"))
+                allowed_chats = data.get("telegram", {}).get("allowed_chat_ids", [])
+            except Exception:
+                pass
 
     return {
         "ok": True,
