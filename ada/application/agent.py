@@ -188,7 +188,13 @@ class Agent:
         elif provider == "llama_cpp" and model_name:
             call_options["llama_cpp_model"] = model_name
         try:
-            result = self.model_manager.call(provider, prompt, complexity=task["complexity"], **call_options)
+            result = self.model_manager.call(
+                provider,
+                prompt,
+                complexity=task["complexity"],
+                token_usage=getattr(prompt, "token_usage", None),
+                **call_options,
+            )
             self.mem.record_task(task, result, provider=provider, success=True)
             self.mem.add_text(
                 f"Tarea: {task.get('prompt', task)}\nResultado: {result}",

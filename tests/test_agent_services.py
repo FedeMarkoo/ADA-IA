@@ -19,6 +19,9 @@ class AgentServiceTests(unittest.TestCase):
         self.assertIn("Responde en español", prompt)
         self.assertIn("respondelo completo ahora", prompt)
         self.assertIn("no sean indispensables", prompt)
+        self.assertGreater(prompt.token_usage["system"], 0)
+        self.assertGreater(prompt.token_usage["memory"], 0)
+        self.assertGreater(prompt.token_usage["prompt"], 0)
 
     def test_response_normalization_only_reads_structured_fields(self):
         self.assertEqual(text_from_result({"reply": "respuesta"}), "respuesta")

@@ -3,6 +3,20 @@ import json
 from ada.infrastructure import prometheus_metrics as metrics
 
 
+def test_llm_token_usage_is_split_by_component():
+    values = metrics.set_llm_token_usage(
+        {"system": 100, "memory": 40, "tools": 20, "prompt": 10}, response="respuesta de prueba"
+    )
+
+    assert values["system"] == 100
+    assert values["memory"] == 40
+    assert values["tools"] == 20
+    assert values["prompt"] == 10
+    assert values["response"] == metrics.estimate_token_count("respuesta de prueba")
+    assert values["total"] == sum(values[name] for name in ("system", "memory", "tools", "prompt", "response"))
+    assert metrics.LLM_TOKEN_USAGE.labels(component="total")._value.get() == values["total"]
+
+
 def test_ollama_model_blob_digest_reads_model_layer(tmp_path):
     manifest = tmp_path / "manifests" / "registry.ollama.ai" / "library" / "demo" / "latest"
     manifest.parent.mkdir(parents=True)

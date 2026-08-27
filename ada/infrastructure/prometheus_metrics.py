@@ -155,6 +155,23 @@ SYSTEM_CPU = Gauge(
     "System CPU usage ratio between 0 and 1.",
     registry=REGISTRY,
 )
+SYSTEM_GPU = Gauge(
+    "ada_system_gpu_usage_ratio",
+    "GPU utilization ratio by device between 0 and 1.",
+    ("gpu",),
+    registry=REGISTRY,
+)
+SYSTEM_GPU_MEMORY = Gauge(
+    "ada_system_gpu_memory_bytes",
+    "GPU memory in bytes, when reported by nvidia-smi.",
+    ("gpu", "state"),
+    registry=REGISTRY,
+)
+SYSTEM_GPU_AVAILABLE = Gauge(
+    "ada_system_gpu_available",
+    "Whether a GPU was detected through nvidia-smi (1/0).",
+    registry=REGISTRY,
+)
 ADA_PROCESS_MEMORY = Gauge(
     "ada_process_memory_bytes",
     "ADA process resident memory in bytes.",

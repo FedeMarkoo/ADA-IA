@@ -19,7 +19,13 @@ from ada.models.catalog import DEFAULT_MODEL_CATALOG
 
 from ada.infrastructure.runtime.ollama import LocalModelRuntime, RuntimeStatus
 from ada.infrastructure.observability import Metrics
-from ada.infrastructure.prometheus_metrics import OLLAMA_DURATION, OLLAMA_EXECUTIONS, OLLAMA_IN_FLIGHT
+from ada.infrastructure.prometheus_metrics import (
+    OLLAMA_DURATION,
+    OLLAMA_EXECUTIONS,
+    OLLAMA_IN_FLIGHT,
+    estimate_token_count,
+    set_llm_token_usage,
+)
 from ada.ollama.client import OllamaClient
 from ada.infrastructure.engines.provider_router import ProviderRouter
 from ada.application.services.model_memory import ModelMemoryEstimator
@@ -792,33 +798,38 @@ class ModelManager:
             OLLAMA_IN_FLIGHT.labels(model=str(model_tag)).inc()
         failed = False
         exclusive_acquired = False
+        token_usage = kwargs.pop("token_usage", None) or {"prompt": estimate_token_count(prompt)}
+        set_llm_token_usage(token_usage)
         try:
             if provider in self.LOCAL_PROVIDERS:
                 if provider == "ollama":
                     exclusive_acquired = self._acquire_exclusive_local_model(model_tag)
-                return (
+                result = (
                     self._call_llama_cpp(prompt, **kwargs)
                     if provider == "llama_cpp"
                     else self._call_ollama(prompt, **kwargs)
                 )
-            if provider == "openai":
-                return self._call_openai(prompt, **kwargs)
-            if provider == "openrouter":
-                return self._call_openai(
+            elif provider == "openai":
+                result = self._call_openai(prompt, **kwargs)
+            elif provider == "openrouter":
+                result = self._call_openai(
                     prompt,
                     api_key=self.openrouter_key,
                     base_url="https://openrouter.ai/api/v1",
                     **kwargs,
                 )
-            if provider == "gemini":
-                return self._call_gemini(prompt, **kwargs)
-            if provider == "groq":
-                return self._call_groq(prompt, **kwargs)
-            if provider == "anthropic":
-                return self._call_anthropic(prompt, **kwargs)
-            if provider == "gpt4all":
-                return self._call_gpt4all(prompt, **kwargs)
-            raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
+            elif provider == "gemini":
+                result = self._call_gemini(prompt, **kwargs)
+            elif provider == "groq":
+                result = self._call_groq(prompt, **kwargs)
+            elif provider == "anthropic":
+                result = self._call_anthropic(prompt, **kwargs)
+            elif provider == "gpt4all":
+                result = self._call_gpt4all(prompt, **kwargs)
+            else:
+                raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
+            set_llm_token_usage(token_usage, response=result)
+            return result
         except Exception:
             failed = True
             self.metrics.increment("provider.errors", tags=tags)

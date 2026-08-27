@@ -10,3 +10,4 @@ Las mejoras se agrupan por tema y mantienen checklist, estado, criterios de acep
 - [Memoria](memoria.md)
 - [Retrieval y reranking de memoria](retrieval-reranking-de-memoria.md)
 - [Integraciones](integraciones.md)
+- [Métricas de tokens por componente](metricas-de-tokens-por-componente.md)

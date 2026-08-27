@@ -350,9 +350,9 @@ class HealthDoctor:
             )
 
     def _check_telegram(self) -> HealthCheckItem:
-        from ada.interfaces.web.server import get_telegram_service_status
+        from ada.interfaces.web.state import get_telegram_service_status
 
-        status = get_telegram_service_status()
+        status = get_telegram_service_status(self.config)
 
         if status.get("running") and status.get("status") != "degraded":
             return HealthCheckItem(

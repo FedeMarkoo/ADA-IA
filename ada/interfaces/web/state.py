@@ -368,15 +368,15 @@ telegram_proc_lock = threading.RLock()
 telegram_logs: deque = deque(maxlen=200)
 
 
-def resolve_telegram_token() -> str:
+def resolve_telegram_token(config=None) -> str:
     from telegram.bot import resolve_telegram_token as resolve_token
 
-    return resolve_token(get_runtime().get("cfg"))
+    return resolve_token(config if config is not None else get_runtime().get("cfg"))
 
 
-def get_telegram_service_status() -> Dict[str, Any]:
+def get_telegram_service_status(config=None) -> Dict[str, Any]:
     global telegram_proc
-    token = resolve_telegram_token()
+    token = resolve_telegram_token(config)
     with telegram_proc_lock:
         running = telegram_proc is not None and telegram_proc.poll() is None
         pid = telegram_proc.pid if running else None
