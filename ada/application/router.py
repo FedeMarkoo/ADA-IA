@@ -216,7 +216,7 @@ class IntentRouter:
                         format=self._mcp_schema() if external_hint else self._schema("router"),
                     )
                 logger.info("router raw=%s", str(raw)[:1000])
-                normalized = self._normalize(self._decode(raw), fallback, memory_candidates)
+                normalized = self._normalize(self._decode(raw), fallback, memory_candidates, text=text)
                 if external_hint and normalized.get("action") != "mcp_call":
                     return {
                         "action": "ask",
@@ -505,7 +505,7 @@ class IntentRouter:
                 return {"action": action.group(1), "tool": tool.group(1), "parameters": {}}
             return {}
 
-    def _normalize(self, candidate, fallback, memory_candidates=None):
+    def _normalize(self, candidate, fallback, memory_candidates=None, text=""):
         if not isinstance(candidate, dict):
             return fallback
         candidate = dict(candidate)
@@ -524,20 +524,31 @@ class IntentRouter:
             candidate.pop("clarifying_question", None)
             action = "food"
         if action == "mcp_call":
-            tool = str(candidate.get("tool") or "")
+            tool = str(candidate.get("tool") or "").strip()
+            if "[" in tool:
+                tool = tool.split("[")[0].strip()
+            if "(" in tool:
+                tool = tool.split("(")[0].strip()
+            if " " in tool:
+                tool = tool.split()[0].strip()
             if not tool or not self.mcp_manager:
                 return fallback
             definition = self.tool_registry.get(tool)
             if not definition or not definition.get("enabled") or definition.get("requires_confirmation"):
                 return fallback
-            if not self.tool_registry.validate_parameters(definition, candidate.get("parameters") or {}):
+            parameters = dict(candidate.get("parameters") or {})
+            schema = definition.get("parameters") or definition.get("inputSchema") or {}
+            required = schema.get("required") or []
+            if "query" in required and not parameters.get("query"):
+                parameters["query"] = text
+            if not self.tool_registry.validate_parameters(definition, parameters):
                 return fallback
             result = dict(fallback)
             result.update(
                 {
                     "action": "mcp_call",
                     "tool": tool,
-                    "parameters": candidate.get("parameters") or {},
+                    "parameters": parameters,
                     "confidence": self._confidence(candidate.get("confidence")),
                 }
             )
@@ -609,8 +620,22 @@ class IntentRouter:
         }
         if self.memory:
             catalog = self.tool_store or self.memory
-            scores = {row["action"]: tuple(row.get("keywords") or []) for row in catalog.router_actions()}
+            scores = {}
+            for row in catalog.router_actions():
+                raw_kw = row.get("keywords")
+                if isinstance(raw_kw, str):
+                    try:
+                        kw_list = json.loads(raw_kw)
+                    except Exception:
+                        kw_list = []
+                elif isinstance(raw_kw, (list, tuple)):
+                    kw_list = list(raw_kw)
+                else:
+                    kw_list = []
+                scores[row["action"]] = tuple(kw_list)
         matches = {action: sum(1 for phrase in phrases if phrase in value) for action, phrases in scores.items()}
+        if not matches or max(matches.values()) == 0:
+            return {"action": "ask", "complexity": 3, "confidence": 0.0}
         action, score = max(matches.items(), key=lambda item: item[1])
         if score == 0:
             return {"action": "ask", "complexity": 3, "confidence": 0.0}

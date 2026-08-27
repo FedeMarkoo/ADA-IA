@@ -976,7 +976,9 @@ class ModelManager:
     def _call_ollama(self, prompt, **kwargs):
         model = kwargs.get("ollama_model") or self._model("chat", "ollama_model", "llama3.2:3b")
         if self.config.get("ollama_backend", "urllib") == "litellm":
-            return self._call_litellm_ollama(prompt, model, **kwargs)
+            if litellm_completion is not None:
+                return self._call_litellm_ollama(prompt, model, **kwargs)
+            logger.warning("litellm_backend_requested_but_not_installed_falling_back_to_urllib")
         num_ctx = self.resolve_effective_num_ctx(
             model,
             prompt=prompt,
