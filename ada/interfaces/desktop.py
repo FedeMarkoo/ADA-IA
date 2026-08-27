@@ -71,6 +71,16 @@ def run() -> None:
     window_holder = {}
 
     def close(*_args):
+        try:
+            from ada.interfaces.web.state import stop_telegram_service
+            stop_telegram_service()
+        except Exception:
+            pass
+        try:
+            from ada.infrastructure.runtime.monitoring import stop_prometheus
+            stop_prometheus()
+        except Exception:
+            pass
         server.shutdown()
         if server_thread.is_alive():
             server_thread.join(timeout=2)

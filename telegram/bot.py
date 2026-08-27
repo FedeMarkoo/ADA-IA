@@ -142,6 +142,8 @@ class TelegramListener:
         except OSError:
             logger.exception("telegram_health_write_failed")
 
+    _shutdown_notified: bool = False
+
     def _notify_lifecycle(self, text: str) -> None:
         """Send lifecycle notification (startup/shutdown) to authorized chats."""
         for cid in self.allowed_chat_ids:
@@ -150,6 +152,17 @@ class TelegramListener:
                     self.send_message(cid, text)
                 except Exception as exc:
                     logger.warning("telegram_lifecycle_notify_failed chat_id=%s error=%s", cid, exc)
+
+    def notify_shutdown(self) -> None:
+        """Send shutdown message to authorized chats immediately."""
+        if self._shutdown_notified:
+            return
+        self._shutdown_notified = True
+        try:
+            self._write_health("stopped")
+        except Exception:
+            pass
+        self._notify_lifecycle("🔴 ADA Offline — El servicio de Telegram se ha detenido.")
 
     def run(self) -> None:
         offset = None
@@ -180,8 +193,7 @@ class TelegramListener:
                     self._write_health("degraded", error=exc)
                     self.stop_event.wait(30 if conflict else max(self.poll_seconds, 3))
         finally:
-            self._write_health("stopped")
-            self._notify_lifecycle("🔴 ADA Offline — El servicio de Telegram se ha detenido.")
+            self.notify_shutdown()
 
     def _remember_update(self, update_id: int) -> None:
         if update_id in self._processed_update_ids:
@@ -502,17 +514,23 @@ def main():
 
     print("🚀 Servidor Telegram Bot iniciando...")
 
+    import atexit
     import signal
+
+    atexit.register(bot.notify_shutdown)
 
     def handle_signal(sig, frame):
         logger.info("telegram_shutdown_signal_received sig=%s", sig)
+        bot.notify_shutdown()
         bot.stop_event.set()
+        sys.exit(0)
 
-    try:
-        signal.signal(signal.SIGTERM, handle_signal)
-        signal.signal(signal.SIGINT, handle_signal)
-    except Exception:
-        pass
+    for sig_name in ("SIGTERM", "SIGINT", "SIGHUP"):
+        if hasattr(signal, sig_name):
+            try:
+                signal.signal(getattr(signal, sig_name), handle_signal)
+            except Exception:
+                pass
 
     bot.run()
 

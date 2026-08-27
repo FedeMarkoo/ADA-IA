@@ -228,6 +228,17 @@ def create_app(
 
     threading.Thread(target=_auto_start_monitoring, daemon=True, name="ada-auto-monitoring").start()
 
+    import atexit
+
+    def _auto_stop_services():
+        try:
+            from ada.interfaces.web.state import stop_telegram_service
+            stop_telegram_service()
+        except Exception:
+            pass
+
+    atexit.register(_auto_stop_services)
+
     return app
 
 
