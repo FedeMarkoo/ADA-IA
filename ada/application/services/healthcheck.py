@@ -328,9 +328,10 @@ class HealthcheckStore:
         self._lock.release()
 
     def prompts(self):
-        rows = self.conn.execute(
-            "SELECT id,category,name,capability,tags,prompt,criteria FROM healthcheck_prompts WHERE enabled=1 ORDER BY category,rowid"
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT id,category,name,capability,tags,prompt,criteria FROM healthcheck_prompts WHERE enabled=1 ORDER BY category,rowid"
+            ).fetchall()
         return [
             {
                 "id": r[0],
