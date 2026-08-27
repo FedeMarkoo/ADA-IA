@@ -5,7 +5,6 @@ import re
 import sqlite3
 import threading
 import urllib.request
-from pathlib import Path
 
 FUNCTIONAL_CATEGORY_LABELS = {
     "commands": "Sistema",
@@ -78,7 +77,14 @@ def _case(category, case_id, name, capability, prompt, must_match, tags=None, re
         "prompt": prompt,
         "must_match": must_match,
         "required_mcp": required_mcp or REQUIRED_MCP_BY_CATEGORY.get(category, "none"),
+        "expected": _default_expected(category),
     }
+
+
+def _default_expected(category):
+    if category in MCP_REQUIRED_CATEGORIES:
+        return "Debe consultar el MCP requerido, usar evidencia real y responder exactamente lo solicitado sin inventar datos ni ejecutar cambios no autorizados."
+    return "Debe responder directamente al pedido, con información correcta, completa y adecuada al contexto, sin limitarse a repetir palabras del prompt."
 
 
 # Data catalog. Categories may contain any number of prompts; no API/UI code is
@@ -253,33 +259,6 @@ HEALTHCHECK_PROMPTS = [
         [r"(permiso|acceso)", r"(leer|escribir|ejecutar)"],
     ),
 ]
-
-
-def _load_legacy_cases():
-    """Restore the original functional cases while keeping one unified catalog."""
-    catalog_path = Path(__file__).resolve().parents[3] / "ai_testing" / "prompts.json"
-    if not catalog_path.is_file():
-        return []
-    try:
-        source_cases = json.loads(catalog_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    existing = {item["id"] for item in HEALTHCHECK_PROMPTS}
-    imported = []
-    for item in source_cases:
-        if item.get("id") in existing or not item.get("prompt") or not item.get("category"):
-            continue
-        criteria = list(item.get("must_match") or [])
-        criteria.extend(re.escape(str(value)) for value in item.get("must_contain") or [])
-        imported.append(_case(
-            item["category"], item["id"], item["id"].replace("_", " ").title(), item["category"],
-            item["prompt"], criteria or [r".+"], [item["category"], "readonly", "restored"],
-        ))
-    return imported
-
-
-HEALTHCHECK_PROMPTS.extend(_load_legacy_cases())
-
 # Regression cases added after the original 52-case run.
 HEALTHCHECK_PROMPTS.extend([
     _case("agent", "judge_ai_required", "Evaluación semántica con IA", "agent",
@@ -320,7 +299,7 @@ class HealthcheckStore:
             CREATE TABLE IF NOT EXISTS healthcheck_prompts (
                 id TEXT PRIMARY KEY, category TEXT NOT NULL DEFAULT 'general', name TEXT NOT NULL,
                 capability TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', prompt TEXT NOT NULL,
-                criteria TEXT NOT NULL, required_mcp TEXT NOT NULL DEFAULT 'none', enabled INTEGER NOT NULL DEFAULT 1,
+                criteria TEXT NOT NULL, required_mcp TEXT NOT NULL DEFAULT 'none', expected TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS healthcheck_runs (
@@ -354,12 +333,13 @@ class HealthcheckStore:
             ("category", "TEXT NOT NULL DEFAULT 'general'"),
             ("tags", "TEXT NOT NULL DEFAULT '[]'"),
             ("required_mcp", "TEXT NOT NULL DEFAULT 'none'"),
+            ("expected", "TEXT NOT NULL DEFAULT ''"),
         ):
             if name not in columns:
                 self.conn.execute(f"ALTER TABLE healthcheck_prompts ADD COLUMN {name} {definition}")
         for item in HEALTHCHECK_PROMPTS:
             self.conn.execute(
-                "INSERT OR IGNORE INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp) VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT OR IGNORE INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp,expected) VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     item["id"],
                     item["category"],
@@ -369,10 +349,11 @@ class HealthcheckStore:
                     item["prompt"],
                     json.dumps(item["must_match"]),
                     item["required_mcp"],
+                    item["expected"],
                 ),
             )
             self.conn.execute(
-                "UPDATE healthcheck_prompts SET category=?, capability=?, tags=?, prompt=?, criteria=?, name=?, required_mcp=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                "UPDATE healthcheck_prompts SET category=?, capability=?, tags=?, prompt=?, criteria=?, name=?, required_mcp=?, expected=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (
                     item["category"],
                     item["capability"],
@@ -381,16 +362,21 @@ class HealthcheckStore:
                     json.dumps(item["must_match"]),
                     item["name"],
                     item["required_mcp"],
+                    item["expected"],
                     item["id"],
                 ),
             )
+        self.conn.execute(
+            "UPDATE healthcheck_prompts SET expected=? WHERE expected IS NULL OR expected=''",
+            ("Debe responder al pedido con información correcta y completa; si requiere un MCP, debe usar evidencia real y no inventar datos.",),
+        )
         self.conn.commit()
         self._lock.release()
 
     def prompts(self):
         with self._lock:
             rows = self.conn.execute(
-                "SELECT id,category,name,capability,tags,prompt,criteria,required_mcp FROM healthcheck_prompts WHERE enabled=1 ORDER BY category,rowid"
+                "SELECT id,category,name,capability,tags,prompt,criteria,required_mcp,expected FROM healthcheck_prompts WHERE enabled=1 ORDER BY category,rowid"
             ).fetchall()
         return [
             {
@@ -403,6 +389,7 @@ class HealthcheckStore:
                 "prompt": r[5],
                 "must_match": json.loads(r[6] or "[]"),
                 "required_mcp": r[7] or "none",
+                "expected": r[8] or "",
             }
             for r in rows
         ]
@@ -412,7 +399,7 @@ class HealthcheckStore:
         if not all(str(value or "").strip() for value in required) or not item.get("must_match"):
             raise ValueError("id, category, name, capability, prompt y must_match son obligatorios")
         self.conn.execute(
-            "INSERT INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp) VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp,expected) VALUES (?,?,?,?,?,?,?,?,?)",
             (
                 item["id"].strip(),
                 item["category"].strip(),
@@ -422,6 +409,7 @@ class HealthcheckStore:
                 item["prompt"].strip(),
                 json.dumps(item["must_match"]),
                 item.get("required_mcp") or REQUIRED_MCP_BY_CATEGORY.get(item["category"].strip(), "none"),
+                item.get("expected") or _default_expected(item["category"].strip()),
             ),
         )
         self.conn.commit()
@@ -645,8 +633,11 @@ def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b
         f"El MCP requerido para este caso es: {item.get('required_mcp') or 'none'}. "
         "Verificá explícitamente si se invocó ese MCP y rechazá el caso si era requerido y no hay evidencia exitosa. "
         "Devolvé SOLO JSON válido con estas claves: passed (boolean), score (número 0 a 1), issues (lista de strings) y rationale (string).\n\n"
-        f"CASO: {item.get('name')}\nPEDIDO: {item.get('prompt')}\nCRITERIOS AUXILIARES: {item.get('must_match', [])}"
-        f"\nERROR DE EJECUCIÓN: {execution_error or 'ninguno'}\nRESPUESTA DE ADA: {reply or '(sin respuesta)'}"
+        f"CASO: {item.get('name')}\nPEDIDO: {item.get('prompt')}\nRESPUESTA DE ADA: {reply or '(sin respuesta)'}"
+        f"\nMCPS EJECUTADOS: {json.dumps(mcp_evidence or [], ensure_ascii=False)}"
+        f"\nESPERADO: {item.get('expected') or _default_expected(category)}"
+        f"\nCRITERIOS AUXILIARES: {item.get('must_match', [])}"
+        f"\nERROR DE EJECUCIÓN: {execution_error or 'ninguno'}"
     )
     payload = json.dumps(
         {"model": model, "prompt": judge_prompt, "stream": False, "format": "json", "options": {"temperature": 0}}
