@@ -12,6 +12,7 @@ def test_trigger_catalog_exposes_future_entry_points_without_starting_them():
             {"telegram": {"enabled": False, "token": ""}},
             Path(__file__).resolve().parents[1],
             state_dir=directory,
+            discover_existing=False,
         )
         summary = manager.summary()
 
