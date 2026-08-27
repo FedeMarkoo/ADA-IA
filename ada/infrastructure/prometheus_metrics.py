@@ -212,13 +212,20 @@ LLM_TOKEN_USAGE = Gauge(
     ("component",),
     registry=REGISTRY,
 )
+LLM_TOKENS_TOTAL = Counter(
+    "ada_llm_tokens_consumed",
+    "Cumulative LLM tokens consumed by context component.",
+    ("component",),
+    registry=REGISTRY,
+)
 UP = Gauge("ada_up", "Whether the ADA web process is alive.", registry=REGISTRY)
 UP.set(1)
 
 _process = psutil.Process(os.getpid())
 _process_started = time.time()
 _observed_ollama_models = set()
-TOKEN_COMPONENTS = ("memory", "tools", "system", "prompt", "response", "total")
+TOKEN_COMPONENTS = ("memory", "tools", "tool_response", "system", "prompt", "response", "libre", "total")
+DEFAULT_CONTEXT_WINDOW = 4096
 
 
 def estimate_token_count(value) -> int:
@@ -226,20 +233,41 @@ def estimate_token_count(value) -> int:
     return max(0, (len(str(value or "")) + 3) // 4)
 
 
-def set_llm_token_usage(usage=None, response=None) -> dict:
+def set_llm_token_usage(usage=None, response=None, max_context=None) -> dict:
     """Publish the latest request breakdown and return normalized values."""
     values = {component: 0 for component in TOKEN_COMPONENTS}
-    for component in ("memory", "tools", "system", "prompt"):
+    for component in ("memory", "tools", "tool_response", "system", "prompt"):
         if usage and component in usage:
             values[component] = max(0, int(usage[component] or 0))
     if usage and usage.get("response"):
         values["response"] = max(0, int(usage["response"]))
     if response is not None:
         values["response"] = estimate_token_count(response)
-    values["total"] = sum(values[component] for component in TOKEN_COMPONENTS[:-1])
+
+    used_components = ("memory", "tools", "tool_response", "system", "prompt", "response")
+    values["total"] = sum(values[component] for component in used_components)
+
+    ctx_limit = int(max_context or (usage.get("num_ctx") if usage else None) or DEFAULT_CONTEXT_WINDOW)
+    values["libre"] = max(0, ctx_limit - values["total"])
+
     for component, value in values.items():
         LLM_TOKEN_USAGE.labels(component=component).set(value)
+        if response is not None and value > 0 and component != "libre":
+            LLM_TOKENS_TOTAL.labels(component=component).inc(value)
     return values
+
+
+def reset_llm_token_usage(max_context=None) -> None:
+    """Reset the active LLM token gauge to 0 and restore libre to full context capacity."""
+    for component in ("memory", "tools", "tool_response", "system", "prompt", "response", "total"):
+        LLM_TOKEN_USAGE.labels(component=component).set(0)
+    ctx_limit = int(max_context or DEFAULT_CONTEXT_WINDOW)
+    LLM_TOKEN_USAGE.labels(component="libre").set(ctx_limit)
+
+
+# Initialize default gauges
+reset_llm_token_usage()
+
 
 
 def _ollama_manifest_path(model: str, models_root: str = "") -> Path:

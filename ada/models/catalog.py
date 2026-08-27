@@ -18,7 +18,7 @@ def _find_project_root() -> Path:
 
 PROJECT_ROOT = _find_project_root()
 CATALOG_PATH = PROJECT_ROOT / "models" / "catalog.json"
-DEFAULT_DB_PATH = PROJECT_ROOT / "models.db"
+DEFAULT_DB_PATH = Path.home() / "Desktop" / "ADA_Data" / "configurations.db"
 
 DEFAULT_MODEL_CATALOG = [
     {
@@ -141,7 +141,13 @@ class ModelCatalog:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, db_path: Optional[Path] = None):
         self.config = config or {}
-        self.db_path = Path(db_path or self.config.get("models_db_path") or DEFAULT_DB_PATH)
+        self.db_path = Path(
+            db_path
+            or self.config.get("configurations_db_path")
+            or self.config.get("database_paths", {}).get("configurations")
+            or self.config.get("models_db_path")
+            or DEFAULT_DB_PATH
+        )
         self._lock = threading.RLock()
         self._init_db()
 
@@ -174,8 +180,15 @@ class ModelCatalog:
                 if count == 0:
                     # Seed from catalog.json or DEFAULT_MODEL_CATALOG
                     models_to_seed = []
+                    configured = self.config.get("model_catalog")
+                    if configured:
+                        if isinstance(configured, dict):
+                            configured = [dict({"name": name}, **value) for name, value in configured.items()]
+                        models_to_seed = configured
                     if CATALOG_PATH.is_file():
                         try:
+                            if models_to_seed:
+                                raise ValueError("configured catalog already loaded")
                             with open(CATALOG_PATH, "r", encoding="utf-8") as f:
                                 data = json.load(f)
                                 models_to_seed = data.get("models", [])
@@ -205,8 +218,11 @@ class ModelCatalog:
         """Return all models from SQLite with hardware suitability calculation."""
         profile = hardware_profile()
         ram_gb = profile.get("ram_gb", 8)
+        # Preserve the lightweight standalone API used by integrations and
+        # tests. The full Agent config always supplies database_paths and
+        # therefore uses configurations.db as the source of truth.
         configured = self.config.get("model_catalog")
-        if configured:
+        if configured and not self.config.get("database_paths") and not self.config.get("configurations_db_path"):
             if isinstance(configured, dict):
                 configured = [dict({"name": name}, **value) for name, value in configured.items()]
             result = []
@@ -218,7 +234,6 @@ class ModelCatalog:
                 entry["recommended"] = ram_gb >= (min_ram + 2)
                 result.append(entry)
             return result
-
         with self._lock:
             with sqlite3.connect(str(self.db_path), check_same_thread=False) as conn:
                 conn.row_factory = sqlite3.Row

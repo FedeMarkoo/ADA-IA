@@ -29,7 +29,16 @@ def load_config(path: Path | str | None = None, project_root: Path | str | None 
             "max_threads": 4,
             "use_mps": False,
             "data_dir": str(default_data_dir),
-            "db_path": str(default_data_dir / "memory.db"),
+            "db_path": str(default_data_dir / "memories.db"),
+            "database_paths": {
+                "memories": str(default_data_dir / "memories.db"),
+                "tools": str(default_data_dir / "tools.db"),
+                "configurations": str(default_data_dir / "configurations.db"),
+                "credentials": str(default_data_dir / "credentials.db"),
+                "operations": str(default_data_dir / "operations.db"),
+                "tests": str(default_data_dir / "tests.db"),
+            },
+            "mcp_data_dir": str(default_data_dir / "mcp_data"),
             "allowed_roots": [str(default_data_dir), str(Path.home() / "Desktop")],
             "confirm_risky": True,
             "memory_encryption": False,
@@ -44,6 +53,25 @@ def load_config(path: Path | str | None = None, project_root: Path | str | None 
     config["data_dir"] = _path(config["data_dir"], root)
     config.setdefault("db_path", str(Path(config["data_dir"]) / "memory.db"))
     config["db_path"] = _path(config["db_path"], root)
+    # `db_path` remains a legacy alias while the stores are migrated.
+    legacy_db_path = config.get("db_path")
+    config.setdefault("database_paths", {})
+    if not isinstance(config["database_paths"], dict):
+        raise ValueError("database_paths debe ser un objeto.")
+    data_dir = Path(config["data_dir"])
+    defaults = {
+        # Existing explicit db_path remains the memory source until the
+        # migration command copies it to memories.db.
+        "memories": legacy_db_path or data_dir / "memories.db",
+        "tools": data_dir / "tools.db",
+        "configurations": data_dir / "configurations.db",
+        "credentials": data_dir / "credentials.db",
+        "operations": data_dir / "operations.db",
+        "tests": data_dir / "tests.db",
+    }
+    for name, default in defaults.items():
+        config["database_paths"].setdefault(name, str(default))
+    config.setdefault("mcp_data_dir", str(data_dir / "mcp_data"))
     if config["db_path"] != ":memory:":
         try:
             Path(config["db_path"]).parent.mkdir(parents=True, exist_ok=True)
@@ -79,8 +107,8 @@ def load_config(path: Path | str | None = None, project_root: Path | str | None 
     config.setdefault("local_model_switch_queue_limit", 1)
     config.setdefault("local_model_restore_previous_on_failure", True)
     config.setdefault("allowed_commands", [])
-    # Agent work is allowed to take minutes. These limits are intentionally
-    # independent from the selected model/performance mode.
+    config.setdefault("adaptive_context", True)
+    config.setdefault("min_num_ctx", 1024)
     config.setdefault("timeout_profile", "patient")
     config.setdefault("router_timeout", 30)
     config.setdefault("model_timeout", 300)
@@ -117,6 +145,7 @@ def validate_config(config):
     bool_keys = (
         "confirm_risky",
         "adaptive_models",
+        "adaptive_context",
         "auto_pull_models",
         "local_model_exclusive_mode",
         "local_model_restore_previous_on_failure",
@@ -153,6 +182,13 @@ def validate_config(config):
             raise ValueError("chat_workers debe ser entero.") from exc
         if not 1 <= chat_workers <= 32:
             raise ValueError("chat_workers debe estar entre 1 y 32.")
+    if "min_num_ctx" in config:
+        try:
+            min_ctx = int(config["min_num_ctx"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("min_num_ctx debe ser entero.") from exc
+        if min_ctx < 256:
+            raise ValueError("min_num_ctx debe ser al menos 256.")
     timeout_keys = ("router_timeout", "model_timeout", "chat_timeout_seconds", "food_advisor_timeout")
     for key in timeout_keys:
         if key not in config:

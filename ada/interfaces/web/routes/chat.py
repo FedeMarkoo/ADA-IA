@@ -74,7 +74,7 @@ def chat():
         return jsonify({"error": "El mensaje no puede estar vacío."}), 400
 
     state = get_session_state()
-    lang = payload.get("lang") or state.conversation.memory.get_preference("lang", "es")
+    lang = payload.get("lang") or runtime.get("cfg", {}).get("lang") or "es"
     source = payload.get("source") or ("telegram" if request.headers.get("X-ADA-Source") == "telegram" else "web")
     request_id = secrets.token_hex(4)
 
@@ -209,6 +209,23 @@ def activity_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
     )
+
+
+@chat_bp.route("/api/debug", methods=["GET", "POST"])
+def debug_api():
+    runtime = get_runtime()
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        enable = payload.get("enabled") if "enabled" in payload else payload.get("enable")
+        if enable is None:
+            new_state = not runtime.get("debug_enabled", False)
+        else:
+            new_state = bool(enable)
+        runtime["debug_enabled"] = new_state
+        if runtime.get("debug_log"):
+            runtime["debug_log"].set_enabled(new_state)
+        return jsonify({"ok": True, "enabled": new_state, "debug_enabled": new_state})
+    return jsonify({"ok": True, "enabled": runtime.get("debug_enabled", False), "debug_enabled": runtime.get("debug_enabled", False)})
 
 
 @chat_bp.route("/api/debug/toggle", methods=["POST"])

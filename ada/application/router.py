@@ -10,6 +10,8 @@ import logging
 import re
 from datetime import date
 from ada.application.tool_registry import ToolRegistry
+from ada.application.services.prompts import PromptWithUsage
+from ada.infrastructure.prometheus_metrics import estimate_token_count
 
 logger = logging.getLogger("ada.router")
 
@@ -202,6 +204,7 @@ class IntentRouter:
                 ollama_model=self.model_manager.select_model("router", role="router"),
                 temperature=0,
                 max_tokens=180 if external_hint else 180,
+                token_usage=getattr(prompt, "token_usage", None),
                 timeout=(
                     max(self.config.get("router_timeout", 30), 60)
                     if external_hint
@@ -278,13 +281,23 @@ class IntentRouter:
         template = self._template(
             "food_mutation_verifier", "Verificá la mutación y devolvé SOLO JSON. Intención: {intent}\nPedido: {text}"
         )
-        prompt = template.replace("{intent}", str(intent)).replace("{text}", text)
+        prompt_str = template.replace("{intent}", str(intent)).replace("{text}", text)
+        prompt = PromptWithUsage(
+            prompt_str,
+            {
+                "system": estimate_token_count(template.replace("{intent}", str(intent)).replace("{text}", "")),
+                "memory": 0,
+                "tools": 0,
+                "prompt": estimate_token_count(text),
+            },
+        )
         try:
             raw = self.model_manager.call(
                 provider,
                 prompt,
                 temperature=0,
                 max_tokens=180,
+                token_usage=getattr(prompt, "token_usage", None),
                 timeout=self.config.get("router_timeout", 30),
                 format=self._schema("food_verify"),
             )
@@ -308,10 +321,20 @@ class IntentRouter:
         template = self._template(
             "food_classifier", "Clasificá el pedido y devolvé SOLO JSON. Historial: {history}\nPedido: {text}"
         )
-        prompt = (
-            template.replace("{history}", history[-1200:])
+        history_str = history[-1200:]
+        prompt_str = (
+            template.replace("{history}", history_str)
             .replace("{text}", text)
             .replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))
+        )
+        prompt = PromptWithUsage(
+            prompt_str,
+            {
+                "system": estimate_token_count(template.replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))),
+                "memory": estimate_token_count(history_str),
+                "tools": 0,
+                "prompt": estimate_token_count(text),
+            },
         )
         try:
             raw = self.model_manager.call(
@@ -319,6 +342,7 @@ class IntentRouter:
                 prompt,
                 temperature=0,
                 max_tokens=400,
+                token_usage=getattr(prompt, "token_usage", None),
                 timeout=self.config.get("router_timeout", 30),
                 format=self._schema("food"),
             )
@@ -385,18 +409,22 @@ class IntentRouter:
         )
         candidates_text = (
             "\n".join(
-                f"- id={item['id']} kind={item['kind']} score={item['score']}: {item['content']}"
+                f"- id={item['id']} kind={item['kind']} score={item['score']}: {item['summary']}"
                 for item in (memory_candidates or [])
             )
             or "(sin candidatos relevantes)"
         )
-        return (
-            template.replace("{actions}", self._actions_text())
+        actions_str = self._actions_text()
+        tools_str = self._tools_text()
+        history_str = history[-2500:]
+
+        base_system = (
+            template.replace("{actions}", actions_str)
             .replace("{food_actions}", ", ".join(sorted(FOOD_ACTIONS)))
-            .replace("{history}", history[-2500:])
-            .replace("{text}", text)
+            .replace("{history}", "{history}")
+            .replace("{text}", "{text}")
             + "\nHerramientas MCP activas:\n"
-            + self._tools_text()
+            + tools_str
             + "\nSi corresponde a una consulta externa, elegí mcp_call con esta forma exacta: "
             + '{"action":"mcp_call","tool":"nombre.del.inventario","parameters":{}}. '
             + "No uses method, params ni nombres inventados; no inventes resultados."
@@ -405,11 +433,28 @@ class IntentRouter:
             + "\nSi seleccionás memoria, devolvé memory_ids y memory_confidence."
         )
 
+        full_prompt = base_system.replace("{history}", history_str).replace("{text}", text)
+
+        system_tokens = estimate_token_count(base_system.replace("{history}", "").replace("{text}", ""))
+        memory_tokens = estimate_token_count(history_str) + estimate_token_count(candidates_text)
+        tools_tokens = estimate_token_count(tools_str)
+        prompt_tokens = estimate_token_count(text)
+
+        return PromptWithUsage(
+            full_prompt,
+            {
+                "system": system_tokens,
+                "memory": memory_tokens,
+                "tools": tools_tokens,
+                "prompt": prompt_tokens,
+            },
+        )
+
     def _mcp_prompt(self, text):
         """Keep external tool selection focused on the live MCP catalog."""
         category = "web_search" if re.search(r"\b(internet|web|noticia|fuente|enlace)\b", text, re.I) else None
         catalog = self._tools_text(category) or self._tools_text()
-        return (
+        system_instructions = (
             "Debés elegir una herramienta MCP del inventario para responder el pedido; no respondas con texto, no pidas aclaraciones y no uses una acción local. "
             "Devolvé SOLO JSON con esta forma exacta: "
             '{"action":"mcp_call","tool":"nombre.del.inventario","parameters":{}}. '
@@ -418,7 +463,17 @@ class IntentRouter:
             "Si se piden próximos eventos sin un eventId, elegí una herramienta de listado o búsqueda; "
             "no uses una herramienta de detalle que requiera un ID.\n"
             f"Fecha actual: {date.today().isoformat()}. Para eventos próximos no uses fechas pasadas.\n"
-            "Inventario MCP activo:\n" + catalog + "\nPedido: " + text
+            "Inventario MCP activo:\n" + catalog + "\nPedido: "
+        )
+        full_prompt = system_instructions + text
+        return PromptWithUsage(
+            full_prompt,
+            {
+                "system": estimate_token_count(system_instructions),
+                "memory": 0,
+                "tools": estimate_token_count(catalog),
+                "prompt": estimate_token_count(text),
+            },
         )
 
     @staticmethod

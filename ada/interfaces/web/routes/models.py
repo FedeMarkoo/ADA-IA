@@ -179,6 +179,8 @@ def ollama_config_api():
         if "ollama_num_ctx" in data:
             val = data["ollama_num_ctx"]
             candidate["ollama_num_ctx"] = int(val) if val else None
+        if "model_num_ctx" in data and isinstance(data["model_num_ctx"], dict):
+            candidate["model_num_ctx"] = {str(k): int(v) for k, v in data["model_num_ctx"].items() if v}
         if "ollama_keep_alive" in data:
             candidate["ollama_keep_alive"] = str(data["ollama_keep_alive"])
         if "ollama_auto_unload" in data:

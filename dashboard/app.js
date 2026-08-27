@@ -50,9 +50,22 @@ export const api = {
     return '';
   },
 
+  async ensureCsrfToken() {
+    let token = this.getCookie('ada_csrf');
+    if (token) return token;
+
+    // The desktop WebKit shell can start executing the module before the
+    // initial document response has committed its Set-Cookie header. Make a
+    // same-origin read to complete the bootstrap, without weakening the
+    // server-side CSRF check.
+    await fetch('/', { credentials: 'same-origin', cache: 'no-store' });
+    return this.getCookie('ada_csrf');
+  },
+
   async request(path, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-    const token = this.getCookie('ada_csrf');
+    const mutates = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((options.method || 'GET').toUpperCase());
+    const token = mutates ? await this.ensureCsrfToken() : this.getCookie('ada_csrf');
     if (token) {
       headers['X-ADA-Token'] = token;
     }
@@ -70,6 +83,7 @@ export const api = {
 
   getStatus() { return this.request('/api/status'); },
   getCoreState() { return this.request('/api/core/state'); },
+  getGrafanaUrls() { return this.request('/api/grafana/dashboard-url'); },
   getDebug() { return this.request('/api/debug'); },
   setDebug(enabled) { return this.request('/api/debug', { method: 'POST', body: JSON.stringify({ enabled }) }); },
 
@@ -255,6 +269,8 @@ const ICON_PATHS = {
   more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
   check: ['m5 12 4 4L19 6'],
   alert: ['M12 3 2.7 20h18.6Z', 'M12 9v4', 'M12 17h.01'],
+  chevronLeft: ['m15 18-6-6 6-6'],
+  chevronRight: ['m9 18 6-6-6-6'],
 };
 
 function Icon({ name, size = 18 }) {
@@ -268,6 +284,24 @@ function Icon({ name, size = 18 }) {
 
 // 1. Sidebar Component
 function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus, isOpen, onClose }) {
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('ada_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapse = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('ada_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const isOnline = isOllamaAvailable(statusData) || runtimeStatus?.available === true;
   const systemReady = isOnline && statusData?.agent_enabled !== false;
   const toolCount = (statusData?.mcp_servers || []).reduce((total, server) => total + (Number(server.tool_count) || 0), 0);
@@ -291,49 +325,74 @@ function Sidebar({ activeTab, onSelectTab, statusData, runtimeStatus, isOpen, on
 
   return h(React.Fragment, null, [
     h('button', { className: `sidebar-scrim ${isOpen ? 'visible' : ''}`, onClick: onClose, 'aria-label': 'Cerrar navegación', key: 'scrim' }),
-    h('aside', { className: `sidebar ${isOpen ? 'mobile-open' : ''}`, id: 'sidebar', 'aria-label': 'Navegación principal', key: 'sidebar' }, [
-    h('div', { className: 'sidebar-header', key: 'header' }, [
-      h('div', { className: 'brand' }, [
-        h('div', { className: 'brand-orb' }, [
-          h('span', { className: 'orb-glow' }),
-          h('span', { className: 'orb-letter' }, 'A'),
-        ]),
-        h('div', { className: 'brand-info' }, [
-          h('span', { className: 'brand-title' }, 'ADA'),
-          h('span', { className: 'brand-tag' }, 'Gestor local'),
-        ]),
-        h('button', { className: 'icon-button sidebar-close', onClick: onClose, 'aria-label': 'Cerrar navegación' }, h(Icon, { name: 'close' })),
-      ]),
-    ]),
-    h('nav', { className: 'sidebar-nav', key: 'nav' }, 
-      navItems.map((item) => {
-        const elements = [];
-        if (item.group !== currentGroup) {
-          currentGroup = item.group;
-          elements.push(h('div', { className: 'nav-group-title', key: `grp-${currentGroup}` }, currentGroup));
-        }
-        elements.push(
-          h('button', {
-            key: item.id,
-            className: `nav-item ${activeTab === item.id ? 'active' : ''}`,
-            id: `nav-${item.id}`,
-            onClick: () => onSelectTab(item.id),
-            'aria-current': activeTab === item.id ? 'page' : undefined,
+    h('aside', {
+      className: `sidebar ${isOpen ? 'mobile-open' : ''} ${isCollapsed ? 'collapsed' : ''}`,
+      id: 'sidebar',
+      'aria-label': 'Navegación principal',
+      key: 'sidebar'
+    }, [
+      h('div', { className: 'sidebar-header', key: 'header' }, [
+        h('div', { className: 'brand' }, [
+          h('div', {
+            className: 'brand-orb',
+            onClick: isCollapsed ? toggleCollapse : undefined,
+            title: isCollapsed ? 'Expandir menú' : undefined,
+            style: isCollapsed ? { cursor: 'pointer' } : undefined
           }, [
-            h('span', { className: 'nav-item-icon', key: 'icon' }, h(Icon, { name: item.icon })),
-            h('span', { className: 'nav-item-label', key: 'lbl' }, item.label),
-            item.badge ? h('span', { className: `badge ${item.badgeClass || ''}`, key: 'badge' }, item.badge) : null,
-          ])
-        );
-        return elements;
-      })
-    ),
-    h('div', { className: 'sidebar-footer', key: 'footer' }, [
-      h('div', { className: 'runtime-pill', id: 'runtime-status-pill' }, [
-        h('span', { className: `status-dot ${systemReady ? 'online' : 'offline'}` }),
-        h('span', { className: 'status-text' }, systemReady ? 'Sistema operativo' : 'Requiere atención'),
+            h('span', { className: 'orb-glow' }),
+            h('span', { className: 'orb-letter' }, 'A'),
+          ]),
+          !isCollapsed ? h('div', { className: 'brand-info' }, [
+            h('span', { className: 'brand-title' }, 'ADA'),
+            h('span', { className: 'brand-tag' }, 'Gestor local'),
+          ]) : null,
+          h('button', {
+            className: 'icon-button sidebar-collapse-btn',
+            onClick: toggleCollapse,
+            title: isCollapsed ? 'Expandir menú lateral' : 'Colapsar menú lateral',
+            'aria-label': isCollapsed ? 'Expandir menú lateral' : 'Colapsar menú lateral'
+          }, h(Icon, { name: isCollapsed ? 'chevronRight' : 'chevronLeft' })),
+          h('button', { className: 'icon-button sidebar-close', onClick: onClose, 'aria-label': 'Cerrar navegación' }, h(Icon, { name: 'close' })),
+        ]),
       ]),
-    ]),
+      h('nav', { className: 'sidebar-nav', key: 'nav' },
+        navItems.map((item) => {
+          const elements = [];
+          if (item.group !== currentGroup) {
+            currentGroup = item.group;
+            elements.push(
+              isCollapsed
+                ? h('div', { className: 'nav-group-divider', key: `grp-div-${currentGroup}`, title: currentGroup })
+                : h('div', { className: 'nav-group-title', key: `grp-${currentGroup}` }, currentGroup)
+            );
+          }
+          elements.push(
+            h('button', {
+              key: item.id,
+              className: `nav-item ${activeTab === item.id ? 'active' : ''}`,
+              id: `nav-${item.id}`,
+              onClick: () => onSelectTab(item.id),
+              title: isCollapsed ? `${item.label}${item.badge ? ` (${item.badge})` : ''}` : undefined,
+              'aria-current': activeTab === item.id ? 'page' : undefined,
+            }, [
+              h('span', { className: 'nav-item-icon', key: 'icon' }, h(Icon, { name: item.icon })),
+              !isCollapsed ? h('span', { className: 'nav-item-label', key: 'lbl' }, item.label) : null,
+              item.badge ? h('span', { className: `badge ${item.badgeClass || ''} ${isCollapsed ? 'badge-dot-collapsed' : ''}`, key: 'badge' }, isCollapsed ? '' : item.badge) : null,
+            ])
+          );
+          return elements;
+        })
+      ),
+      h('div', { className: 'sidebar-footer', key: 'footer' }, [
+        h('div', {
+          className: `runtime-pill ${isCollapsed ? 'collapsed-pill' : ''}`,
+          id: 'runtime-status-pill',
+          title: systemReady ? 'Sistema operativo' : 'Requiere atención'
+        }, [
+          h('span', { className: `status-dot ${systemReady ? 'online' : 'offline'}` }),
+          !isCollapsed ? h('span', { className: 'status-text' }, systemReady ? 'Sistema operativo' : 'Requiere atención') : null,
+        ]),
+      ]),
     ]),
   ]);
 }
@@ -666,61 +725,43 @@ function OverviewView({ statusData, onSwitchTab, showToast, onRefresh }) {
   ]);
 }
 
-function DesktopMetricsFallback() {
-  const [metrics, setMetrics] = useState(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const response = await fetch('/metrics', { credentials: 'same-origin' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const text = await response.text();
-        const values = {};
-        text.split('\n').forEach((line) => {
-          if (!line || line.startsWith('#')) return;
-          const match = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{[^}]*\})?\s+([-+0-9.eE]+)$/);
-          if (match && values[match[1]] == null) values[match[1]] = Number(match[2]);
-        });
-        if (mounted) { setMetrics(values); setError(''); }
-      } catch (loadError) {
-        if (mounted) setError(loadError.message || 'No se pudieron leer las métricas');
-      }
-    };
-    load();
-    const interval = setInterval(load, 5000);
-    return () => { mounted = false; clearInterval(interval); };
-  }, []);
-
-  const value = (name, format = (item) => item.toLocaleString('es-AR', { maximumFractionDigits: 1 })) => {
-    const item = metrics?.[name];
-    return item == null || Number.isNaN(item) ? '—' : format(item);
-  };
-  const cards = [
-    ['ada_up', 'ADA', (item) => item === 1 ? 'Operativo' : 'Sin datos'],
-    ['process_resident_memory_bytes', 'Memoria ADA', (item) => `${(item / 1024 / 1024).toFixed(0)} MB`],
-    ['process_cpu_seconds_total', 'CPU acumulada', (item) => `${item.toFixed(1)} s`],
-    ['ada_http_requests_total', 'Requests totales'],
-  ];
-  return h('section', { className: 'tab-view active metrics-view metrics-dashboard' }, [
-    h('div', { className: 'metrics-hero' }, [
-      h('div', null, [h('span', { className: 'eyebrow' }, 'OBSERVABILIDAD'), h('h1', null, 'Métricas'), h('p', null, 'Vista local compatible con la aplicación de escritorio.')]),
-      h('div', { className: 'metrics-freshness' }, [h('span', { className: 'status-dot online' }), h('span', null, error ? `Error: ${error}` : 'Lectura activa · cada 5 segundos')]),
-    ]),
-    h('div', { className: 'metrics-kpis metrics-kpis-wide' }, cards.map(([name, label, formatter]) => h('article', { className: 'metric-kpi', key: name }, [h('span', null, label), h('strong', null, value(name, formatter)), h('small', null, name)]))),
-    h('div', { className: 'metrics-empty-panel' }, [h('strong', null, 'Grafana no es compatible con el motor WebKit de esta ventana'), h('span', null, 'Se muestran las métricas reales de ADA directamente desde su endpoint Prometheus.')]),
-  ]);
-}
-
-function MetricsView() {
-  // The native desktop shell uses WebKitGTK. Grafana's SPA is not reliable
-  // there, while Chromium can keep the full interactive dashboard.
-  if (/ADA\/1\.0/.test(navigator.userAgent)) return h(DesktopMetricsFallback);
+function MetricsView({ statusData }) {
   const grafanaBaseUrl = (window.__ADA_GRAFANA_URL__ || `${window.location.protocol}//${window.location.hostname}:3000`).replace(/\/$/, '');
-  const grafanaDashboardUrl = `${grafanaBaseUrl}/d/ada-overview/ada-operaciones?orgId=1&kiosk=tv&refresh=10s`;
+
+  // Calculate dynamic from range: absolute start timestamp of gestor to now, capped at 1h max
+  let fromRange = 'now-1h';
+  if (statusData?.identity?.started_at) {
+    const startedAtMs = new Date(statusData.identity.started_at).getTime();
+    if (!isNaN(startedAtMs)) {
+      const nowMs = Date.now();
+      const elapsedMs = nowMs - startedAtMs;
+      if (elapsedMs < 3600000) {
+        // Less than 1 hour: fix the start to the exact timestamp when the gestor started
+        fromRange = startedAtMs;
+      } else {
+        // More than 1 hour: 1 hour window
+        fromRange = 'now-1h';
+      }
+    }
+  }
+
+  const grafanaDashboardUrl = `${grafanaBaseUrl}/d/ada-overview?kiosk=tv&refresh=10s&from=${fromRange}&to=now`;
+
   return h('section', { className: 'tab-view active metrics-view' }, [
-    h('div', { className: 'grafana-embed' }, [h('iframe', { src: grafanaDashboardUrl, title: 'Dashboard de métricas de ADA en Grafana', loading: 'eager', allowFullScreen: true })]),
+    h('div', { className: 'grafana-embed' }, [
+      h('iframe', {
+        src: grafanaDashboardUrl,
+        title: 'Dashboard de métricas de ADA en Grafana',
+        loading: 'eager',
+        allowFullScreen: true,
+        style: {
+          width: '125%',
+          height: '125%',
+          transform: 'scale(0.8)',
+          transformOrigin: 'top left'
+        }
+      })
+    ])
   ]);
 }
 
@@ -4507,7 +4548,7 @@ export function App() {
         activeTab === 'overview' ? h(OverviewView, { statusData, onSwitchTab: selectTab, showToast, onRefresh: refreshAll }) : null,
         activeTab === 'core' ? h(CoreView, { onSwitchTab: selectTab }) : null,
         activeTab === 'benchmark' ? h(HealthcheckView, { showToast }) : null,
-        activeTab === 'metrics' ? h(MetricsView, { showToast }) : null,
+        activeTab === 'metrics' ? h(MetricsView, { statusData, showToast }) : null,
         activeTab === 'ollama' ? h(OllamaView, { modelsData: ollamaData, statusData, onRefresh: refreshAll, showToast, onBenchmark: (m) => { selectTab('benchmark'); } }) : null,
         activeTab === 'models' ? h(ModelsView, { installedModels: ollamaData.models || [], showToast }) : null,
         activeTab === 'mcps' ? h(MCPsView, { showToast }) : null,

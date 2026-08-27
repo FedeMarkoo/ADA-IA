@@ -17,9 +17,10 @@ class PromptWithUsage(str):
 
 
 class PromptBuilder:
-    def __init__(self, memory, mcp_manager=None):
+    def __init__(self, memory, mcp_manager=None, configuration_store=None):
         self.memory = memory
         self.mcp_manager = mcp_manager
+        self.configuration_store = configuration_store
         self._proc_cache = (0.0, {})
 
     @staticmethod
@@ -38,6 +39,9 @@ class PromptBuilder:
 
     def task(self, task, language="auto"):
         fallback = self.system(language)
+        if self.configuration_store:
+            self.configuration_store.ensure_system_prompt(fallback, priority=100)
+            fallback = self.configuration_store.system_prompt(fallback)
         template = self.memory.prompt_template("agent_system", fallback)
         prompt = template.replace("{language}", "Responde en español." if str(language).startswith("es") else "")
         # This rule is appended even when the system template comes from an

@@ -24,6 +24,7 @@ from ada.infrastructure.prometheus_metrics import (
     OLLAMA_EXECUTIONS,
     OLLAMA_IN_FLIGHT,
     estimate_token_count,
+    reset_llm_token_usage,
     set_llm_token_usage,
 )
 from ada.ollama.client import OllamaClient
@@ -137,18 +138,14 @@ class ModelManager:
                         raise RuntimeError("Timeout esperando el cambio de modelo local.")
                     self._local_model_condition.wait(min(0.1, remaining))
                     continue
-                if self._local_resident_model in (None, model):
-                    if self._local_resident_model is None:
-                        running = client.running_models()
-                        others = [
-                            item.get("name") for item in running if item.get("name") and item.get("name") != model
-                        ]
-                        if others:
-                            self._local_model_switching = True
-                            break
-                    self._local_resident_model = model
+                running = client.running_models()
+                others = [
+                    item.get("name") for item in running if item.get("name") and item.get("name") != model
+                ]
+                if not others and self._local_resident_model == model:
                     self._local_model_active += 1
                     return True
+
                 if self._local_model_active:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
@@ -556,6 +553,63 @@ class ModelManager:
             result.append(dict(item, hardware_tier=profile["tier"]))
         return result
 
+    def model_context_limit(self, model: str, default: int = None) -> int:
+        """Resolve the effective context window (num_ctx) for a specific model."""
+        if not model:
+            return default or int(self.config.get("ollama_num_ctx", 4096))
+        clean_model = str(model).split("@")[0].strip()
+        base_name = clean_model.split(":")[0] if ":" in clean_model else clean_model
+
+        model_ctx_map = self.config.get("model_num_ctx") or {}
+        if clean_model in model_ctx_map and model_ctx_map[clean_model]:
+            return int(model_ctx_map[clean_model])
+        if base_name in model_ctx_map and model_ctx_map[base_name]:
+            return int(model_ctx_map[base_name])
+
+        catalog = self.config.get("model_catalog") or []
+        if isinstance(catalog, dict):
+            catalog = [dict({"name": name}, **value) for name, value in catalog.items()]
+        for item in catalog:
+            if isinstance(item, dict) and item.get("name") in (clean_model, base_name) and item.get("num_ctx"):
+                return int(item["num_ctx"])
+
+        return default or int(self.config.get("ollama_num_ctx", 4096))
+
+    def resolve_effective_num_ctx(
+        self,
+        model: str,
+        prompt: Any = None,
+        max_tokens: int = 0,
+        num_ctx: int = None,
+        adaptive: bool = None,
+        role: str = "chat",
+    ) -> int:
+        """Resolve dynamic context window (num_ctx), bounded by the configured model ceiling."""
+        ceiling = int(num_ctx or self.model_context_limit(model))
+        is_adaptive = self.config.get("adaptive_context", True) if adaptive is None else bool(adaptive)
+        if not is_adaptive or not prompt:
+            return ceiling
+
+        prompt_tokens = 0
+        if hasattr(prompt, "token_usage") and isinstance(prompt.token_usage, dict) and prompt.token_usage:
+            prompt_tokens = sum(
+                int(v or 0)
+                for k, v in prompt.token_usage.items()
+                if k in ("prompt", "system", "memory", "tools", "tool_response")
+            )
+        if not prompt_tokens:
+            prompt_tokens = estimate_token_count(prompt)
+
+        expected_output = int(max_tokens or self.config.get("chat_max_tokens", 768) or 768)
+        safety_margin = max(256, int((prompt_tokens + expected_output) * 0.15))
+        needed = prompt_tokens + expected_output + safety_margin
+
+        buckets = (1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768, 65536, 131072)
+        target = next((b for b in buckets if b >= needed), needed)
+        min_ctx = int(self.config.get("min_num_ctx", 1024))
+
+        return min(ceiling, max(min_ctx, target))
+
     def _model_candidates(self, task, role="chat"):
         task_name = task if isinstance(task, str) else (task.get("task") or task.get("type") or task.get("model_role"))
         policy = self.effective_policy()
@@ -679,7 +733,7 @@ class ModelManager:
             return {"model": model, "status": "unknown", "warnings": ["El proveedor actual no es local."]}
         client = OllamaClient(self.ollama_url, timeout=5)
         metadata = next((item for item in client.list_models() if item.get("name") == model), {})
-        context = num_ctx or self.config.get("ollama_num_ctx", 4096)
+        context = num_ctx or self.model_context_limit(model)
         return ModelMemoryEstimator(self.config).estimate(
             model,
             context,
@@ -698,7 +752,7 @@ class ModelManager:
         observed_bytes = int((observed or {}).get("size_vram") or (observed or {}).get("size") or 0)
         if not observed_bytes:
             return {"ok": False, "model": model, "error": "model_not_running"}
-        context = num_ctx or self.config.get("ollama_num_ctx", 4096)
+        context = num_ctx or self.model_context_limit(model)
         metadata = next((item for item in client.list_models() if item.get("name") == model), {})
         estimator = ModelMemoryEstimator(self.config)
         baseline = estimator.estimate(
@@ -830,9 +884,20 @@ class ModelManager:
         if provider in self.LOCAL_PROVIDERS:
             OLLAMA_IN_FLIGHT.labels(model=str(model_tag)).inc()
         failed = False
-        exclusive_acquired = False
-        token_usage = kwargs.pop("token_usage", None) or {"prompt": estimate_token_count(prompt)}
-        set_llm_token_usage(token_usage)
+        token_usage = kwargs.pop("token_usage", None)
+        if token_usage is None and hasattr(prompt, "token_usage"):
+            token_usage = dict(prompt.token_usage)
+        if token_usage is None:
+            token_usage = {"prompt": estimate_token_count(prompt)}
+        ctx_limit = self.resolve_effective_num_ctx(
+            model_tag,
+            prompt=prompt,
+            max_tokens=kwargs.get("max_tokens", 0),
+            num_ctx=kwargs.get("num_ctx"),
+            adaptive=kwargs.get("adaptive_context"),
+            role=kwargs.get("role", "chat"),
+        )
+        set_llm_token_usage(token_usage, max_context=ctx_limit)
         try:
             if provider in self.LOCAL_PROVIDERS:
                 if provider == "ollama":
@@ -861,7 +926,7 @@ class ModelManager:
                 result = self._call_gpt4all(prompt, **kwargs)
             else:
                 raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
-            set_llm_token_usage(token_usage, response=result)
+            set_llm_token_usage(token_usage, response=result, max_context=ctx_limit)
             return result
         except Exception:
             failed = True
@@ -878,6 +943,7 @@ class ModelManager:
                 OLLAMA_EXECUTIONS.labels(model=str(model_tag), status=status).inc()
                 OLLAMA_DURATION.labels(model=str(model_tag), status=status).observe(duration)
                 OLLAMA_IN_FLIGHT.labels(model=str(model_tag)).dec()
+            reset_llm_token_usage(max_context=ctx_limit)
 
     def call_vision(self, provider, prompt, image_base64, **kwargs):
         if provider == "gemini":
@@ -890,12 +956,17 @@ class ModelManager:
         started = time.monotonic()
         failed = False
         OLLAMA_IN_FLIGHT.labels(model=str(model)).inc()
+        exclusive_acquired = False
+        if provider == "ollama":
+            exclusive_acquired = self._acquire_exclusive_local_model(model)
         try:
             return self._call_ollama_vision(prompt, image_base64, **kwargs)
         except Exception:
             failed = True
             raise
         finally:
+            if exclusive_acquired:
+                self._release_exclusive_local_model()
             status = "error" if failed else "ok"
             duration = time.monotonic() - started
             OLLAMA_EXECUTIONS.labels(model=str(model), status=status).inc()
@@ -906,14 +977,19 @@ class ModelManager:
         model = kwargs.get("ollama_model") or self._model("chat", "ollama_model", "llama3.2:3b")
         if self.config.get("ollama_backend", "urllib") == "litellm":
             return self._call_litellm_ollama(prompt, model, **kwargs)
+        num_ctx = self.resolve_effective_num_ctx(
+            model,
+            prompt=prompt,
+            max_tokens=kwargs.get("max_tokens", 0),
+            num_ctx=kwargs.get("num_ctx"),
+            adaptive=kwargs.get("adaptive_context"),
+            role=kwargs.get("role", "chat"),
+        )
         options = {
             "temperature": kwargs.get("temperature", float(self.config.get("ollama_temperature", 0.2))),
             "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
+            "num_ctx": num_ctx,
         }
-        if "num_ctx" in kwargs:
-            options["num_ctx"] = int(kwargs["num_ctx"])
-        elif self.config.get("ollama_num_ctx"):
-            options["num_ctx"] = int(self.config["ollama_num_ctx"])
         if kwargs.get("max_tokens"):
             options["num_predict"] = int(kwargs["max_tokens"])
 
@@ -1031,14 +1107,19 @@ class ModelManager:
 
     def _call_ollama_vision(self, prompt, image_base64, **kwargs):
         model = kwargs.get("ollama_model") or self._model("vision", "vision_model", "qwen2.5vl:3b")
+        num_ctx = self.resolve_effective_num_ctx(
+            model,
+            prompt=prompt,
+            max_tokens=kwargs.get("max_tokens", 0),
+            num_ctx=kwargs.get("num_ctx"),
+            adaptive=kwargs.get("adaptive_context"),
+            role="vision",
+        )
         options = {
             "temperature": kwargs.get("temperature", float(self.config.get("ollama_temperature", 0.1))),
             "num_thread": kwargs.get("num_thread", recommended_threads(self.config)),
+            "num_ctx": num_ctx,
         }
-        if "num_ctx" in kwargs:
-            options["num_ctx"] = int(kwargs["num_ctx"])
-        elif self.config.get("ollama_num_ctx"):
-            options["num_ctx"] = int(self.config["ollama_num_ctx"])
 
         payload = json.dumps(
             {

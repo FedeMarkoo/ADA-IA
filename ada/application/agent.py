@@ -8,6 +8,8 @@ from pathlib import Path
 
 from ada.infrastructure.engines.model_manager import ModelManager
 from ada.infrastructure.persistence.sqlite import Memory
+from ada.infrastructure.persistence.paths import DatabasePaths
+from ada.infrastructure.persistence.configurations import ConfigurationStore
 from ada.capabilities.registry import capability_catalog, load_capabilities
 from ada.agents.coordinator import MultiAgentCoordinator
 from ada.application.router import IntentRouter, is_capability_discussion
@@ -17,7 +19,8 @@ from ada.domain.tasks import Action
 from ada.infrastructure.observability import Metrics
 from ada.application.services.complexity import ComplexityEstimator
 from ada.application.services.knowledge import KnowledgeLoader
-from ada.application.services.prompts import PromptBuilder
+from ada.application.services.prompts import PromptBuilder, PromptWithUsage
+from ada.infrastructure.prometheus_metrics import estimate_token_count
 
 logger = logging.getLogger("ada.agent")
 
@@ -28,8 +31,12 @@ class Agent:
     def __init__(self, cfg=None, mcp_manager=None):
         self.cfg = cfg or {}
         self.metrics = Metrics("agent")
+        self.database_paths = DatabasePaths.from_config(self.cfg)
+        self.database_paths.ensure_directories()
+        self.configurations = ConfigurationStore(self.database_paths.configurations)
         self.model_manager = ModelManager(self.cfg)
-        db_path = self.cfg.get("db_path", str(Path.home() / "Desktop" / "ADA_Data" / "memory.db"))
+        db_path = self.cfg.get("memories_db_path") or self.cfg.get("database_paths", {}).get("memories")
+        db_path = db_path or self.cfg.get("db_path", str(Path.home() / "Desktop" / "ADA_Data" / "memories.db"))
         self.mem = Memory(
             db_path,
             encrypted=bool(self.cfg.get("memory_encryption", False)),
@@ -43,7 +50,7 @@ class Agent:
         self.planner = Planner(self.skills, self.policy)
         self.knowledge_loader = KnowledgeLoader(self.mem)
         self.mcp_manager = mcp_manager
-        self.prompt_builder = PromptBuilder(self.mem, mcp_manager=mcp_manager)
+        self.prompt_builder = PromptBuilder(self.mem, mcp_manager=mcp_manager, configuration_store=self.configurations)
         self._load_knowledge()
         self.history = []
         self.lang = self.cfg.get("lang", "auto")
@@ -81,13 +88,16 @@ class Agent:
         if not request or not self.mcp_manager or not self.cfg.get("memory_as_tool", True):
             return result
         lookup = self.mcp_manager.execute_tool("memory.search", {**request, "_request": request["query"]}, self)
-        continuation = (
-            str(prompt)
-            + "\n\nResultado de memory.search (usalo como fuente, no inventes otros recuerdos):\n"
+        lookup_str = (
+            "\n\nResultado de memory.search (usalo como fuente, no inventes otros recuerdos):\n"
             + json.dumps(lookup, ensure_ascii=False)
             + "\nRespondé ahora al usuario sin volver a pedir otra herramienta."
         )
-        return self.model_manager.call(provider, continuation, **call_options)
+        continuation_text = str(prompt) + lookup_str
+        usage = dict(getattr(prompt, "token_usage", {}))
+        usage["tool_response"] = usage.get("tool_response", 0) + estimate_token_count(lookup_str)
+        continuation = PromptWithUsage(continuation_text, usage)
+        return self.model_manager.call(provider, continuation, token_usage=usage, **call_options)
 
     def plan_request(self, text):
         """Turn a routed request into a validated, non-executing plan."""

@@ -26,7 +26,16 @@
   },
   "base_dir": "~/GoogleDrive",
   "data_dir": "~/Desktop/ADA_Data",
-  "db_path": "~/Desktop/ADA_Data/memory.db",
+  "db_path": "~/Desktop/ADA_Data/memories.db",
+  "database_paths": {
+    "memories": "~/Desktop/ADA_Data/memories.db",
+    "tools": "~/Desktop/ADA_Data/tools.db",
+    "configurations": "~/Desktop/ADA_Data/configurations.db",
+    "credentials": "~/Desktop/ADA_Data/credentials.db",
+    "operations": "~/Desktop/ADA_Data/operations.db",
+    "tests": "~/Desktop/ADA_Data/tests.db"
+  },
+  "mcp_data_dir": "~/Desktop/ADA_Data/mcp_data",
   "memory_encryption": false,
   "memory_compaction_enabled": true,
   "memory_compaction_threshold_messages": 100,
@@ -92,6 +101,8 @@
     "reasoning": {"token_budget": 24576},
     "tools": {"token_budget": 8192}
   },
+  "adaptive_context": true,
+  "min_num_ctx": 1024,
   "update": {
     "enabled": false,
     "auto_pull": false,

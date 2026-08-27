@@ -179,3 +179,43 @@ def test_gestor_endpoints():
     data = res.get_json()
     assert "audit_count" in data
     assert "db_path" in data
+
+    # 9. Healthcheck batch execution and lifecycle
+    res = client.get("/api/healthcheck/prompts")
+    assert res.status_code == 200
+    prompts_data = res.get_json()
+    assert prompts_data["ok"] is True
+    assert len(prompts_data["prompts"]) >= 15
+
+    res = client.post(
+        "/api/healthcheck/run",
+        headers=headers,
+        data=json.dumps({"prompt_ids": ["capabilities_summary"]}),
+    )
+    assert res.status_code == 202
+    run_data = res.get_json()
+    assert run_data["ok"] is True
+    assert "run_id" in run_data
+    run_id = run_data["run_id"]
+
+    res = client.get("/api/healthcheck/runs/active")
+    assert res.status_code == 200
+    assert "runs" in res.get_json()
+
+    res = client.get("/api/healthcheck/batches")
+    assert res.status_code == 200
+    assert "runs" in res.get_json()
+
+    res = client.get("/api/healthcheck/latest")
+    assert res.status_code == 200
+    assert "results" in res.get_json()
+
+    res = client.get(f"/api/healthcheck/runs/{run_id}")
+    assert res.status_code == 200
+    assert res.get_json()["ok"] is True
+    assert "run" in res.get_json()
+
+    res = client.post(f"/api/healthcheck/runs/{run_id}/cancel", headers=headers)
+    assert res.status_code == 200
+    assert res.get_json()["ok"] is True
+

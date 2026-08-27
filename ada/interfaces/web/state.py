@@ -82,6 +82,7 @@ def ollama_config_payload(config: Dict[str, Any]) -> Dict[str, Any]:
         "cpu_limit_percent": config.get("cpu_limit_percent", 50),
         "ollama_num_thread": config.get("ollama_num_thread"),
         "ollama_num_ctx": config.get("ollama_num_ctx", 4096),
+        "model_num_ctx": config.get("model_num_ctx", {}),
         "ollama_keep_alive": config.get("ollama_keep_alive", "5m"),
         "ollama_auto_unload": bool(config.get("ollama_auto_unload", False)),
         "ollama_idle_unload_seconds": int(config.get("ollama_idle_unload_seconds", 300)),
@@ -407,7 +408,13 @@ telegram_logs: deque = deque(maxlen=200)
 def resolve_telegram_token(config=None) -> str:
     from telegram.bot import resolve_telegram_token as resolve_token
 
-    return resolve_token(config if config is not None else get_runtime().get("cfg"))
+    if config is not None:
+        return resolve_token(config)
+    try:
+        cfg = get_runtime().get("cfg")
+    except Exception:
+        cfg = None
+    return resolve_token(cfg)
 
 
 def get_telegram_service_status(config=None) -> Dict[str, Any]:
@@ -416,11 +423,33 @@ def get_telegram_service_status(config=None) -> Dict[str, Any]:
     with telegram_proc_lock:
         running = telegram_proc is not None and telegram_proc.poll() is None
         pid = telegram_proc.pid if running else None
+
+    last_error = None
+    try:
+        health_path = Path.home() / "Desktop/ADA_Data/runtime/triggers/telegram.json"
+        if health_path.exists():
+            health_info = json.loads(health_path.read_text(encoding="utf-8"))
+            last_error = health_info.get("last_error")
+    except Exception:
+        pass
+
+    try:
+        cfg = config if config is not None else get_runtime().get("cfg", {})
+        allowed_chats = cfg.get("telegram", {}).get("allowed_chat_ids", [])
+    except Exception:
+        allowed_chats = []
+
     return {
+        "ok": True,
         "configured": bool(token),
+        "token_set": bool(token),
         "token_masked": (token[:6] + "..." + token[-4:]) if len(token) > 10 else ("***" if token else None),
         "running": running,
         "pid": pid,
+        "status": "running" if running else "stopped",
+        "last_error": last_error,
+        "allowed_chat_ids": allowed_chats,
+        "survives_dashboard_restart": True,
     }
 
 
@@ -468,7 +497,7 @@ def stop_telegram_service() -> Dict[str, Any]:
         try:
             telegram_proc.terminate()
             try:
-                telegram_proc.wait(timeout=3)
+                telegram_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 telegram_proc.kill()
             telegram_proc = None

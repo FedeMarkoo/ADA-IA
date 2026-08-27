@@ -138,6 +138,11 @@ def create_app(
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(error):
+        from werkzeug.exceptions import HTTPException
+
+        if isinstance(error, HTTPException):
+            return jsonify({"error": error.name.lower().replace(" ", "_"), "message": error.description}), error.code
+
         app.logger.exception("Unhandled ADA request error: %s", error)
         correlation_id = secrets.token_hex(8)
         return (
@@ -211,6 +216,18 @@ def create_app(
 
     # Register all modular route blueprints
     register_blueprints(app)
+
+    # Auto-start Prometheus in background if available
+    def _auto_start_monitoring():
+        try:
+            time.sleep(1.0)
+            from ada.infrastructure.runtime.monitoring import start_prometheus
+            start_prometheus()
+        except Exception:
+            pass
+
+    threading.Thread(target=_auto_start_monitoring, daemon=True, name="ada-auto-monitoring").start()
+
     return app
 
 

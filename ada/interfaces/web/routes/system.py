@@ -30,7 +30,25 @@ def agent_restart_api():
     if not agent:
         return jsonify({"ok": False, "error": "agent_not_available"}), 500
     agent.running = True
+    runtime["agent_enabled"] = True
     return jsonify({"ok": True, "message": "Agente listo nuevamente."})
+
+
+@system_bp.route("/api/agent/start", methods=["POST"])
+def agent_start_api():
+    runtime = get_runtime()
+    runtime["agent_enabled"] = True
+    agent = runtime.get("agent")
+    if agent:
+        agent.running = True
+    return jsonify({"ok": True, "message": "Agente iniciado.", "agent_enabled": True})
+
+
+@system_bp.route("/api/agent/stop", methods=["POST"])
+def agent_stop_api():
+    runtime = get_runtime()
+    runtime["agent_enabled"] = False
+    return jsonify({"ok": True, "message": "Agente detenido.", "agent_enabled": False})
 
 
 @system_bp.route("/api/mcps/servers")
@@ -227,11 +245,13 @@ def update_apply_api():
 
 
 # ==============================================================================
+# ==============================================================================
 # Telegram Connector Service Endpoints
 # ==============================================================================
 
 
 @system_bp.route("/api/services/telegram/status")
+@system_bp.route("/api/telegram/status")
 def telegram_service_status():
     return jsonify(get_telegram_service_status())
 
@@ -244,7 +264,49 @@ def telegram_service_toggle():
     return jsonify(start_telegram_service())
 
 
+@system_bp.route("/api/telegram/start", methods=["POST"])
+def telegram_start_api():
+    return jsonify(start_telegram_service())
+
+
+@system_bp.route("/api/telegram/stop", methods=["POST"])
+def telegram_stop_api():
+    return jsonify(stop_telegram_service())
+
+
+@system_bp.route("/api/telegram/restart", methods=["POST"])
+def telegram_restart_api():
+    from ada.interfaces.web.state import restart_telegram_service
+    return jsonify(restart_telegram_service())
+
+
+@system_bp.route("/api/telegram/history")
+def telegram_history_api():
+    runtime = get_runtime()
+    messages = []
+    try:
+        mem = runtime["agent"].mem
+        cur = mem.conn.cursor()
+        cur.execute(
+            "SELECT id, session, role, content, created_at FROM conversation_messages WHERE session LIKE 'tg_%' OR session LIKE 'telegram_%' ORDER BY id DESC LIMIT 50"
+        )
+        for row in cur.fetchall():
+            messages.append(
+                {
+                    "id": row[0],
+                    "session": row[1],
+                    "role": row[2],
+                    "content": row[3],
+                    "created_at": str(row[4]),
+                }
+            )
+    except Exception:
+        pass
+    return jsonify({"ok": True, "messages": messages})
+
+
 @system_bp.route("/api/services/telegram/config", methods=["POST"])
+@system_bp.route("/api/telegram/config", methods=["POST"])
 def telegram_service_config():
     runtime = get_runtime()
     body = request.get_json(silent=True) or {}
@@ -289,5 +351,71 @@ def telegram_service_config():
 
 
 @system_bp.route("/api/services/telegram/logs")
+@system_bp.route("/api/telegram/logs")
 def telegram_service_logs():
     return jsonify({"logs": list(telegram_logs)})
+
+
+# ==============================================================================
+# Monitoring & Telemetry (Prometheus & Grafana) Endpoints
+# ==============================================================================
+
+
+@system_bp.route("/api/monitoring/status")
+def monitoring_status_api():
+    from ada.infrastructure.runtime.monitoring import get_monitoring_status
+    return jsonify(get_monitoring_status())
+
+
+@system_bp.route("/api/monitoring/start-all", methods=["POST"])
+def monitoring_start_all_api():
+    from ada.infrastructure.runtime.monitoring import start_monitoring_all
+    return jsonify(start_monitoring_all())
+
+
+@system_bp.route("/api/monitoring/prometheus/status")
+def monitoring_prometheus_status_api():
+    from ada.infrastructure.runtime.monitoring import get_prometheus_status
+    return jsonify(get_prometheus_status())
+
+
+@system_bp.route("/api/monitoring/prometheus/start", methods=["POST"])
+def monitoring_prometheus_start_api():
+    from ada.infrastructure.runtime.monitoring import start_prometheus
+    return jsonify(start_prometheus())
+
+
+@system_bp.route("/api/monitoring/prometheus/stop", methods=["POST"])
+def monitoring_prometheus_stop_api():
+    from ada.infrastructure.runtime.monitoring import stop_prometheus
+    return jsonify(stop_prometheus())
+
+
+@system_bp.route("/api/monitoring/prometheus/restart", methods=["POST"])
+def monitoring_prometheus_restart_api():
+    from ada.infrastructure.runtime.monitoring import restart_prometheus
+    return jsonify(restart_prometheus())
+
+
+@system_bp.route("/api/monitoring/grafana/status")
+def monitoring_grafana_status_api():
+    from ada.infrastructure.runtime.monitoring import get_grafana_status
+    return jsonify(get_grafana_status())
+
+
+@system_bp.route("/api/monitoring/grafana/start", methods=["POST"])
+def monitoring_grafana_start_api():
+    from ada.infrastructure.runtime.monitoring import start_grafana
+    return jsonify(start_grafana())
+
+
+@system_bp.route("/api/monitoring/grafana/stop", methods=["POST"])
+def monitoring_grafana_stop_api():
+    from ada.infrastructure.runtime.monitoring import stop_grafana
+    return jsonify(stop_grafana())
+
+
+@system_bp.route("/api/monitoring/grafana/restart", methods=["POST"])
+def monitoring_grafana_restart_api():
+    from ada.infrastructure.runtime.monitoring import restart_grafana
+    return jsonify(restart_grafana())

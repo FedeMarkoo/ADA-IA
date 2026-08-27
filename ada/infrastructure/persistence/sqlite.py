@@ -91,7 +91,7 @@ class Memory:
             return
         ALLOWED_COLUMNS = {
             "images": {"path", "meta"},
-            "memories": {"content", "meta"},
+            "memories": {"summary", "content", "meta"},
             "tasks": {"task", "result"},
             "procedures": {"instructions", "meta"},
             "conversation_messages": {"text"},
@@ -119,7 +119,7 @@ class Memory:
             );
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                content TEXT NOT NULL, kind TEXT DEFAULT 'note', meta TEXT
+                summary TEXT NOT NULL DEFAULT '', content TEXT NOT NULL, kind TEXT DEFAULT 'note', meta TEXT
             );
             CREATE TABLE IF NOT EXISTS procedures (
                 id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL,
@@ -186,6 +186,16 @@ class Memory:
         columns = {row[1] for row in self.conn.execute("PRAGMA table_info(router_catalog)").fetchall()}
         if "keywords" not in columns:
             self.conn.execute("ALTER TABLE router_catalog ADD COLUMN keywords TEXT")
+        memory_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(memories)").fetchall()}
+        if "summary" not in memory_columns:
+            # Existing installations only had the detailed content field.
+            # Keep it intact and derive a selector summary below.
+            self.conn.execute("ALTER TABLE memories ADD COLUMN summary TEXT NOT NULL DEFAULT ''")
+            for row in self.conn.execute("SELECT id, content FROM memories WHERE summary='' OR summary IS NULL").fetchall():
+                self.conn.execute(
+                    "UPDATE memories SET summary=? WHERE id=?",
+                    (self._memory_summary(self._open(row["content"])), row["id"]),
+                )
         self._apply_migrations()
         self._migrate_sensitive_rows()
         self.conn.commit()
@@ -516,8 +526,8 @@ class Memory:
     def add_text(self, text, vector=None, meta=None, kind="note"):
         with self._lock:
             self.conn.execute(
-                "INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
-                (self._seal(text), kind, self._seal(self._json(meta or {}))),
+                "INSERT INTO memories(summary, content, kind, meta) VALUES (?, ?, ?, ?)",
+                (self._seal(self._memory_summary(text)), self._seal(text), kind, self._seal(self._json(meta or {}))),
             )
             self.conn.commit()
 
@@ -535,11 +545,25 @@ class Memory:
         counts["db_path"] = self.db_path
         return counts
 
-    def add_memory_record(self, content, kind="note", meta=None):
+    @staticmethod
+    def _memory_summary(content, max_chars=180):
+        """Build a compact selector text when callers do not provide one."""
+        text = re.sub(r"\s+", " ", str(content or "")).strip()
+        if len(text) <= max_chars:
+            return text
+        return text[: max_chars - 1].rsplit(" ", 1)[0] + "…"
+
+    def add_memory_record(self, content, kind="note", meta=None, summary=None):
+        content = str(content or "").strip()
+        summary = self._memory_summary(summary if summary is not None else content)
+        if not content:
+            raise ValueError("content no puede estar vacío")
+        if not summary:
+            raise ValueError("summary no puede estar vacío")
         with self._lock:
             cursor = self.conn.execute(
-                "INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
-                (self._seal(content), kind, self._seal(self._json(meta or {}))),
+                "INSERT INTO memories(summary, content, kind, meta) VALUES (?, ?, ?, ?)",
+                (self._seal(summary), self._seal(content), kind, self._seal(self._json(meta or {}))),
             )
             self.conn.commit()
             return cursor.lastrowid
@@ -549,14 +573,16 @@ class Memory:
         limit = min(max(int(limit), 1), 50)
         with self._lock:
             rows = self.conn.execute(
-                "SELECT id, created_at, content, kind, meta FROM memories "
+                "SELECT id, created_at, summary, content, kind, meta FROM memories "
                 "WHERE (? IS NULL OR kind=?) ORDER BY id DESC LIMIT 500",
                 (kind, kind),
             ).fetchall()
         result = []
         for row in rows:
             content = self._open(row["content"])
-            if terms and not all(term in content.lower() for term in terms):
+            summary = self._open(row["summary"] or "")
+            searchable = f"{summary} {content}".lower()
+            if terms and not all(term in searchable for term in terms):
                 continue
             try:
                 meta = json.loads(self._open(row["meta"] or "{}"))
@@ -567,6 +593,7 @@ class Memory:
                     "id": row["id"],
                     "created_at": row["created_at"],
                     "content": content,
+                    "summary": summary,
                     "kind": row["kind"],
                     "meta": meta,
                 }
@@ -581,12 +608,13 @@ class Memory:
         limit = min(max(int(limit), 1), 30)
         with self._lock:
             rows = self.conn.execute(
-                "SELECT id, created_at, content, kind, meta FROM memories ORDER BY id DESC LIMIT 500"
+                "SELECT id, created_at, summary, content, kind, meta FROM memories ORDER BY id DESC LIMIT 500"
             ).fetchall()
         candidates = []
         for row in rows:
             content = self._open(row["content"])
-            lowered = content.lower()
+            summary = self._open(row["summary"] or "")
+            lowered = f"{summary} {content}".lower()
             overlap = sum(lowered.count(term) for term in terms)
             if terms and not overlap:
                 continue
@@ -602,7 +630,7 @@ class Memory:
                 {
                     "id": row["id"],
                     "kind": row["kind"],
-                    "content": content[:600],
+                    "summary": summary,
                     "score": round(score, 4),
                     "source": "memory",
                     "created_at": row["created_at"],
@@ -627,20 +655,30 @@ class Memory:
         placeholders = ",".join("?" for _ in ids)
         with self._lock:
             rows = self.conn.execute(
-                f"SELECT id, content, kind FROM memories WHERE id IN ({placeholders})", ids
+                f"SELECT id, summary, content, kind FROM memories WHERE id IN ({placeholders})", ids
             ).fetchall()
         by_id = {row["id"]: row for row in rows}
         return [
-            {"id": memory_id, "content": self._open(by_id[memory_id]["content"]), "kind": by_id[memory_id]["kind"]}
+            {
+                "id": memory_id,
+                "summary": self._open(by_id[memory_id]["summary"] or ""),
+                "content": self._open(by_id[memory_id]["content"]),
+                "kind": by_id[memory_id]["kind"],
+            }
             for memory_id in ids
             if memory_id in by_id
         ]
 
-    def update_memory_record(self, memory_id, content=None, kind=None, meta=None):
+    def update_memory_record(self, memory_id, content=None, kind=None, meta=None, summary=None):
         fields, values = [], []
         if content is not None:
             fields.append("content=?")
             values.append(self._seal(str(content)))
+            if summary is None:
+                summary = self._memory_summary(content)
+        if summary is not None:
+            fields.append("summary=?")
+            values.append(self._seal(self._memory_summary(summary)))
         if kind is not None:
             fields.append("kind=?")
             values.append(str(kind))
@@ -665,8 +703,8 @@ class Memory:
         """Persist a trusted reference document for retrieval by the agent."""
         with self._lock:
             self.conn.execute(
-                "INSERT INTO memories(content, kind, meta) VALUES (?, ?, ?)",
-                (self._seal(content), "knowledge", self._seal(self._json({"name": name, "source": source}))),
+                "INSERT INTO memories(summary, content, kind, meta) VALUES (?, ?, ?, ?)",
+                (self._seal(self._memory_summary(content)), self._seal(content), "knowledge", self._seal(self._json({"name": name, "source": source}))),
             )
             self.conn.commit()
 

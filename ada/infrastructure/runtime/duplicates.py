@@ -34,26 +34,39 @@ def _processes() -> List[Dict[str, Any]]:
 
 
 def _kind(command: str) -> str | None:
+    import re
+
     value = command.casefold()
     if "telegram/bot.py" in value or "telegram\\bot.py" in value:
         return "telegram"
-    if "ada.interfaces.web.server" in value or "ada.interfaces.web.asgi" in value:
+    if "ada.interfaces.web.server" in value or "ada.interfaces.web.asgi" in value or "ada:app" in value:
         return "ada"
     if "ollama serve" in value:
         return "ollama"
-    if "mcp" in value and ("python" in value or "node" in value or "server" in value):
+    if "mcps." in value or "mcps/" in value or "mcps\\" in value:
+        m = re.search(r"mcps[\./\\]([a-zA-Z0-9_\-]+)", value)
+        if m:
+            return f"mcp:{m.group(1)}"
+    if "mcp" in value and ("python" in value or "node" in value or "server" in value or "codex" in value):
+        m = re.search(r"([a-zA-Z0-9_\-]+_mcp_server|[a-zA-Z0-9_\-]+mcp[a-zA-Z0-9_\-]*)", value)
+        if m:
+            return f"mcp:{m.group(1)}"
         return "mcp"
+    if "prometheus" in value and ("--config.file" in value or "prometheus-local.yml" in value):
+        return "prometheus"
+    if "grafana" in value and ("--config=" in value or "grafana.ini" in value or "/usr/sbin/grafana" in value or "/usr/share/grafana" in value):
+        return "grafana"
     return None
 
 
 def detect_duplicates() -> Dict[str, Any]:
     """Return every detected instance, grouped by runtime kind."""
-    groups: Dict[str, List[Dict[str, Any]]] = {kind: [] for kind in ("ada", "telegram", "mcp", "ollama")}
+    groups: Dict[str, List[Dict[str, Any]]] = {}
     for item in _processes():
         kind = _kind(item["command"])
         if kind:
             item["current_process"] = item["pid"] == os.getpid()
-            groups[kind].append(item)
+            groups.setdefault(kind, []).append(item)
     duplicates = {kind: items for kind, items in groups.items() if len(items) > 1}
     return {
         "ok": not bool(duplicates),

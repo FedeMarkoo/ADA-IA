@@ -68,6 +68,7 @@ class HealthDoctor:
             self._check_memory,
             self._check_hardware,
             self._check_telegram,
+            self._check_monitoring,
             self._check_duplicates,
         )
         with ThreadPoolExecutor(max_workers=len(checks), thread_name_prefix="ada-health") as executor:
@@ -397,6 +398,59 @@ class HealthDoctor:
                 details=status,
             )
 
+    def _check_monitoring(self) -> HealthCheckItem:
+        from ada.infrastructure.runtime.monitoring import get_monitoring_status
+
+        status = get_monitoring_status()
+        prom = status["prometheus"]
+        graf = status["grafana"]
+
+        if prom["online"] and graf["online"]:
+            return HealthCheckItem(
+                id="telemetry_monitoring",
+                name="Telemetría (Prometheus y Grafana)",
+                category="services",
+                status="ok",
+                message=f"Métricas y dashboards activos (Prometheus :{prom['url'].split(':')[-1]} y Grafana :{graf['url'].split(':')[-1]})",
+                details=status,
+            )
+        elif not prom["online"] and not graf["online"]:
+            return HealthCheckItem(
+                id="telemetry_monitoring",
+                name="Telemetría (Prometheus y Grafana)",
+                category="services",
+                status="warning",
+                message="Prometheus y Grafana están detenidos",
+                details=status,
+                can_auto_fix=True,
+                fix_action_id="start_monitoring",
+                fix_label="Iniciar Monitoreo (Prometheus + Grafana)",
+            )
+        elif not prom["online"]:
+            return HealthCheckItem(
+                id="telemetry_monitoring",
+                name="Telemetría (Prometheus y Grafana)",
+                category="services",
+                status="warning",
+                message="Servidor Prometheus detenido (las métricas no se recopilarán)",
+                details=status,
+                can_auto_fix=True,
+                fix_action_id="start_prometheus",
+                fix_label="Iniciar Prometheus",
+            )
+        else:
+            return HealthCheckItem(
+                id="telemetry_monitoring",
+                name="Telemetría (Prometheus y Grafana)",
+                category="services",
+                status="warning",
+                message="Servidor Grafana detenido",
+                details=status,
+                can_auto_fix=True,
+                fix_action_id="start_grafana",
+                fix_label="Iniciar Grafana",
+            )
+
     def fix_action(self, action_id: str) -> Dict[str, Any]:
         """Execute a single remediation action."""
         if action_id == "start_ollama":
@@ -443,14 +497,39 @@ class HealthDoctor:
             return {"ok": False, "error": "Ollama client not available"}
 
         elif action_id == "start_telegram":
-            from ada.interfaces.web.server import start_telegram_service
+            from ada.interfaces.web.state import start_telegram_service
 
             return start_telegram_service()
 
         elif action_id == "restart_telegram":
-            from ada.interfaces.web.server import restart_telegram_service
+            from ada.interfaces.web.state import restart_telegram_service
 
             return restart_telegram_service()
+
+        elif action_id == "start_prometheus":
+            from ada.infrastructure.runtime.monitoring import start_prometheus
+
+            return start_prometheus()
+
+        elif action_id == "restart_prometheus":
+            from ada.infrastructure.runtime.monitoring import restart_prometheus
+
+            return restart_prometheus()
+
+        elif action_id == "start_grafana":
+            from ada.infrastructure.runtime.monitoring import start_grafana
+
+            return start_grafana()
+
+        elif action_id == "restart_grafana":
+            from ada.infrastructure.runtime.monitoring import restart_grafana
+
+            return restart_grafana()
+
+        elif action_id == "start_monitoring":
+            from ada.infrastructure.runtime.monitoring import start_monitoring_all
+
+            return start_monitoring_all()
 
         return {"ok": False, "error": f"Acción desconocida: {action_id}"}
 

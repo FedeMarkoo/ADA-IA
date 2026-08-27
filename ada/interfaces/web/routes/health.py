@@ -8,7 +8,7 @@ import secrets
 import threading
 import time
 from typing import Any, Dict, List
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from ada.application.services.healthcheck import (
     HealthcheckStore,
@@ -27,6 +27,18 @@ from ada.ollama.client import OllamaClient
 
 logger = logging.getLogger("ada.web.health")
 health_bp = Blueprint("health", __name__)
+
+_healthcheck_active_run_ids = set()
+_healthcheck_active_runs_lock = threading.RLock()
+
+
+def _healthcheck_active_runs():
+    with _healthcheck_active_runs_lock:
+        return set(_healthcheck_active_run_ids)
+
+
+def _recover_orphaned_healthchecks(store):
+    return store.recover_orphaned_batches(_healthcheck_active_runs())
 
 
 @health_bp.route("/api/healthcheck")
@@ -139,74 +151,184 @@ def _execute_healthcheck_batch(runtime: Dict[str, Any], prompts: List[Dict[str, 
 
         outcome: Dict[str, Any] = {}
 
-        def runner():
+        def invoke_case():
             try:
-                reply, _ = runtime["web_chat"].handle_message(
-                    item["prompt"],
-                    state,
-                    progress_callback=progress,
-                    session_id=session_id,
-                )
-                outcome["reply"] = reply
-            except Exception as error:
-                outcome["error"] = str(error)
+                result, result_status = runtime["web_chat"].handle(item["prompt"], state, "es", progress=progress)
+                outcome.update({"payload": result, "status": result_status})
+            except Exception as exc:
+                outcome.update({"payload": {}, "status": 500, "error": str(exc)})
 
-        thread = threading.Thread(target=runner, name=f"hc-{item['id']}", daemon=True)
-        thread.start()
-        thread.join(timeout=case_timeout)
-        duration = round(time.monotonic() - started, 3)
+        case_thread = threading.Thread(target=invoke_case, name=f"healthcheck-case-{item['id']}", daemon=True)
+        case_thread.start()
+        case_thread.join(case_timeout)
 
-        if thread.is_alive():
-            result = {
-                "ok": False,
-                "reason": "case_timeout",
-                "message": f"El caso superó el límite de {case_timeout}s.",
-                "duration_seconds": duration,
-                "executed_mcps": executed_mcps,
-                "trace": trace,
-            }
-        elif outcome.get("error"):
-            result = {
-                "ok": False,
-                "reason": "execution_error",
-                "error": outcome["error"],
-                "duration_seconds": duration,
-                "executed_mcps": executed_mcps,
-                "trace": trace,
-            }
+        if case_thread.is_alive():
+            payload, reply, status = {}, "", 504
+            error = f"healthcheck_case_timeout_after_{case_timeout:g}s"
+            trace.append({
+                "phase": "case_timeout",
+                "timeout_seconds": case_timeout,
+                "at_seconds": round(time.monotonic() - started, 3),
+            })
         else:
-            reply = outcome.get("reply", "")
-            eval_result = evaluate_healthcheck(item, reply, duration_seconds=duration, executed_mcps=executed_mcps)
-            if (
-                not eval_result.get("ok")
-                and str(item.get("category", "")).startswith("mcp_")
-                and requires_mcp(item.get("prompt", ""))
-            ):
-                eval_result["reason"] = "mcp_not_used"
-            judge_explanation = None
-            if not eval_result.get("ok") and (runtime.get("cfg") or {}).get("healthcheck_llm_judge"):
-                judge_explanation = llm_judge(runtime["agent"], item, reply)
-            result = {
-                **eval_result,
-                "response": reply,
-                "duration_seconds": duration,
-                "executed_mcps": executed_mcps,
-                "trace": trace,
-                "judge_explanation": judge_explanation,
-            }
+            payload = outcome.get("payload") or {}
+            status = outcome.get("status", 500)
+            reply = payload.get("reply") or payload.get("message") or ""
+            error = outcome.get("error") or (payload.get("error") if status >= 400 else None)
 
-        store.record_batch_item(run_id, item["id"], result)
-    store.mark_batch_finished(run_id)
+        if not error and requires_mcp(item) and not executed_mcps:
+            error = "required_mcp_not_executed"
+            trace.append({
+                "phase": "mcp_required_but_not_executed",
+                "category": item.get("category"),
+                "at_seconds": round(time.monotonic() - started, 3),
+            })
+
+        duration = round(time.monotonic() - started, 3)
+        evaluation = evaluate_healthcheck(item, reply, duration, error)
+        model = payload.get("model") if isinstance(payload, dict) else None
+        for event in reversed(trace):
+            if event.get("model"):
+                model = event["model"]
+                break
+
+        if not error and reply:
+            criteria_passed = bool(evaluation.get("passed"))
+            cfg = runtime.get("cfg") or {}
+            policy = cfg.get("model_policy", {}).get("reasoning", {})
+            judge_model = (
+                cfg.get("healthcheck_judge_model")
+                or policy.get("preferred")
+                or cfg.get("models", {}).get("chat", "llama3.2:3b")
+            )
+            judge = llm_judge(
+                item,
+                reply,
+                cfg.get("ollama_url", "http://127.0.0.1:11434"),
+                judge_model,
+                mcp_evidence=[mcp for mcp in executed_mcps if mcp.get("ok") is True],
+            )
+            evaluation["judge"] = judge
+            evaluation["passed"] = bool(judge.get("passed"))
+            evaluation["score"] = judge.get("score", 0.0)
+            evaluation["issues"] = judge.get("issues", [])
+            evaluation["rationale"] = judge.get("rationale", "")
+            successful_mcps = [mcp for mcp in executed_mcps if mcp.get("ok") is True]
+            if successful_mcps and criteria_passed:
+                evaluation["passed"] = True
+                evaluation["issues"] = []
+                evaluation["rationale"] = "Aprobado por resultado MCP exitoso y criterios del caso."
+                judge["passed"] = True
+                judge["score"] = max(float(judge.get("score") or 0), 1.0)
+                judge["issues"] = []
+                judge["rationale"] = evaluation["rationale"]
+                judge["source"] = "mcp-grounded"
+            trace.append({
+                "phase": "judge_finished",
+                "model": judge.get("model"),
+                "source": judge.get("source"),
+                "score": judge.get("score"),
+                "passed": judge.get("passed"),
+                "at_seconds": round(time.monotonic() - started, 3),
+            })
+
+        status_name = "passed" if evaluation["passed"] else ("error" if error else "failed")
+        unique_mcps: List[Dict[str, Any]] = []
+        seen_mcps = set()
+        for mcp in executed_mcps:
+            key = (mcp.get("server"), mcp.get("tool"))
+            if key not in seen_mcps:
+                seen_mcps.add(key)
+                unique_mcps.append(mcp)
+            else:
+                existing = next(item for item in unique_mcps if (item.get("server"), item.get("tool")) == key)
+                for field, value in mcp.items():
+                    if value is not None:
+                        existing[field] = value
+
+        current_batch = store.batch(run_id)
+        if not current_batch or current_batch["status"] != "running":
+            return
+
+        store.save_run(
+            run_id,
+            item["id"],
+            reply,
+            evaluation,
+            evaluation["elapsed_seconds"],
+            request=item["prompt"],
+            status=status_name,
+            status_code=status,
+            model=model,
+            mcps=unique_mcps,
+            trace=trace,
+        )
+        store.mark_batch_item(run_id, evaluation["passed"])
+
+    store.finish_batch(run_id)
+
+
+@health_bp.route("/api/healthcheck/runs/active", methods=["GET"])
+def healthcheck_active_runs_api():
+    store = HealthcheckStore(get_runtime()["agent"].mem)
+    _recover_orphaned_healthchecks(store)
+    return jsonify({"ok": True, "runs": store.active_batches()})
+
+
+@health_bp.route("/api/healthcheck/batches", methods=["GET"])
+def healthcheck_batches_api():
+    store = HealthcheckStore(get_runtime()["agent"].mem)
+    _recover_orphaned_healthchecks(store)
+    return jsonify({"ok": True, "runs": store.recent_batches()})
+
+
+@health_bp.route("/api/healthcheck/latest", methods=["GET"])
+def healthcheck_latest_api():
+    store = HealthcheckStore(get_runtime()["agent"].mem)
+    return jsonify({"ok": True, "results": store.latest_results()})
+
+
+@health_bp.route("/api/healthcheck/runs/<run_id>", methods=["GET"])
+def healthcheck_run_status_api(run_id):
+    store = HealthcheckStore(get_runtime()["agent"].mem)
+    _recover_orphaned_healthchecks(store)
+    batch = store.batch(run_id)
+    if not batch:
+        return jsonify({"error": "healthcheck_run_not_found"}), 404
+    include_history = request.args.get("details", "1").lower() not in {"0", "false", "no"}
+    history = [item for item in store.history(200) if item["run_id"] == run_id] if include_history else []
+    return jsonify({"ok": True, "run": batch, "batch": batch, "history": history})
+
+
+@health_bp.route("/api/healthcheck/runs/<run_id>/progress")
+def healthcheck_run_progress_api(run_id):
+    store = HealthcheckStore(get_runtime()["agent"].mem)
+    batch = store.batch(run_id)
+    if not batch:
+        return jsonify({"error": "batch_not_found"}), 404
+    return jsonify({"ok": True, **batch})
+
+
+@health_bp.route("/api/healthcheck/runs/<run_id>/cancel", methods=["POST"])
+def healthcheck_run_cancel_api(run_id):
+    """Mark a stalled healthcheck as interrupted without killing ADA."""
+    store = HealthcheckStore(get_runtime()["agent"].mem)
+    changed = store.interrupt_batch(run_id)
+    with _healthcheck_active_runs_lock:
+        _healthcheck_active_run_ids.discard(run_id)
+    batch = store.batch(run_id)
+    if not batch:
+        return jsonify({"error": "healthcheck_run_not_found"}), 404
+    return jsonify({"ok": True, "changed": bool(changed), "run": batch, "batch": batch})
 
 
 @health_bp.route("/api/healthcheck/run", methods=["POST"])
 def healthcheck_run_api():
-    """Start an asynchronous functional checklist batch in the background."""
+    """Create a durable batch and execute it in the background."""
     runtime = get_runtime()
     data = request.get_json(silent=True) or {}
     store = HealthcheckStore(runtime["agent"].mem)
     all_prompts = store.prompts()
-    run_id = f"healthcheck_{int(time.time())}_{secrets.token_hex(4)}"
 
     requested_category = data.get("category")
     requested_ids = set(data.get("prompt_ids") or [])
@@ -224,57 +346,37 @@ def healthcheck_run_api():
 
     if not prompts:
         return (
-            jsonify({"error": "no_prompts_matched", "message": "No se encontraron casos de prueba para ejecutar."}),
+            jsonify({"error": "healthcheck_no_prompts", "message": "No se encontraron casos de prueba para ejecutar."}),
             400,
         )
 
-    batch = store.create_batch(run_id, prompts, metadata={"category": requested_category})
-    runtime["healthcheck_executor"].submit(_execute_healthcheck_batch, runtime, prompts, run_id)
-    return jsonify({"ok": True, "run_id": run_id, "batch": batch}), 202
+    run_id = f"healthcheck_{int(time.time())}_{secrets.token_hex(4)}"
+    store.begin_batch(run_id, [item["id"] for item in prompts])
+    with _healthcheck_active_runs_lock:
+        _healthcheck_active_run_ids.add(run_id)
 
+    try:
+        executor = runtime.get("healthcheck_executor")
+        future = executor.submit(_execute_healthcheck_batch, runtime, prompts, run_id)
 
-@health_bp.route("/api/healthcheck/runs/<run_id>")
-def healthcheck_run_status_api(run_id):
-    store = HealthcheckStore(get_runtime()["agent"].mem)
+        def healthcheck_done(done_future):
+            with _healthcheck_active_runs_lock:
+                _healthcheck_active_run_ids.discard(run_id)
+            try:
+                done_future.result()
+            except Exception:
+                logger.exception("healthcheck_batch_failed run_id=%s", run_id)
+                try:
+                    HealthcheckStore(runtime["agent"].mem).interrupt_batch(run_id)
+                except Exception:
+                    pass
+
+        future.add_done_callback(healthcheck_done)
+    except Exception:
+        with _healthcheck_active_runs_lock:
+            _healthcheck_active_run_ids.discard(run_id)
+        raise
+
     batch = store.batch(run_id)
-    if not batch:
-        return jsonify({"error": "batch_not_found"}), 404
-    return jsonify({"ok": True, "batch": batch})
+    return jsonify({"ok": True, "accepted": True, "run_id": run_id, "run": batch, "batch": batch}), 202
 
-
-@health_bp.route("/api/healthcheck/runs/<run_id>/progress")
-def healthcheck_run_progress_api(run_id):
-    store = HealthcheckStore(get_runtime()["agent"].mem)
-    progress = store.progress(run_id)
-    if not progress:
-        return jsonify({"error": "batch_not_found"}), 404
-    return jsonify({"ok": True, **progress})
-
-
-@health_bp.route("/api/healthcheck/runs/<run_id>/cancel", methods=["POST"])
-def healthcheck_run_cancel_api(run_id):
-    store = HealthcheckStore(get_runtime()["agent"].mem)
-    cancelled = store.cancel_batch(run_id)
-    return jsonify({"ok": cancelled})
-
-
-@health_bp.route("/api/healthcheck/runs/<run_id>/report")
-def healthcheck_run_report_api(run_id):
-    store = HealthcheckStore(get_runtime()["agent"].mem)
-    batch = store.batch(run_id)
-    if not batch:
-        return jsonify({"error": "batch_not_found"}), 404
-    return jsonify({"ok": True, "report": store.report(run_id), "batch": batch})
-
-
-@health_bp.route("/api/healthcheck/runs/<run_id>/rerun-failed", methods=["POST"])
-def healthcheck_run_rerun_failed_api(run_id):
-    runtime = get_runtime()
-    store = HealthcheckStore(runtime["agent"].mem)
-    failed_prompts = store.failed_prompts_for_run(run_id)
-    if not failed_prompts:
-        return jsonify({"error": "no_failed_prompts", "message": "Esta corrida no tuvo casos fallidos."}), 400
-    new_run_id = f"healthcheck_{int(time.time())}_{secrets.token_hex(4)}"
-    batch = store.create_batch(new_run_id, failed_prompts, metadata={"rerun_from": run_id})
-    runtime["healthcheck_executor"].submit(_execute_healthcheck_batch, runtime, failed_prompts, new_run_id)
-    return jsonify({"ok": True, "run_id": new_run_id, "batch": batch}), 202

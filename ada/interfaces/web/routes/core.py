@@ -134,3 +134,39 @@ def core_state_api():
 def prometheus_metrics():
     """Prometheus scrape endpoint. Grafana reads the Prometheus server."""
     return Response(exposition(), mimetype="text/plain; version=0.0.4")
+
+
+@core_bp.route("/api/grafana/dashboard-url")
+def grafana_dashboard_url_api():
+    """Return the direct public and internal dashboard URLs for Grafana."""
+    import base64
+    import json
+    import urllib.error
+    import urllib.request
+
+    base_url = os.environ.get("ADA_GRAFANA_URL", "http://127.0.0.1:3000").rstrip("/")
+    auth = base64.b64encode(b"admin:admin").decode("ascii")
+    token = None
+    try:
+        req = urllib.request.Request(f"{base_url}/api/dashboards/uid/ada-overview/public-dashboards")
+        req.add_header("Authorization", f"Basic {auth}")
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            data = json.loads(resp.read().decode())
+            if isinstance(data, list) and data:
+                token = data[0].get("accessToken")
+            elif isinstance(data, dict) and data.get("accessToken"):
+                token = data.get("accessToken")
+    except Exception:
+        token = "7ade3361da2c4881a79e2f3fe16131a0"
+
+    public_path = f"/public-dashboards/{token}" if token else "/d/ada-overview"
+    return jsonify(
+        {
+            "ok": True,
+            "base_url": base_url,
+            "public_url": f"{base_url}{public_path}",
+            "internal_url": f"{base_url}/d/ada-overview?orgId=1&kiosk=tv&refresh=10s",
+            "public_token": token,
+        }
+    )
+
