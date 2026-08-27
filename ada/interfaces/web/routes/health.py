@@ -192,8 +192,9 @@ def _execute_healthcheck_batch(runtime: Dict[str, Any], prompts: List[Dict[str, 
                 model = event["model"]
                 break
 
-        if not error and reply:
-            criteria_passed = bool(evaluation.get("passed"))
+        # Every case is evaluated by the independent IA judge. Regex criteria
+        # remain auxiliary signals only and are included in the judge context.
+        if True:
             cfg = runtime.get("cfg") or {}
             policy = cfg.get("model_policy", {}).get("reasoning", {})
             judge_model = (
@@ -207,22 +208,13 @@ def _execute_healthcheck_batch(runtime: Dict[str, Any], prompts: List[Dict[str, 
                 cfg.get("ollama_url", "http://127.0.0.1:11434"),
                 judge_model,
                 mcp_evidence=[mcp for mcp in executed_mcps if mcp.get("ok") is True],
+                execution_error=error,
             )
             evaluation["judge"] = judge
             evaluation["passed"] = bool(judge.get("passed"))
             evaluation["score"] = judge.get("score", 0.0)
             evaluation["issues"] = judge.get("issues", [])
             evaluation["rationale"] = judge.get("rationale", "")
-            successful_mcps = [mcp for mcp in executed_mcps if mcp.get("ok") is True]
-            if successful_mcps and criteria_passed:
-                evaluation["passed"] = True
-                evaluation["issues"] = []
-                evaluation["rationale"] = "Aprobado por resultado MCP exitoso y criterios del caso."
-                judge["passed"] = True
-                judge["score"] = max(float(judge.get("score") or 0), 1.0)
-                judge["issues"] = []
-                judge["rationale"] = evaluation["rationale"]
-                judge["source"] = "mcp-grounded"
             trace.append({
                 "phase": "judge_finished",
                 "model": judge.get("model"),
@@ -379,4 +371,3 @@ def healthcheck_run_api():
 
     batch = store.batch(run_id)
     return jsonify({"ok": True, "accepted": True, "run_id": run_id, "run": batch, "batch": batch}), 202
-

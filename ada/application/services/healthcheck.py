@@ -42,7 +42,10 @@ MCP_REQUIRED_CATEGORIES = {
 
 def requires_mcp(item):
     """Return whether a healthcheck result must be grounded in a tool call."""
-    return str(item.get("category") or "").lower() in MCP_REQUIRED_CATEGORIES
+    required = item.get("required_mcp")
+    if required is None:
+        return str(item.get("category") or "").lower() in MCP_REQUIRED_CATEGORIES
+    return str(required).lower() not in {"", "none", "null"}
 
 
 def functional_category(category):
@@ -50,7 +53,20 @@ def functional_category(category):
     return FUNCTIONAL_CATEGORY_LABELS.get(category, str(category or "Otros").replace("_", " ").title())
 
 
-def _case(category, case_id, name, capability, prompt, must_match, tags=None):
+REQUIRED_MCP_BY_CATEGORY = {
+    "web": "web_search.search",
+    "finance": "web_search.search",
+    "calendar": "google_calendar.list_events",
+    "mcp_google_calendar": "google_calendar.list_events",
+    "gmail": "gmail.read_inbox",
+    "mcp_gmail": "gmail.read_inbox",
+    "filesystem": "filesystem.list_files",
+    "photography": "google_drive.search",
+    "mcp_google_drive": "google_drive.search",
+}
+
+
+def _case(category, case_id, name, capability, prompt, must_match, tags=None, required_mcp=None):
     """Small declaration helper: adding a case is one data-only entry."""
     return {
         "id": case_id,
@@ -60,6 +76,7 @@ def _case(category, case_id, name, capability, prompt, must_match, tags=None):
         "tags": tags or [capability, "readonly"],
         "prompt": prompt,
         "must_match": must_match,
+        "required_mcp": required_mcp or REQUIRED_MCP_BY_CATEGORY.get(category, "none"),
     }
 
 
@@ -263,7 +280,7 @@ class HealthcheckStore:
             CREATE TABLE IF NOT EXISTS healthcheck_prompts (
                 id TEXT PRIMARY KEY, category TEXT NOT NULL DEFAULT 'general', name TEXT NOT NULL,
                 capability TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', prompt TEXT NOT NULL,
-                criteria TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+                criteria TEXT NOT NULL, required_mcp TEXT NOT NULL DEFAULT 'none', enabled INTEGER NOT NULL DEFAULT 1,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS healthcheck_runs (
@@ -296,12 +313,13 @@ class HealthcheckStore:
         for name, definition in (
             ("category", "TEXT NOT NULL DEFAULT 'general'"),
             ("tags", "TEXT NOT NULL DEFAULT '[]'"),
+            ("required_mcp", "TEXT NOT NULL DEFAULT 'none'"),
         ):
             if name not in columns:
                 self.conn.execute(f"ALTER TABLE healthcheck_prompts ADD COLUMN {name} {definition}")
         for item in HEALTHCHECK_PROMPTS:
             self.conn.execute(
-                "INSERT OR IGNORE INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria) VALUES (?,?,?,?,?,?,?)",
+                "INSERT OR IGNORE INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp) VALUES (?,?,?,?,?,?,?,?)",
                 (
                     item["id"],
                     item["category"],
@@ -310,10 +328,11 @@ class HealthcheckStore:
                     json.dumps(item["tags"]),
                     item["prompt"],
                     json.dumps(item["must_match"]),
+                    item["required_mcp"],
                 ),
             )
             self.conn.execute(
-                "UPDATE healthcheck_prompts SET category=?, capability=?, tags=?, prompt=?, criteria=?, name=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                "UPDATE healthcheck_prompts SET category=?, capability=?, tags=?, prompt=?, criteria=?, name=?, required_mcp=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (
                     item["category"],
                     item["capability"],
@@ -321,6 +340,7 @@ class HealthcheckStore:
                     item["prompt"],
                     json.dumps(item["must_match"]),
                     item["name"],
+                    item["required_mcp"],
                     item["id"],
                 ),
             )
@@ -330,7 +350,7 @@ class HealthcheckStore:
     def prompts(self):
         with self._lock:
             rows = self.conn.execute(
-                "SELECT id,category,name,capability,tags,prompt,criteria FROM healthcheck_prompts WHERE enabled=1 ORDER BY category,rowid"
+                "SELECT id,category,name,capability,tags,prompt,criteria,required_mcp FROM healthcheck_prompts WHERE enabled=1 ORDER BY category,rowid"
             ).fetchall()
         return [
             {
@@ -342,6 +362,7 @@ class HealthcheckStore:
                 "tags": json.loads(r[4] or "[]"),
                 "prompt": r[5],
                 "must_match": json.loads(r[6] or "[]"),
+                "required_mcp": r[7] or "none",
             }
             for r in rows
         ]
@@ -351,7 +372,7 @@ class HealthcheckStore:
         if not all(str(value or "").strip() for value in required) or not item.get("must_match"):
             raise ValueError("id, category, name, capability, prompt y must_match son obligatorios")
         self.conn.execute(
-            "INSERT INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp) VALUES (?,?,?,?,?,?,?,?)",
             (
                 item["id"].strip(),
                 item["category"].strip(),
@@ -360,6 +381,7 @@ class HealthcheckStore:
                 json.dumps(item.get("tags") or [item["capability"], "readonly"]),
                 item["prompt"].strip(),
                 json.dumps(item["must_match"]),
+                item.get("required_mcp") or REQUIRED_MCP_BY_CATEGORY.get(item["category"].strip(), "none"),
             ),
         )
         self.conn.commit()
@@ -559,16 +581,8 @@ FAILURE_MARKERS = re.compile(
 )
 
 
-def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b", mcp_evidence=None):
+def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b", mcp_evidence=None, execution_error=None):
     """Use an independent model to judge task completion, not keyword presence."""
-    if not reply or (FAILURE_MARKERS.search(str(reply)) and not mcp_evidence):
-        return {
-            "passed": False,
-            "score": 0.0,
-            "issues": ["La respuesta indica que ADA no pudo completar o acceder a la tarea."],
-            "rationale": "Falla explícita detectada antes de consultar al juez.",
-            "source": "guard",
-        }
     category = str(item.get("category") or "").lower()
     conceptual = category in {"chat", "reasoning", "architecture", "metrics", "safety", "diagnostics", "agent"}
     evidence_rule = (
@@ -588,8 +602,11 @@ def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b
     judge_prompt = (
         "Sos un evaluador estricto de pruebas funcionales de un agente. Evaluá si la respuesta realmente cumplió el pedido. "
         "No alcanza con que repita palabras del pedido: " + evidence_rule + trace_evidence + " "
+        f"El MCP requerido para este caso es: {item.get('required_mcp') or 'none'}. "
+        "Verificá explícitamente si se invocó ese MCP y rechazá el caso si era requerido y no hay evidencia exitosa. "
         "Devolvé SOLO JSON válido con estas claves: passed (boolean), score (número 0 a 1), issues (lista de strings) y rationale (string).\n\n"
-        f"CASO: {item.get('name')}\nPEDIDO: {item.get('prompt')}\nCRITERIOS AUXILIARES: {item.get('must_match', [])}\nRESPUESTA DE ADA: {reply}"
+        f"CASO: {item.get('name')}\nPEDIDO: {item.get('prompt')}\nCRITERIOS AUXILIARES: {item.get('must_match', [])}"
+        f"\nERROR DE EJECUCIÓN: {execution_error or 'ninguno'}\nRESPUESTA DE ADA: {reply or '(sin respuesta)'}"
     )
     payload = json.dumps(
         {"model": model, "prompt": judge_prompt, "stream": False, "format": "json", "options": {"temperature": 0}}

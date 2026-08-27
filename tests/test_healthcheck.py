@@ -57,6 +57,12 @@ def test_external_healthchecks_require_mcp_grounding():
     assert requires_mcp({"category": "reasoning"}) is False
 
 
+def test_catalog_declares_required_mcp_for_every_case():
+    assert all(item.get("required_mcp") for item in HEALTHCHECK_PROMPTS)
+    assert next(item for item in HEALTHCHECK_PROMPTS if item["id"] == "web_search")["required_mcp"] == "web_search.search"
+    assert next(item for item in HEALTHCHECK_PROMPTS if item["id"] == "greeting")["required_mcp"] == "none"
+
+
 def test_healthcheck_run_history_is_json_safe():
     memory = Memory(":memory:")
     store = HealthcheckStore(memory)
@@ -111,12 +117,22 @@ def test_concurrent_catalog_reads_do_not_break_shared_sqlite_connection():
     assert results and all(value == len(HEALTHCHECK_PROMPTS) for value in results)
 
 
-def test_llm_judge_never_approves_explicit_access_failure():
+@patch("urllib.request.urlopen")
+def test_llm_judge_receives_execution_error_and_required_mcp(mock_urlopen):
+    response = MagicMock()
+    response.__enter__.return_value.read.return_value = json.dumps(
+        {"response": json.dumps({"passed": False, "score": 0.0, "issues": ["MCP faltante"], "rationale": "No se ejecutó."})}
+    ).encode()
+    mock_urlopen.return_value = response
     result = llm_judge(
-        {"name": "fotos", "prompt": "Buscá fotos", "must_match": ["foto"]}, "No pude acceder a Google Drive."
+        {"name": "fotos", "prompt": "Buscá fotos", "must_match": ["foto"], "required_mcp": "google_drive.search"},
+        "",
+        execution_error="required_mcp_not_executed",
     )
-    assert result["passed"] is False
-    assert result["source"] == "guard"
+    request_body = json.loads(mock_urlopen.call_args.args[0].data.decode())
+    assert result["source"] == "llm"
+    assert "google_drive.search" in request_body["prompt"]
+    assert "required_mcp_not_executed" in request_body["prompt"]
 
 
 @patch("urllib.request.urlopen")
