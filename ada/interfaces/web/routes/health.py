@@ -119,6 +119,18 @@ def healthcheck_prompt_create_api():
     return jsonify({"ok": True, "id": data.get("id")}), 201
 
 
+@health_bp.route("/api/healthcheck/prompts/<prompt_id>", methods=["PUT"])
+def healthcheck_prompt_update_api(prompt_id):
+    data = request.get_json(silent=True) or {}
+    try:
+        HealthcheckStore(get_runtime()["agent"].mem).update_prompt(prompt_id, data)
+    except ValueError as exc:
+        return jsonify({"error": "invalid_healthcheck_prompt", "message": str(exc)}), 400
+    except KeyError:
+        return jsonify({"error": "healthcheck_prompt_not_found"}), 404
+    return jsonify({"ok": True, "id": prompt_id})
+
+
 @health_bp.route("/api/healthcheck/history", methods=["GET"])
 def healthcheck_history_api():
     store = HealthcheckStore(get_runtime()["agent"].mem)

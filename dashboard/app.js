@@ -170,6 +170,7 @@ export const api = {
   },
   getHealthcheckPrompts() { return this.request('/api/healthcheck/prompts'); },
   addHealthcheckPrompt(data) { return this.request('/api/healthcheck/prompts', { method: 'POST', body: JSON.stringify(data) }); },
+  updateHealthcheckPrompt(id, data) { return this.request(`/api/healthcheck/prompts/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) }); },
   runHealthcheck(prompt_ids) {
     return this.request('/api/healthcheck/run', { method: 'POST', body: JSON.stringify({ prompt_ids }) });
   },
@@ -2379,13 +2380,14 @@ function HealthcheckView({ showToast }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingCase, setEditingCase] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [activeRun, setActiveRun] = useState(null);
   const [latestByPrompt, setLatestByPrompt] = useState({});
   const [latestLoaded, setLatestLoaded] = useState(false);
   const [promptsLoaded, setPromptsLoaded] = useState(false);
   const [expandedCards, setExpandedCards] = useState({});
-  const [newCase, setNewCase] = useState({ id: '', category: 'web', name: '', capability: 'web', tags: 'web, readonly', prompt: '', must_match: '(respuesta|fuente)' });
+  const [newCase, setNewCase] = useState({ id: '', category: 'web', name: '', capability: 'web', tags: 'web, readonly', prompt: '', required_mcp: 'web_search.search', expected: '' });
 
   const toggleCardExpanded = (id) => {
     setExpandedCards(prev => ({
@@ -2491,10 +2493,17 @@ function HealthcheckView({ showToast }) {
     return stats;
   }, { ok: 0, failed: 0, running: 0 });
   const addCase = async () => {
-    const data = { ...newCase, id: newCase.id.trim(), name: newCase.name.trim(), tags: newCase.tags.split(',').map(value => value.trim()).filter(Boolean), prompt: newCase.prompt.trim(), must_match: newCase.must_match.split('\n').map(value => value.trim()).filter(Boolean) };
-    if (!data.id || !data.name || !data.prompt || !data.must_match.length) { showToast('Completá id, nombre, prompt y al menos un criterio', 'warning'); return; }
-    try { await api.addHealthcheckPrompt(data); const fresh = await api.getHealthcheckPrompts(); setPrompts(fresh.prompts || []); setShowAdd(false); setNewCase({ id: '', category: 'web', name: '', capability: 'web', tags: 'web, readonly', prompt: '', must_match: '(respuesta|fuente)' }); showToast('Caso agregado al grupo', 'success'); }
+    const data = { ...newCase, id: newCase.id.trim(), name: newCase.name.trim(), tags: newCase.tags.split(',').map(value => value.trim()).filter(Boolean), prompt: newCase.prompt.trim(), required_mcp: newCase.required_mcp.trim() || 'none', expected: newCase.expected.trim() };
+    if (!data.id || !data.name || !data.prompt || !data.expected) { showToast('Completá id, nombre, prompt y esperado', 'warning'); return; }
+    try { await api.addHealthcheckPrompt(data); const fresh = await api.getHealthcheckPrompts(); setPrompts(fresh.prompts || []); setShowAdd(false); setNewCase({ id: '', category: 'web', name: '', capability: 'web', tags: 'web, readonly', prompt: '', required_mcp: 'web_search.search', expected: '' }); showToast('Caso agregado al grupo', 'success'); }
     catch (err) { showToast(`No se pudo agregar: ${err.message}`, 'danger'); }
+  };
+  const startEdit = (item) => setEditingCase({ ...item, tags: (item.tags || []).join(', ') });
+  const saveEdit = async () => {
+    const data = { ...editingCase, tags: editingCase.tags.split(',').map(value => value.trim()).filter(Boolean), prompt: editingCase.prompt.trim(), required_mcp: editingCase.required_mcp.trim() || 'none', expected: editingCase.expected.trim() };
+    if (!data.name || !data.prompt || !data.expected) { showToast('Completá nombre, prompt y esperado', 'warning'); return; }
+    try { await api.updateHealthcheckPrompt(editingCase.id, data); const fresh = await api.getHealthcheckPrompts(); setPrompts(fresh.prompts || []); setEditingCase(null); showToast('Caso actualizado en SQLite', 'success'); }
+    catch (err) { showToast(`No se pudo editar: ${err.message}`, 'danger'); }
   };
 
   return h('section', { className: 'tab-view active', id: 'tab-benchmark' }, [
@@ -2542,10 +2551,10 @@ function HealthcheckView({ showToast }) {
         showAdd ? h('div', { className: 'p-4 mb-5 rounded-lg border border-subtle bg-base' }, [
           h('h4', { className: 'text-sm font-semibold mb-3' }, 'Agregar caso al catálogo'),
           h('div', { className: 'grid grid-cols-2 gap-3' }, [
-            ...[['id', 'ID único'], ['name', 'Nombre'], ['category', 'Categoría'], ['capability', 'Tag/capacidad'], ['tags', 'Tags separados por coma']].map(([key, label]) => h('input', { key, className: 'form-input', placeholder: label, value: newCase[key], onChange: e => setNewCase({ ...newCase, [key]: e.target.value }) })),
+            ...[['id', 'ID único'], ['name', 'Nombre'], ['category', 'Categoría'], ['capability', 'Tag/capacidad'], ['tags', 'Tags separados por coma'], ['required_mcp', 'MCP requerido (o none)']].map(([key, label]) => h('input', { key, className: 'form-input', placeholder: label, value: newCase[key], onChange: e => setNewCase({ ...newCase, [key]: e.target.value }) })),
           ]),
           h('textarea', { className: 'form-input form-textarea mt-3', rows: 3, placeholder: 'Prompt de solo lectura', value: newCase.prompt, onChange: e => setNewCase({ ...newCase, prompt: e.target.value }) }),
-          h('textarea', { className: 'form-input form-textarea mt-3', rows: 2, placeholder: 'Un regex esperado por línea', value: newCase.must_match, onChange: e => setNewCase({ ...newCase, must_match: e.target.value }) }),
+          h('textarea', { className: 'form-input form-textarea mt-3', rows: 3, placeholder: 'Cómo debe ser la respuesta para aprobar', value: newCase.expected, onChange: e => setNewCase({ ...newCase, expected: e.target.value }) }),
           h('button', { className: 'btn btn-primary mt-3', onClick: addCase }, 'Guardar en SQLite'),
         ]) : null,
         h('div', { className: 'healthcheck-browser' }, [
@@ -2591,6 +2600,7 @@ function HealthcheckView({ showToast }) {
                 h('span', { className: `healthcheck-status ${lastStatus === 'passed' ? 'is-ok' : lastStatus === 'error' ? 'is-error' : lastStatus === 'failed' ? 'is-fail' : lastStatus === 'running' ? 'is-running' : ''}` }, lastStatus === 'passed' ? '✓ Aprobado' : lastStatus === 'error' ? '⚠ Error' : lastStatus === 'failed' ? '✗ Falló' : lastStatus === 'running' ? '⏳ En ejecución' : 'Pendiente')
               ]),
               h('p', { className: 'healthcheck-prompt-text' }, item.prompt),
+              h('div', { className: 'text-xs text-muted mt-1' }, `MCP requerido: ${item.required_mcp || 'none'} · Esperado: ${item.expected || 'No definido'}`),
               isExecuting
                 ? h('div', { className: 'text-xs text-secondary mb-2' }, '⏳ En ejecución...')
                 : last
@@ -2621,26 +2631,30 @@ function HealthcheckView({ showToast }) {
                       h('strong', { className: 'block mb-1 font-semibold' }, 'Problemas detectados:'),
                       h('ul', { className: 'list-disc pl-4 mt-1' }, last.judge.issues.map((iss, i) => h('li', { key: i }, iss)))
                     ]) : null,
-                    last.missing?.length ? h('div', { key: 'missing', className: 'text-xs text-warning mb-2 p-2 rounded bg-surface-elevated border border-warning' }, [
-                      h('strong', { className: 'block mb-1' }, 'Expresiones regulares esperadas no encontradas:'),
-                      h('ul', { className: 'list-disc pl-4 mt-1' }, last.missing.map((mis, i) => h('li', { key: i }, mis)))
-                    ]) : null,
-                    !last.judge && (!last.missing || !last.missing.length) ? h('p', { key: 'rule-passed', className: 'text-xs text-success' }, '✓ Cumple todas las reglas y expresiones de coincidencia requeridas.') : null
+                    last.evaluation_source === 'llm_required' ? h('p', { key: 'llm-only', className: 'text-xs text-muted' }, 'La aprobación depende exclusivamente del juez IA.') : null
                   ] : h('p', { className: 'text-xs text-muted' }, 'Ejecutá esta prueba con "Probar ahora" para visualizar la evaluación.')
                 ])
               ]) : null,
 
               h('div', { className: 'flex justify-between items-center mt-3 pt-2 border-t border-subtle' }, [
                 h('button', { className: 'healthcheck-run-button', disabled: loading, onClick: (e) => { e.stopPropagation(); run([item.id]); } }, 'Probar ahora'),
+                h('button', { className: 'btn btn-secondary btn-sm', disabled: loading || runInProgress, onClick: (e) => { e.stopPropagation(); startEdit(item); } }, 'Editar'),
                 h('span', {
                   className: 'text-xs text-muted cursor-pointer hover:text-primary transition-colors',
                   onClick: (e) => { e.stopPropagation(); toggleCardExpanded(item.id); }
                 }, isExpanded ? '▲ Ocultar detalles' : '▼ Doble click / Ver respuesta')
               ])
             ]);
-        })) : h('div', { className: 'healthcheck-empty' }, 'No hay prompts en esta categoría.'),
+            })) : h('div', { className: 'healthcheck-empty' }, 'No hay prompts en esta categoría.'),
           ]),
         ]),
+        editingCase ? h('div', { className: 'p-4 mt-5 rounded-lg border border-primary bg-base' }, [
+          h('h4', { className: 'text-sm font-semibold mb-3' }, `Editar caso: ${editingCase.id}`),
+          h('div', { className: 'grid grid-cols-2 gap-3' }, ['name', 'category', 'capability', 'tags', 'required_mcp'].map(key => h('input', { key, className: 'form-input', placeholder: key, value: editingCase[key] || '', onChange: e => setEditingCase({ ...editingCase, [key]: e.target.value }) }))),
+          h('textarea', { className: 'form-input form-textarea mt-3', rows: 3, placeholder: 'Prompt', value: editingCase.prompt || '', onChange: e => setEditingCase({ ...editingCase, prompt: e.target.value }) }),
+          h('textarea', { className: 'form-input form-textarea mt-3', rows: 3, placeholder: 'Cómo debe ser la respuesta para aprobar', value: editingCase.expected || '', onChange: e => setEditingCase({ ...editingCase, expected: e.target.value }) }),
+          h('div', { className: 'flex gap-2 mt-3' }, [h('button', { className: 'btn btn-primary', onClick: saveEdit }, 'Guardar cambios'), h('button', { className: 'btn btn-secondary', onClick: () => setEditingCase(null) }, 'Cancelar')]),
+        ]) : null,
       ]),
     ]),
     result ? h('div', { className: 'card', key: 'result' }, [

@@ -395,8 +395,8 @@ class HealthcheckStore:
 
     def add_prompt(self, item):
         required = (item.get("id"), item.get("category"), item.get("name"), item.get("capability"), item.get("prompt"))
-        if not all(str(value or "").strip() for value in required) or not item.get("must_match"):
-            raise ValueError("id, category, name, capability, prompt y must_match son obligatorios")
+        if not all(str(value or "").strip() for value in required):
+            raise ValueError("id, category, name, capability y prompt son obligatorios")
         self.conn.execute(
             "INSERT INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp,expected) VALUES (?,?,?,?,?,?,?,?,?)",
             (
@@ -406,12 +406,29 @@ class HealthcheckStore:
                 item["capability"].strip(),
                 json.dumps(item.get("tags") or [item["capability"], "readonly"]),
                 item["prompt"].strip(),
-                json.dumps(item["must_match"]),
+                json.dumps(item.get("must_match") or []),
                 item.get("required_mcp") or REQUIRED_MCP_BY_CATEGORY.get(item["category"].strip(), "none"),
                 item.get("expected") or _default_expected(item["category"].strip()),
             ),
         )
         self.conn.commit()
+
+    def update_prompt(self, prompt_id, item):
+        required = (item.get("category"), item.get("name"), item.get("capability"), item.get("prompt"))
+        if not all(str(value or "").strip() for value in required):
+            raise ValueError("category, name, capability y prompt son obligatorios")
+        with self._lock:
+            cursor = self.conn.execute(
+                "UPDATE healthcheck_prompts SET category=?, name=?, capability=?, tags=?, prompt=?, required_mcp=?, expected=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (
+                    item["category"].strip(), item["name"].strip(), item["capability"].strip(),
+                    json.dumps(item.get("tags") or [item["capability"], "readonly"]), item["prompt"].strip(),
+                    item.get("required_mcp") or "none", item.get("expected") or _default_expected(item["category"].strip()), prompt_id,
+                ),
+            )
+            self.conn.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(prompt_id)
 
     def save_run(
         self,
