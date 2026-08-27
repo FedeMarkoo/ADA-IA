@@ -79,7 +79,7 @@ class SecureVault:
     """Isolated, encrypted SQLite credentials vault."""
 
     def __init__(self, db_path: Optional[Path | str] = None, master_key: Optional[str] = None):
-        default_path = "~/Desktop/ADA_Data/vault.db"
+        default_path = "~/Desktop/ADA_Data/credentials.db"
         self.path = Path(db_path or os.environ.get("ADA_VAULT_PATH", default_path)).expanduser()
         self._explicit_key = master_key
         self._lock = threading.RLock()

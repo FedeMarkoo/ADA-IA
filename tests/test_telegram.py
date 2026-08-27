@@ -1,11 +1,13 @@
 import unittest
+from unittest.mock import patch
 from telegram.bot import TelegramListener
 
 
 class TelegramAdapterTests(unittest.TestCase):
     def test_disabled_without_token(self):
-        listener = TelegramListener({"telegram": {"enabled": True, "token": ""}})
-        self.assertFalse(listener.enabled)
+        with patch("telegram.bot.resolve_telegram_token", return_value=""):
+            listener = TelegramListener({"telegram": {"enabled": True, "token": ""}})
+            self.assertFalse(listener.enabled)
 
     def test_allowed_chat_ids_are_normalized(self):
         listener = TelegramListener({"telegram": {"allowed_chat_ids": [123, " 456 "]}})

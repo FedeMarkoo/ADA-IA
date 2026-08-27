@@ -28,14 +28,22 @@ logger = logging.getLogger("ada.telegram")
 def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
     if config:
         tg_cfg = config.get("telegram", {}) if isinstance(config.get("telegram"), dict) else {}
-        if "token" in tg_cfg or "bot_token" in tg_cfg:
-            return str(tg_cfg.get("token") or tg_cfg.get("bot_token") or "").strip()
-        if "telegram_token" in config:
-            return str(config.get("telegram_token") or "").strip()
+        token = str(tg_cfg.get("token") or tg_cfg.get("bot_token") or config.get("telegram_token") or "").strip()
+        if token:
+            return token
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if token:
         return token
+
+    try:
+        from ada.infrastructure.credentials import SecureVault as AdaVault
+
+        token = AdaVault().get("telegram_bot_token") or AdaVault().get("telegram_token")
+        if token:
+            return str(token).strip()
+    except Exception as exc:
+        logger.warning("telegram_token_vault_read_failed error=%s", exc)
 
     try:
         from utils.credentials import SecureVault
@@ -44,7 +52,8 @@ def resolve_telegram_token(config: Optional[Dict[str, Any]] = None) -> str:
         if token:
             return str(token).strip()
     except Exception as exc:
-        logger.warning("telegram_token_vault_read_failed error=%s", exc)
+        logger.warning("telegram_token_utils_vault_read_failed error=%s", exc)
+
     cfg_file = PROJECT_ROOT / "ada" / "config.json"
     if not cfg_file.is_file():
         cfg_file = PROJECT_ROOT / "config.json"
@@ -133,32 +142,46 @@ class TelegramListener:
         except OSError:
             logger.exception("telegram_health_write_failed")
 
+    def _notify_lifecycle(self, text: str) -> None:
+        """Send lifecycle notification (startup/shutdown) to authorized chats."""
+        for cid in self.allowed_chat_ids:
+            if cid and cid not in {"*", "all"}:
+                try:
+                    self.send_message(cid, text)
+                except Exception as exc:
+                    logger.warning("telegram_lifecycle_notify_failed chat_id=%s error=%s", cid, exc)
+
     def run(self) -> None:
         offset = None
         logger.info("telegram_bot_started base_url=%s", self.base_url)
         self._write_health("starting")
-        while not self.stop_event.is_set():
-            try:
-                updates = self._get_updates(offset)
-                self._write_health("healthy", pending_updates=len(updates))
-                for update in updates:
-                    update_id = update.get("update_id")
-                    if update_id is not None:
-                        update_id = int(update_id)
-                        if update_id in self._processed_update_ids:
-                            logger.warning("telegram_update_duplicate_skipped update_id=%s", update_id)
-                            offset = max(offset or 0, update_id + 1)
-                            continue
-                    offset = (update_id + 1) if update_id is not None else offset
-                    self.handle_update(update)
-            except Exception as exc:
-                conflict = "Telegram API 409" in str(exc)
-                if conflict:
-                    logger.error("telegram_listener_conflict error=%s", exc)
-                else:
-                    logger.exception("adapter error: %s", exc)
-                self._write_health("degraded", error=exc)
-                self.stop_event.wait(30 if conflict else max(self.poll_seconds, 3))
+        self._notify_lifecycle("🟢 ADA Online — El servicio de Telegram se ha iniciado y está listo para recibir mensajes.")
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    updates = self._get_updates(offset)
+                    self._write_health("healthy", pending_updates=len(updates))
+                    for update in updates:
+                        update_id = update.get("update_id")
+                        if update_id is not None:
+                            update_id = int(update_id)
+                            if update_id in self._processed_update_ids:
+                                logger.warning("telegram_update_duplicate_skipped update_id=%s", update_id)
+                                offset = max(offset or 0, update_id + 1)
+                                continue
+                        offset = (update_id + 1) if update_id is not None else offset
+                        self.handle_update(update)
+                except Exception as exc:
+                    conflict = "Telegram API 409" in str(exc)
+                    if conflict:
+                        logger.error("telegram_listener_conflict error=%s", exc)
+                    else:
+                        logger.exception("adapter error: %s", exc)
+                    self._write_health("degraded", error=exc)
+                    self.stop_event.wait(30 if conflict else max(self.poll_seconds, 3))
+        finally:
+            self._write_health("stopped")
+            self._notify_lifecycle("🔴 ADA Offline — El servicio de Telegram se ha detenido.")
 
     def _remember_update(self, update_id: int) -> None:
         if update_id in self._processed_update_ids:
@@ -254,8 +277,8 @@ class TelegramListener:
         if chat_id:
             logger.info("chat_id=%s from=%s (@%s) update_id=%s", chat_id, first_name, username, update_id)
         # An empty allowlist is intentionally fail-closed: no Telegram chat is
-        # authorized until an explicit chat ID is configured.
-        if not chat_id or chat_id not in self.allowed_chat_ids:
+        # authorized until an explicit chat ID is configured (or '*' for wildcard).
+        if not chat_id or (chat_id not in self.allowed_chat_ids and "*" not in self.allowed_chat_ids and "all" not in self.allowed_chat_ids):
             logger.warning("telegram_chat_not_allowed chat_id=%s", chat_id or "missing")
             return
 
@@ -478,6 +501,19 @@ def main():
         sys.exit(1)
 
     print("🚀 Servidor Telegram Bot iniciando...")
+
+    import signal
+
+    def handle_signal(sig, frame):
+        logger.info("telegram_shutdown_signal_received sig=%s", sig)
+        bot.stop_event.set()
+
+    try:
+        signal.signal(signal.SIGTERM, handle_signal)
+        signal.signal(signal.SIGINT, handle_signal)
+    except Exception:
+        pass
+
     bot.run()
 
 
