@@ -22,6 +22,55 @@ logger = logging.getLogger("ada.web.system")
 system_bp = Blueprint("system", __name__)
 
 
+@system_bp.route("/api/agent/restart", methods=["POST"])
+def agent_restart_api():
+    """Reset the in-process agent lifecycle without recreating the Flask app."""
+    runtime = get_runtime()
+    agent = runtime.get("agent")
+    if not agent:
+        return jsonify({"ok": False, "error": "agent_not_available"}), 500
+    agent.running = True
+    return jsonify({"ok": True, "message": "Agente listo nuevamente."})
+
+
+@system_bp.route("/api/mcps/servers")
+def mcp_servers_api():
+    manager = get_runtime().get("mcp_manager")
+    return jsonify({"servers": manager.list_servers() if manager else []})
+
+
+@system_bp.route("/api/mcps/tools")
+def mcp_tools_api():
+    manager = get_runtime().get("mcp_manager")
+    return jsonify({"tools": manager.list_tools() if manager else []})
+
+
+@system_bp.route("/api/mcps/servers/<name>/<action>", methods=["POST", "GET"])
+def mcp_server_action_api(name, action):
+    manager = get_runtime().get("mcp_manager")
+    if not manager:
+        return jsonify({"ok": False, "error": "mcp_manager_not_available"}), 500
+    handlers = {
+        "start": manager.start_server,
+        "stop": manager.stop_server,
+        "restart": manager.restart_server,
+        "ping": manager.ping_server,
+    }
+    handler = handlers.get(action)
+    if not handler:
+        return jsonify({"ok": False, "error": "unknown_mcp_action"}), 404
+    result = handler(name)
+    return jsonify(result), 200 if result.get("ok") else 404
+
+
+@system_bp.route("/api/mcps/servers/restart-all", methods=["POST"])
+def mcp_restart_all_api():
+    manager = get_runtime().get("mcp_manager")
+    if not manager:
+        return jsonify({"ok": False, "error": "mcp_manager_not_available"}), 500
+    return jsonify(manager.restart_all_servers())
+
+
 @system_bp.route("/api/audit")
 def audit_api():
     limit = min(200, max(1, request.args.get("limit", default=50, type=int)))
@@ -43,6 +92,7 @@ def memory_stats_api():
         pass
     return jsonify(
         {
+            **active_agent.mem.stats(),
             "stats": active_agent.mem.stats(),
             "procedures": active_agent.mem.list_procedures(),
             "recent_audit": audit_entries,

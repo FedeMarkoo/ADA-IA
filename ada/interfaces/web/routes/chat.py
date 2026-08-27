@@ -102,6 +102,12 @@ def chat():
         )
         return jsonify({"error": "chat_timeout", "message": "La tarea excedió el tiempo límite."}), 504
 
+    activity_update(
+        runtime,
+        "completed" if status_code < 400 else "error",
+        {"detail": "Respuesta entregada" if status_code < 400 else "La solicitud terminó con error"},
+        session_id=state.session_id,
+    )
     RESPONSES.labels(source, str(status_code)).inc()
     return jsonify(res), status_code
 

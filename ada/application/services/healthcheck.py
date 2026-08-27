@@ -338,9 +338,9 @@ class HealthcheckStore:
                 "functional_category": functional_category(r[1]),
                 "name": r[2],
                 "capability": r[3],
-                "tags": json.loads(r[4]),
+                "tags": json.loads(r[4] or "[]"),
                 "prompt": r[5],
-                "must_match": json.loads(r[6]),
+                "must_match": json.loads(r[6] or "[]"),
             }
             for r in rows
         ]
