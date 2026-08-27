@@ -2503,11 +2503,34 @@ function HealthcheckView({ showToast }) {
           h('button', { className: 'btn btn-secondary', disabled: loading || runInProgress, onClick: () => setShowAdd(!showAdd) }, showAdd ? 'Cerrar alta' : '+ Agregar caso'),
           h('span', { className: 'text-sm text-muted self-center' }, promptsLoaded ? `${prompts.length} capacidades verificables` : 'Cargando casos…'),
         ]),
-        activeRun ? h('div', { className: `healthcheck-progress mb-5 ${['completed', 'interrupted'].includes(activeRun.status) ? 'is-completed' : ''}` }, [
-          h('div', { className: 'flex justify-between items-center mb-2' }, [h('strong', { className: 'text-sm' }, activeRun.status === 'completed' ? 'Última corrida registrada' : activeRun.status === 'interrupted' ? 'Corrida interrumpida' : 'Progreso guardado'), h('span', { className: 'text-sm text-primary' }, `${activeRun.completed}/${activeRun.total} · ${activeRun.percent}%`)]),
-          h('div', { className: 'healthcheck-progress-track' }, [h('div', { className: 'healthcheck-progress-bar', style: { width: `${activeRun.percent}%` } })]),
-          h('div', { className: 'text-xs text-muted mt-2' }, activeRun.status === 'completed' ? `${activeRun.passed} aprobados · ${activeRun.failed} fallidos · finalizada ${activeRun.finished_at || ''}` : activeRun.status === 'interrupted' ? `${activeRun.completed} casos guardados · se detuvo antes de finalizar. Podés ejecutarla nuevamente.` : (activeRun.current_prompt_id ? `Ejecutando: ${currentPromptLabel}` : 'Preparando el próximo caso…')),
-        ]) : null,
+        activeRun ? (() => {
+          const total = Math.max(1, activeRun.total || 0);
+          const passedCount = activeRun.passed || 0;
+          const failedCount = activeRun.failed || 0;
+          const passedPercent = (passedCount / total) * 100;
+          const failedPercent = (failedCount / total) * 100;
+          return h('div', { className: `healthcheck-progress mb-5 ${['completed', 'interrupted'].includes(activeRun.status) ? 'is-completed' : ''}` }, [
+            h('div', { className: 'flex justify-between items-center mb-2' }, [
+              h('strong', { className: 'text-sm' }, activeRun.status === 'completed' ? 'Última corrida registrada' : activeRun.status === 'interrupted' ? 'Corrida interrumpida' : 'Progreso guardado'),
+              h('span', { className: 'text-sm text-primary font-mono' }, `${activeRun.completed}/${activeRun.total} · ${activeRun.percent}%`)
+            ]),
+            h('div', { className: 'healthcheck-progress-track' }, [
+              passedPercent > 0 ? h('div', { key: 'passed', className: 'healthcheck-progress-bar is-passed', style: { width: `${passedPercent}%` }, title: `${passedCount} aprobado${passedCount !== 1 ? 's' : ''}` }) : null,
+              failedPercent > 0 ? h('div', { key: 'failed', className: 'healthcheck-progress-bar is-failed', style: { width: `${failedPercent}%` }, title: `${failedCount} fallido${failedCount !== 1 ? 's' : ''}` }) : null,
+            ].filter(Boolean)),
+            h('div', { className: 'text-xs text-muted mt-2 flex justify-between items-center' }, [
+              h('span', null, activeRun.status === 'completed'
+                ? `${activeRun.passed} aprobados · ${activeRun.failed} fallidos · finalizada ${activeRun.finished_at || ''}`
+                : activeRun.status === 'interrupted'
+                  ? `${activeRun.completed} casos guardados · se detuvo antes de finalizar. Podés ejecutarla nuevamente.`
+                  : (activeRun.current_prompt_id ? `Ejecutando: ${currentPromptLabel}` : 'Preparando el próximo caso…')),
+              (passedCount > 0 || failedCount > 0) ? h('span', { className: 'font-mono text-xs flex gap-2' }, [
+                passedCount > 0 ? h('span', { key: 'p', className: 'text-success font-semibold' }, `✓ ${passedCount}`) : null,
+                failedCount > 0 ? h('span', { key: 'f', className: 'text-danger font-semibold' }, `✗ ${failedCount}`) : null,
+              ].filter(Boolean)) : null,
+            ]),
+          ]);
+        })() : null,
         showAdd ? h('div', { className: 'p-4 mb-5 rounded-lg border border-subtle bg-base' }, [
           h('h4', { className: 'text-sm font-semibold mb-3' }, 'Agregar caso al catálogo'),
           h('div', { className: 'grid grid-cols-2 gap-3' }, [
