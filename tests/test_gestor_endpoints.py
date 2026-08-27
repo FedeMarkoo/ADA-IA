@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from pathlib import Path
 
 try:
     from ada.interfaces.web.server import create_app
@@ -12,6 +13,7 @@ def test_gestor_endpoints():
     if create_app is None:
         raise unittest.SkipTest("Flask is not installed (optional web extra)")
     trigger_state = tempfile.TemporaryDirectory()
+    test_cfg_path = Path(trigger_state.name) / "config.json"
     app = create_app(
         {
             "allowed_roots": ["/tmp"],
@@ -19,7 +21,8 @@ def test_gestor_endpoints():
             "trigger_state_dir": trigger_state.name,
             "discover_external_triggers": False,
             "telegram": {"enabled": False, "token": ""},
-        }
+        },
+        config_path=test_cfg_path,
     )
     client = app.test_client()
 
