@@ -74,3 +74,37 @@ def detect_duplicates() -> Dict[str, Any]:
         "instances": groups,
         "duplicate_count": sum(max(0, len(items) - 1) for items in groups.values()),
     }
+
+
+def cleanup_duplicates() -> Dict[str, Any]:
+    """Terminate redundant duplicate processes cleanly."""
+    try:
+        import psutil
+    except ImportError:
+        return {"ok": False, "error": "psutil not available"}
+    report = detect_duplicates()
+    killed = []
+    current_pid = os.getpid()
+    for kind, procs in report.get("duplicates", {}).items():
+        keep_proc = None
+        for p in procs:
+            if p.get("current_process"):
+                keep_proc = p
+                break
+        if not keep_proc and procs:
+            keep_proc = procs[-1]
+
+        for p in procs:
+            if keep_proc and p["pid"] != keep_proc["pid"] and p["pid"] != current_pid:
+                try:
+                    proc = psutil.Process(p["pid"])
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=2)
+                    except psutil.TimeoutExpired:
+                        proc.kill()
+                    killed.append({"kind": kind, "pid": p["pid"]})
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+    return {"ok": True, "killed": killed, "remaining": detect_duplicates()}
+

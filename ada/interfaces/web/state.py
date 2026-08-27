@@ -477,6 +477,26 @@ def start_telegram_service() -> Dict[str, Any]:
         if telegram_proc is not None and telegram_proc.poll() is None:
             return {"ok": True, "message": "El servicio ya está en ejecución", "status": get_telegram_service_status()}
         try:
+            # Terminate any existing orphan telegram bot processes first
+            try:
+                import psutil
+                cur_pid = os.getpid()
+                for p in psutil.process_iter(["pid", "cmdline"]):
+                    try:
+                        if p.info["pid"] == cur_pid:
+                            continue
+                        cmd = " ".join(str(x) for x in (p.info.get("cmdline") or []))
+                        if "telegram/bot.py" in cmd or "telegram\\bot.py" in cmd:
+                            p.terminate()
+                            try:
+                                p.wait(timeout=2)
+                            except psutil.TimeoutExpired:
+                                p.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+            except Exception:
+                pass
+
             bot_script = PROJECT_ROOT / "telegram" / "bot.py"
             env = os.environ.copy()
             port = int(os.environ.get("ADA_UI_PORT", "5005"))

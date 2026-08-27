@@ -133,7 +133,9 @@ class HealthDoctor:
             status="error",
             message=f"Hay más de una instancia activa ({labels})",
             details=report,
-            can_auto_fix=False,
+            can_auto_fix=True,
+            fix_action_id="cleanup_duplicates",
+            fix_label="Cerrar Duplicados",
         )
 
     def _check_ollama(self) -> HealthCheckItem:
@@ -484,7 +486,7 @@ class HealthDoctor:
 
         elif action_id == "init_memory":
             if self.agent and hasattr(self.agent, "mem"):
-                self.agent.mem.record_task({"init": True}, {"status": "ok"}, provider="doctor")
+                self.agent.operations.record_task({"init": True}, {"status": "ok"}, provider="doctor")
                 return {"ok": True, "message": "Memoria inicializada correctamente"}
             return {"ok": False, "error": "Memory not available"}
 
@@ -530,6 +532,11 @@ class HealthDoctor:
             from ada.infrastructure.runtime.monitoring import start_monitoring_all
 
             return start_monitoring_all()
+
+        elif action_id == "cleanup_duplicates":
+            from ada.infrastructure.runtime.duplicates import cleanup_duplicates
+
+            return cleanup_duplicates()
 
         return {"ok": False, "error": f"Acción desconocida: {action_id}"}
 
