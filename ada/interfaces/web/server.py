@@ -111,6 +111,7 @@ def create_app(
         "memory_refiner": mem_refiner,
         "identity": {
             "version": ADA_VERSION,
+            "commit_id": DEPLOYED_COMMIT.get("sha", "unknown"),
             "deployed_commit": DEPLOYED_COMMIT,
             "started_at": PROCESS_STARTED_AT,
             "reloaded_at": None,

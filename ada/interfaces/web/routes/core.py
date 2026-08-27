@@ -42,7 +42,32 @@ def favicon():
 @core_bp.route("/api/health")
 def health():
     return jsonify(
-        {"status": "healthy", "version": ADA_VERSION, "deployed_commit": DEPLOYED_COMMIT, "timestamp": time.time()}
+        {
+            "status": "healthy",
+            "version": ADA_VERSION,
+            "commit_id": DEPLOYED_COMMIT.get("sha", "unknown"),
+            "deployed_commit": DEPLOYED_COMMIT,
+            "timestamp": time.time(),
+        }
+    )
+
+
+@core_bp.route("/api/info")
+@core_bp.route("/api/version")
+def info():
+    """Return basic runtime and deployment version information."""
+    return jsonify(
+        {
+            "status": "healthy",
+            "version": ADA_VERSION,
+            "commit_id": DEPLOYED_COMMIT.get("sha", "unknown"),
+            "full_commit_id": DEPLOYED_COMMIT.get("full_sha", "unknown"),
+            "commit_message": DEPLOYED_COMMIT.get("message", ""),
+            "deployed_commit": DEPLOYED_COMMIT,
+            "pid": os.getpid(),
+            "started_at": PROCESS_STARTED_AT,
+            "timestamp": time.time(),
+        }
     )
 
 
@@ -83,6 +108,7 @@ def status():
                 "identity",
                 {
                     "version": ADA_VERSION,
+                    "commit_id": DEPLOYED_COMMIT.get("sha", "unknown"),
                     "deployed_commit": DEPLOYED_COMMIT,
                     "started_at": PROCESS_STARTED_AT,
                     "reloaded_at": None,

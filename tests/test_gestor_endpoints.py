@@ -228,3 +228,21 @@ def test_gestor_endpoints():
     assert res.status_code == 200
     assert res.get_json()["ok"] is True
 
+    # 10. Info and version endpoints
+    res = client.get("/api/info")
+    assert res.status_code == 200
+    info_data = res.get_json()
+    assert info_data["status"] == "healthy"
+    assert "version" in info_data
+    assert "commit_id" in info_data
+    assert "deployed_commit" in info_data
+    assert "pid" in info_data
+
+    res = client.get("/api/version")
+    assert res.status_code == 200
+    assert res.get_json()["commit_id"] == info_data["commit_id"]
+
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    assert res.get_json()["commit_id"] == info_data["commit_id"]
+
