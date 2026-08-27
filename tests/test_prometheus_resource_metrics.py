@@ -4,17 +4,33 @@ from ada.infrastructure import prometheus_metrics as metrics
 
 
 def test_llm_token_usage_is_split_by_component():
+    initial_total = metrics.LLM_TOKENS_TOTAL.labels(component="total")._value.get()
     values = metrics.set_llm_token_usage(
-        {"system": 100, "memory": 40, "tools": 20, "prompt": 10}, response="respuesta de prueba"
+        {"system": 100, "memory": 40, "tools": 20, "tool_response": 30, "prompt": 10}, response="respuesta de prueba"
     )
 
     assert values["system"] == 100
     assert values["memory"] == 40
     assert values["tools"] == 20
+    assert values["tool_response"] == 30
     assert values["prompt"] == 10
     assert values["response"] == metrics.estimate_token_count("respuesta de prueba")
-    assert values["total"] == sum(values[name] for name in ("system", "memory", "tools", "prompt", "response"))
+    assert values["total"] == sum(values[name] for name in ("system", "memory", "tools", "tool_response", "prompt", "response"))
     assert metrics.LLM_TOKEN_USAGE.labels(component="total")._value.get() == values["total"]
+    assert metrics.LLM_TOKENS_TOTAL.labels(component="total")._value.get() == initial_total + values["total"]
+
+
+def test_grafana_dashboard_schema():
+    from pathlib import Path
+    dashboard_file = Path(__file__).resolve().parents[1] / "monitoring" / "grafana" / "dashboards" / "ada-overview.json"
+    assert dashboard_file.is_file()
+    data = json.loads(dashboard_file.read_text(encoding="utf-8"))
+    assert data["uid"] == "ada-overview"
+    rows = [p["title"] for p in data["panels"] if p.get("type") == "row"]
+    assert "TOKENS Y CONTEXTO LLM" in rows
+    assert "ESTADO GENERAL" in rows
+    assert "OLLAMA Y MODELOS LOCALES" in rows
+
 
 
 def test_ollama_model_blob_digest_reads_model_layer(tmp_path):
