@@ -7,13 +7,16 @@ import com.ada.conversation.application.dto.LlmRequest
 import org.springframework.stereotype.Component
 
 @Component
-class AdaMetrics(private val registry: MeterRegistry) {
+class AdaMetrics(
+    private val registry: MeterRegistry,
+    private val tokenUsageEstimator: TokenUsageEstimator,
+) {
     fun recordRequest(context: String, useCase: String, outcome: String) {
         registry.counter("ada_requests_total", "context", context, "use_case", useCase, "outcome", outcome).increment()
     }
 
     fun recordTokenBreakdown(request: LlmRequest, completion: LlmCompletion) {
-        request.tokenComponents().forEach { component ->
+        tokenUsageEstimator.components(request).forEach { component ->
             registry.counter(
                 "ada_llm_tokens_total",
                 "model", request.model,

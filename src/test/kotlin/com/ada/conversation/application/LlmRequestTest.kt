@@ -2,6 +2,7 @@ package com.ada.conversation.application
 
 import com.ada.conversation.application.dto.ChatRequest
 import com.ada.conversation.application.dto.LlmTool
+import com.ada.shared.observability.TokenUsageEstimator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -26,7 +27,7 @@ class LlmRequestTest {
         assertEquals(listOf("search"), request.tools.map { it.name })
         assertEquals(
             listOf("system", "prompt", "tools", "total"),
-            request.tokenComponents().map { it.component },
+            TokenUsageEstimator().components(request).map { it.component },
         )
     }
 }
