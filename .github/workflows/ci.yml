@@ -42,6 +42,8 @@ jobs:
           persist-credentials: false
       - name: Test web search MCP
         run: python3 -m unittest discover -s mcp/web-search -p 'test_*.py'
+      - name: Test SQLite smoke runner
+        run: python3 -m unittest discover -s scripts/testing -p 'test_*.py'
 
   test:
     name: Run tests

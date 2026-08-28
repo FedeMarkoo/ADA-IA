@@ -1,19 +1,60 @@
 #!/usr/bin/env python3
-"""Run a small, deterministic smoke suite against ADA's HTTP API."""
+"""Seed and execute a smoke suite whose prompts live in external SQLite."""
 
 import argparse
 import json
+import os
+import sqlite3
 import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 
-DEFAULT_PROMPTS = [
-    "Explicá en tres puntos qué es una arquitectura hexagonal.",
-    "Compará JPG, PNG y RAW para conservar fotografías.",
-    "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora.",
-]
+CREATE_PROMPTS_TABLE = """
+CREATE TABLE IF NOT EXISTS smoke_prompts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def database_path(argument):
+    if argument:
+        return Path(argument)
+    return Path(os.environ.get("ADA_DATA_DIR", "../ada-data")) / "db" / "ada.sqlite"
+
+
+def seed_prompts(database, seed_file):
+    database.parent.mkdir(parents=True, exist_ok=True)
+    with seed_file.open(encoding="utf-8") as file:
+        prompts = json.load(file)
+    with sqlite3.connect(database) as connection:
+        connection.execute(CREATE_PROMPTS_TABLE)
+        connection.executemany(
+            """
+            INSERT INTO smoke_prompts(id, name, prompt, enabled)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(id) DO UPDATE SET name=excluded.name,
+                prompt=excluded.prompt, enabled=excluded.enabled
+            """,
+            [(item["id"], item["name"], item["prompt"]) for item in prompts],
+        )
+    return len(prompts)
+
+
+def load_prompts(database, limit):
+    with sqlite3.connect(database) as connection:
+        connection.execute(CREATE_PROMPTS_TABLE)
+        rows = connection.execute(
+            "SELECT id, name, prompt FROM smoke_prompts WHERE enabled = 1 ORDER BY rowid LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{"id": row[0], "name": row[1], "prompt": row[2]} for row in rows]
 
 
 def request(url, payload=None):
@@ -55,21 +96,25 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--poll-seconds", type=float, default=1.0)
-    parser.add_argument("--prompts-file")
-    parser.add_argument("prompts", nargs="*")
+    parser.add_argument("--database", help="External SQLite file containing smoke_prompts")
+    parser.add_argument("--seed-file", type=Path, help="JSON fixture used to upsert prompts into SQLite")
+    parser.add_argument("--limit", type=int, default=3)
     args = parser.parse_args()
-    prompts = args.prompts
-    if args.prompts_file:
-        with open(args.prompts_file, encoding="utf-8") as file:
-            prompts = [item["prompt"] for item in json.load(file)][:3]
-    prompts = prompts or DEFAULT_PROMPTS
+    database = database_path(args.database)
+    database.parent.mkdir(parents=True, exist_ok=True)
+    if args.seed_file:
+        print(f"Seeded {seed_prompts(database, args.seed_file)} prompts in {database}")
+    prompts = load_prompts(database, args.limit)
+    if not prompts:
+        print(f"No enabled prompts found in {database}. Use --seed-file first.", file=sys.stderr)
+        return 2
     passed = 0
-    print(f"Running {len(prompts)} smoke prompts against {args.base_url}")
-    for index, prompt in enumerate(prompts, start=1):
-        print(f"[{index}/{len(prompts)}] {prompt}")
+    print(f"Running {len(prompts)} SQLite smoke prompts against {args.base_url}")
+    for index, item in enumerate(prompts, start=1):
+        print(f"[{index}/{len(prompts)}] {item['id']} - {item['name']}")
         try:
-            passed += run_prompt(args.base_url, prompt, args.poll_seconds)
-        except (urllib.error.URLError, KeyError, json.JSONDecodeError) as error:
+            passed += run_prompt(args.base_url, item["prompt"], args.poll_seconds)
+        except (OSError, urllib.error.URLError, KeyError, json.JSONDecodeError) as error:
             print(f"  ERROR: {error}", file=sys.stderr)
     print(f"Result: {passed}/{len(prompts)} passed")
     return 0 if passed == len(prompts) else 1
