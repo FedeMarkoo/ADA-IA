@@ -21,6 +21,6 @@ public class SystemContextItem implements ContextItem {
   public ContextState apply(ChatRequest r, ContextState c) {
     var m = new java.util.ArrayList<>(c.messages());
     m.add(new LlmMessage(LlmMessageRole.SYSTEM, provider.content(), component()));
-    return new ContextState(m, c.tools());
+    return new ContextState(m, c.tools(), c.selection());
   }
 }

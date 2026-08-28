@@ -3,6 +3,10 @@ model_list:
     litellm_params:
       model: ollama/llama3.2:1b
       api_base: http://ollama:11434
+  - model_name: ollama/qwen2.5:7b
+    litellm_params:
+      model: ollama/qwen2.5:7b
+      api_base: http://ollama:11434
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

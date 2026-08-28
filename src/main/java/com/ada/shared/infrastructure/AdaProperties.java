@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.validation.annotation.Validated;
 
 @Validated
@@ -16,7 +17,7 @@ import org.springframework.validation.annotation.Validated;
 @NoArgsConstructor
 public class AdaProperties {
   @NotBlank private String dataDir;
-  private LlmProperties llm;
+  @NestedConfigurationProperty private LlmProperties llm;
 
   public Path getNormalizedDataDirectory() {
     return Path.of(dataDir).toAbsolutePath().normalize();

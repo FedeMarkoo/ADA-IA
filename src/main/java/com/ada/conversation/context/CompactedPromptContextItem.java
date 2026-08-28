@@ -22,7 +22,8 @@ public class CompactedPromptContextItem implements ContextItem {
   }
 
   public ContextState apply(ChatRequest r, ContextState c) {
-    if (estimator.estimate(c) <= max) return c;
+    if ((c.selection() == null || !c.selection().compactContext()) && estimator.estimate(c) <= max)
+      return c;
     var keep =
         c.messages().stream().filter(m -> m.component() == LlmContentComponent.SYSTEM).toList();
     var summary =
@@ -34,6 +35,6 @@ public class CompactedPromptContextItem implements ContextItem {
     all.add(
         new LlmMessage(
             LlmMessageRole.SYSTEM, "Previous context summary:\n" + summary, component()));
-    return new ContextState(all, c.tools());
+    return new ContextState(all, c.tools(), c.selection());
   }
 }

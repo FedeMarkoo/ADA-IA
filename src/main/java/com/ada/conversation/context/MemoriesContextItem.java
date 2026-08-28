@@ -21,7 +21,9 @@ public class MemoriesContextItem implements ContextItem {
 
   public ContextState apply(ChatRequest r, ContextState c) {
     var messages = new ArrayList<>(c.messages());
-    var memories = memoryManager.relevantMemories(r);
+    var selected =
+        c.selection() == null ? memoryManager.memorySubjects(r) : c.selection().memories();
+    var memories = memoryManager.relevantMemories(r, selected);
     if (!memories.isEmpty()) {
       messages.add(
           new LlmMessage(
@@ -29,6 +31,6 @@ public class MemoriesContextItem implements ContextItem {
               "Relevant memories:\n" + String.join("\n", memories),
               component()));
     }
-    return new ContextState(messages, c.tools());
+    return new ContextState(messages, c.tools(), c.selection());
   }
 }

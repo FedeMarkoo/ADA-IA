@@ -16,6 +16,6 @@ public class PromptContextItem implements ContextItem {
   public ContextState apply(ChatRequest r, ContextState c) {
     var m = new java.util.ArrayList<>(c.messages());
     m.add(new LlmMessage(LlmMessageRole.USER, r.message(), component()));
-    return new ContextState(m, c.tools());
+    return new ContextState(m, c.tools(), c.selection());
   }
 }

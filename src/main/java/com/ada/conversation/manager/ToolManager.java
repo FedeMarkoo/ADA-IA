@@ -36,6 +36,14 @@ public class ToolManager {
     return List.copyOf(tools);
   }
 
+  public List<String> availableToolNames() {
+    return availableTools().stream().map(LlmTool::name).toList();
+  }
+
+  public List<LlmTool> selectedTools(List<String> names) {
+    return availableTools().stream().filter(tool -> names.contains(tool.name())).toList();
+  }
+
   public ToolExecutionResult execute(LlmToolCall call) {
     return executors.stream()
         .filter(executor -> executor.supports(call.name()))

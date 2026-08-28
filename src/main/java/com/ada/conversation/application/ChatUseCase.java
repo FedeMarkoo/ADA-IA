@@ -51,6 +51,7 @@ public class ChatUseCase {
       var r = metrics.measureStage("filtering_command", () -> applyFilters(input));
       if (adaInfoManager.supports(r.message())) return executeInfoCommand(id);
       var selection = selector.execute(r);
+      tracker.update(id, new MessageExecutionState.SelectingContext());
       tracker.update(id, new MessageExecutionState.CreatingContext());
       var req =
           metrics.measureStage("context_creation", () -> factory.create(r, selection.model()));
@@ -86,7 +87,6 @@ public class ChatUseCase {
                 req.metadata());
         completion = invoke(id, req, tokenUsage);
       }
-      tracker.update(id, new MessageExecutionState.Completed());
       metrics.recordRequest("conversation", "chat", "success");
       var result =
           new ChatResult(
@@ -98,6 +98,7 @@ public class ChatUseCase {
               aggregateTokenUsage(tokenUsage));
       memoryManager.review(r, result.content());
       results.save(result);
+      tracker.update(id, new MessageExecutionState.Completed());
       return result;
     } catch (RuntimeException e) {
       tracker.update(

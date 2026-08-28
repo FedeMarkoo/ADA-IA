@@ -95,3 +95,13 @@ ser escribible por ese UID/GID, o se deben definir explícitamente
 `ADA_CONTAINER_UID` y `ADA_CONTAINER_GID` en `deploy/.env`. El primer arranque
 con una ruta nueva debe validarse revisando `/actuator/health` y los logs del
 servicio.
+## Routing de contexto
+
+La etapa `context_selection` mide por separado al modelo router y publica:
+
+- `ada_pipeline_stage_duration_seconds` y `ada_pipeline_stage_last_duration_seconds` para la latencia de selección.
+- `ada_context_selection_total` para invocaciones exitosas del router.
+- `ada_context_selection_items_total` para MCPs, tools y memorias seleccionados.
+- `ada_llm_duration_seconds` y tokens del proveedor con la etiqueta `model`, permitiendo comparar el router 1B con el modelo principal.
+
+Una selección completada no implica que una tool haya sido ejecutada. La ejecución se mide posteriormente en `ada_mcp_calls_total` y `ada_mcp_duration_seconds`.

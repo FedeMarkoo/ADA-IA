@@ -25,7 +25,7 @@ public class MemoryManager {
   private final AdaMetrics metrics;
   private final ObjectMapper objectMapper;
 
-  @Value("${ada.llm.default-model:unknown}")
+  @Value("${ada.llm.routing-model:ollama/llama3.2:1b}")
   private String evaluationModel;
 
   public MemoryManager(LlmClient llmClient, AdaMetrics metrics, ObjectMapper objectMapper) {
@@ -35,9 +35,21 @@ public class MemoryManager {
   }
 
   public List<String> relevantMemories(ChatRequest request) {
+    return relevantMemories(request, memorySubjects(request));
+  }
+
+  public List<String> memorySubjects(ChatRequest request) {
+    return memories.stream()
+        .filter(memory -> memory.conversationId().equals(request.conversationId()))
+        .map(MemoryCandidate::subject)
+        .toList();
+  }
+
+  public List<String> relevantMemories(ChatRequest request, List<String> selectedSubjects) {
     var query = request.message().toLowerCase();
     return memories.stream()
         .filter(memory -> memory.conversationId().equals(request.conversationId()))
+        .filter(memory -> selectedSubjects.contains(memory.subject()))
         .filter(
             memory ->
                 sharesMeaningfulWord(memory.subject(), query)
