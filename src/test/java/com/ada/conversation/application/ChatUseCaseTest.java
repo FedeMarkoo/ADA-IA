@@ -36,6 +36,8 @@ class ChatUseCaseTest {
     when(infoManager.describe()).thenReturn("ADA info");
     when(metrics.startRequest()).thenReturn(1L);
     when(observability.start(anyString(), anyString())).thenReturn(operation);
+    when(operation.event(anyString(), any())).thenReturn(operation);
+    when(operation.failure(any())).thenReturn(operation);
     doAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get())
         .when(metrics)
         .measureStage(anyString(), any());
