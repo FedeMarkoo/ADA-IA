@@ -34,7 +34,18 @@ def run_prompt(base_url, prompt, poll_seconds):
         state_name = status.get("state", "unknown").upper()
         print(f"  {message_id} -> {state_name}", flush=True)
         if state_name in {"COMPLETED", "FAILED"}:
-            return state_name == "COMPLETED"
+            if state_name == "FAILED":
+                return False
+            result = request(f"{base_url}/api/v1/chat/{message_id}")
+            print(
+                f"  response model={result.get('model')} "
+                f"input_tokens={result.get('inputTokens')} "
+                f"output_tokens={result.get('outputTokens')} "
+                f"token_usage={result.get('tokenUsage')}",
+                flush=True,
+            )
+            print(f"  response: {result.get('content')}", flush=True)
+            return True
         time.sleep(poll_seconds)
     print(f"  {message_id} -> TIMEOUT", flush=True)
     return False

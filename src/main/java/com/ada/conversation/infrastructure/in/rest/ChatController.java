@@ -1,6 +1,7 @@
 package com.ada.conversation.infrastructure.in.rest;
 
 import com.ada.conversation.application.ChatUseCase;
+import com.ada.conversation.application.port.out.MessageResultStore;
 import com.ada.conversation.application.port.out.MessageStateTracker;
 import com.ada.conversation.infrastructure.in.rest.dto.*;
 import com.ada.conversation.infrastructure.in.rest.mapper.ChatRestMapper;
@@ -18,6 +19,7 @@ public class ChatController {
   private final ChatUseCase useCase;
   private final ChatRestMapper mapper;
   private final MessageStateTracker tracker;
+  private final MessageResultStore results;
 
   @PostMapping
   public ResponseEntity<ChatAcceptedHttpResponse> chat(@Valid @RequestBody ChatHttpRequest r) {
@@ -30,5 +32,12 @@ public class ChatController {
     var s = tracker.current(messageId);
     if (s == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Message not found");
     return mapper.toStatus(messageId, s);
+  }
+
+  @GetMapping("/{messageId}")
+  public ChatHttpResponse result(@PathVariable String messageId) {
+    var result = results.find(messageId);
+    if (result == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Result not found");
+    return mapper.toResponse(result);
   }
 }

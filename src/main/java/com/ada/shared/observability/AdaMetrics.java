@@ -56,8 +56,10 @@ public class AdaMetrics {
     registry.counter("ada_requests_total", "context", c, "use_case", u, "outcome", o).increment();
   }
 
-  public void recordTokenBreakdown(LlmRequest r, LlmCompletion c) {
-    estimator.components(r).stream()
+  public java.util.List<TokenUsageComponent> recordTokenBreakdown(LlmRequest r, LlmCompletion c) {
+    var components = new java.util.ArrayList<>(estimator.components(r));
+    components.removeIf(x -> x.component().equals("total"));
+    components.stream()
         .filter(x -> !x.component().equals("total"))
         .forEach(
             x ->
@@ -71,7 +73,9 @@ public class AdaMetrics {
                         "source",
                         x.source().name().toLowerCase())
                     .increment(x.tokens()));
-    if (c.outputTokens() != null)
+    if (c.outputTokens() != null) {
+      components.add(
+          new TokenUsageComponent("response", c.outputTokens(), TokenUsageSource.PROVIDER));
       registry
           .counter(
               "ada_llm_tokens_total",
@@ -82,6 +86,8 @@ public class AdaMetrics {
               "source",
               "provider")
           .increment(c.outputTokens());
+    }
+    return components;
   }
 
   public void recordProviderTokens(String m, Long i, Long o) {

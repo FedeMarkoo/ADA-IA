@@ -17,6 +17,25 @@ ADA_LLM_DEFAULT_MODEL=openai/gpt-4o-mini
 No se guardan claves en `application.yml`, SQLite ni logs. Timeouts, reintentos,
 backoff y circuit breaker deben ser explícitos y medidos.
 
+### Ollama local en Docker
+
+El `compose.yaml` incluye Ollama como proveedor local de LiteLLM. El modelo se
+descarga una sola vez mediante el servicio de inicialización `ollama-model` y
+queda persistido en el volumen Docker nombrado `ollama-data`; por eso un
+reinicio o un redeploy no elimina los modelos descargados. El modelo se puede
+cambiar sin modificar el código:
+
+```text
+OLLAMA_MODEL=llama3.2:1b
+ADA_LLM_DEFAULT_MODEL=ollama/llama3.2:1b
+```
+
+En un clon nuevo, copiar `deploy/.env.example` a `deploy/.env` y ejecutar
+`docker compose --env-file deploy/.env up -d`. Compose espera a que Ollama esté
+saludable, descarga el modelo configurado y recién después inicia LiteLLM y
+ADA. El puerto de Ollama queda limitado a `127.0.0.1:11434` para diagnóstico
+local; LiteLLM lo consume por la red interna de Compose.
+
 El endpoint de gestión queda atado a `127.0.0.1:8081`; así Prometheus y los
 endpoints de Actuator no quedan expuestos por la interfaz HTTP de la aplicación.
 En un despliegue remoto debe agregarse autenticación o una ACL de red.
