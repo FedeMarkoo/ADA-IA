@@ -233,6 +233,135 @@ LLM_TOKENS_TOTAL = Counter(
     ("component",),
     registry=REGISTRY,
 )
+HEALTHCHECK_RUNS = Counter(
+    "ada_healthcheck_runs_total",
+    "Total healthcheck and prompt test executions by category, capability and status.",
+    ("category", "capability", "status"),
+    registry=REGISTRY,
+)
+HEALTHCHECK_DURATION = Histogram(
+    "ada_healthcheck_duration_seconds",
+    "Duration of individual healthcheck prompt test executions in seconds.",
+    ("category", "capability", "status"),
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0),
+    registry=REGISTRY,
+)
+HEALTHCHECK_JUDGE_SCORE = Histogram(
+    "ada_healthcheck_judge_score",
+    "Evaluation score awarded by AI judge (0.0 to 1.0).",
+    ("category", "model"),
+    buckets=(0.0, 0.25, 0.5, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0),
+    registry=REGISTRY,
+)
+HEALTHCHECK_BATCH_RUNS = Counter(
+    "ada_healthcheck_batch_runs_total",
+    "Healthcheck batch runs by lifecycle status (started, completed, interrupted).",
+    ("status",),
+    registry=REGISTRY,
+)
+HEALTHCHECK_ACTIVE_BATCHES = Gauge(
+    "ada_healthcheck_active_batches",
+    "Number of currently running healthcheck batches.",
+    registry=REGISTRY,
+)
+HEALTHCHECK_PASS_RATE = Gauge(
+    "ada_healthcheck_last_pass_rate_ratio",
+    "Latest observed pass rate ratio per category (0.0 to 1.0).",
+    ("category",),
+    registry=REGISTRY,
+)
+ROUTER_DECISIONS = Counter(
+    "ada_router_decisions_total",
+    "Intent routing decisions by action, intent type and execution status.",
+    ("action", "intent_type", "status"),
+    registry=REGISTRY,
+)
+ROUTER_CONFIDENCE = Histogram(
+    "ada_router_confidence_score",
+    "Confidence score distribution of routing decisions.",
+    ("action",),
+    buckets=(0.0, 0.2, 0.4, 0.6, 0.75, 0.85, 0.95, 1.0),
+    registry=REGISTRY,
+)
+ROUTER_ERRORS = Counter(
+    "ada_router_errors_total",
+    "Routing errors by error type.",
+    ("error_type",),
+    registry=REGISTRY,
+)
+ROUTER_FALLBACKS = Counter(
+    "ada_router_fallbacks_total",
+    "Router fallback events by trigger.",
+    ("trigger",),
+    registry=REGISTRY,
+)
+LLM_GENERATION_SPEED = Histogram(
+    "ada_llm_generation_speed_tokens_per_second",
+    "LLM generation throughput in tokens per second.",
+    ("model",),
+    buckets=(1.0, 5.0, 10.0, 15.0, 20.0, 30.0, 50.0, 75.0, 100.0),
+    registry=REGISTRY,
+)
+LLM_CONTEXT_SATURATION = Gauge(
+    "ada_llm_context_saturation_ratio",
+    "Ratio of LLM context window used (0.0 to 1.0).",
+    ("model",),
+    registry=REGISTRY,
+)
+LLM_RETRIES = Counter(
+    "ada_llm_retries_total",
+    "LLM call retries and fallbacks by model and reason.",
+    ("model", "reason"),
+    registry=REGISTRY,
+)
+SQLITE_QUERIES = Counter(
+    "ada_sqlite_queries_total",
+    "SQLite database operations by table and operation type.",
+    ("table", "operation"),
+    registry=REGISTRY,
+)
+SQLITE_QUERY_DURATION = Histogram(
+    "ada_sqlite_query_duration_seconds",
+    "Duration of SQLite database operations in seconds.",
+    ("operation",),
+    buckets=(0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0),
+    registry=REGISTRY,
+)
+MEMORY_REFINER_RUNS = Counter(
+    "ada_memory_refiner_runs_total",
+    "Memory refiner execution cycles by status.",
+    ("status",),
+    registry=REGISTRY,
+)
+MEMORY_REFINER_FACTS = Counter(
+    "ada_memory_refiner_extracted_facts_total",
+    "Total facts extracted from conversations by memory refiner.",
+    registry=REGISTRY,
+)
+TELEGRAM_MESSAGES = Counter(
+    "ada_telegram_messages_total",
+    "Telegram messages processed by direction (inbound, outbound) and status.",
+    ("direction", "status"),
+    registry=REGISTRY,
+)
+TELEGRAM_LATENCY = Histogram(
+    "ada_telegram_latency_seconds",
+    "End-to-end processing latency for Telegram messages in seconds.",
+    buckets=(0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
+    registry=REGISTRY,
+)
+TELEGRAM_POLLING_ERRORS = Counter(
+    "ada_telegram_polling_errors_total",
+    "Telegram polling or transport errors by type.",
+    ("error_type",),
+    registry=REGISTRY,
+)
+SYSTEM_ERRORS = Counter(
+    "ada_system_errors_total",
+    "System and component errors by component and error class.",
+    ("component", "error_class"),
+    registry=REGISTRY,
+)
 UP = Gauge("ada_up", "Whether the ADA web process is alive.", registry=REGISTRY)
 UP.set(1)
 
@@ -538,7 +667,169 @@ def operation_finished(name: str) -> None:
     ADA_ACTIVE.labels(operation=name).dec()
 
 
+def record_healthcheck_run(category: str, capability: str, status: str, duration: float) -> None:
+    """Record an individual healthcheck / test case run in Prometheus."""
+    try:
+        cat = str(category or "general").lower()
+        cap = str(capability or "unknown").lower()
+        stat = str(status or "failed").lower()
+        HEALTHCHECK_RUNS.labels(category=cat, capability=cap, status=stat).inc()
+        sec = max(0.0, float(duration or 0.0))
+        HEALTHCHECK_DURATION.labels(category=cat, capability=cap, status=stat).observe(sec)
+    except Exception:
+        pass
+
+
+def record_healthcheck_judge(category: str, model: str, score: float) -> None:
+    """Record AI judge score distribution in Prometheus."""
+    try:
+        cat = str(category or "general").lower()
+        mod = str(model or "unknown").lower()
+        val = max(0.0, min(1.0, float(score or 0.0)))
+        HEALTHCHECK_JUDGE_SCORE.labels(category=cat, model=mod).observe(val)
+    except Exception:
+        pass
+
+
+def record_healthcheck_batch(status: str) -> None:
+    """Record batch lifecycle event."""
+    try:
+        stat = str(status or "completed").lower()
+        HEALTHCHECK_BATCH_RUNS.labels(status=stat).inc()
+    except Exception:
+        pass
+
+
+def set_active_healthcheck_batches(count: int) -> None:
+    """Update active healthcheck batches gauge."""
+    try:
+        HEALTHCHECK_ACTIVE_BATCHES.set(max(0, int(count or 0)))
+    except Exception:
+        pass
+
+
+def update_category_pass_rate(category: str, pass_rate: float) -> None:
+    """Update category pass rate gauge."""
+    try:
+        cat = str(category or "general").lower()
+        rate = max(0.0, min(1.0, float(pass_rate or 0.0)))
+        HEALTHCHECK_PASS_RATE.labels(category=cat).set(rate)
+    except Exception:
+        pass
+
+
+def record_router_decision(action: str, intent_type: str = "direct", status: str = "ok", confidence: float = 1.0) -> None:
+    """Record intent router decision in Prometheus."""
+    try:
+        act = str(action or "ask").lower()
+        itype = str(intent_type or "direct").lower()
+        stat = str(status or "ok").lower()
+        ROUTER_DECISIONS.labels(action=act, intent_type=itype, status=stat).inc()
+        conf = max(0.0, min(1.0, float(confidence or 0.0)))
+        ROUTER_CONFIDENCE.labels(action=act).observe(conf)
+    except Exception:
+        pass
+
+
+def record_router_error(error_type: str) -> None:
+    """Record a router error."""
+    try:
+        err = str(error_type or "unknown").lower()
+        ROUTER_ERRORS.labels(error_type=err).inc()
+    except Exception:
+        pass
+
+
+def record_router_fallback(trigger: str) -> None:
+    """Record a router fallback invocation."""
+    try:
+        trig = str(trigger or "unknown").lower()
+        ROUTER_FALLBACKS.labels(trigger=trig).inc()
+    except Exception:
+        pass
+
+
+def record_llm_generation(model: str, tokens: int, duration: float, context_used: int = 0, context_max: int = DEFAULT_CONTEXT_WINDOW) -> None:
+    """Record LLM generation throughput and context saturation."""
+    try:
+        mod = str(model or "unknown").lower()
+        tok = max(0, int(tokens or 0))
+        sec = max(0.001, float(duration or 0.0))
+        speed = tok / sec
+        LLM_GENERATION_SPEED.labels(model=mod).observe(speed)
+        if context_max and context_max > 0:
+            saturation = min(1.0, max(0.0, float(context_used or 0) / float(context_max)))
+            LLM_CONTEXT_SATURATION.labels(model=mod).set(saturation)
+    except Exception:
+        pass
+
+
+def record_llm_retry(model: str, reason: str) -> None:
+    """Record LLM retry or model switch event."""
+    try:
+        mod = str(model or "unknown").lower()
+        res = str(reason or "timeout").lower()
+        LLM_RETRIES.labels(model=mod, reason=res).inc()
+    except Exception:
+        pass
+
+
+def record_sqlite_op(table: str, operation: str, duration: float = 0.0) -> None:
+    """Record SQLite database operation."""
+    try:
+        tbl = str(table or "unknown").lower()
+        op = str(operation or "select").lower()
+        SQLITE_QUERIES.labels(table=tbl, operation=op).inc()
+        if duration > 0:
+            SQLITE_QUERY_DURATION.labels(operation=op).observe(float(duration))
+    except Exception:
+        pass
+
+
+def record_memory_refiner(status: str = "ok", extracted_facts: int = 0) -> None:
+    """Record memory refiner cycle."""
+    try:
+        stat = str(status or "ok").lower()
+        MEMORY_REFINER_RUNS.labels(status=stat).inc()
+        if extracted_facts > 0:
+            MEMORY_REFINER_FACTS.inc(int(extracted_facts))
+    except Exception:
+        pass
+
+
+def record_telegram_event(direction: str, status: str = "ok", duration: float = None) -> None:
+    """Record Telegram communication event."""
+    try:
+        direct = str(direction or "inbound").lower()
+        stat = str(status or "ok").lower()
+        TELEGRAM_MESSAGES.labels(direction=direct, status=stat).inc()
+        if duration is not None and duration >= 0:
+            TELEGRAM_LATENCY.observe(float(duration))
+    except Exception:
+        pass
+
+
+def record_telegram_error(error_type: str) -> None:
+    """Record Telegram polling or transport error."""
+    try:
+        err = str(error_type or "network").lower()
+        TELEGRAM_POLLING_ERRORS.labels(error_type=err).inc()
+    except Exception:
+        pass
+
+
+def record_system_error(component: str, error_class: str) -> None:
+    """Record system error by component."""
+    try:
+        comp = str(component or "general").lower()
+        err_cls = str(error_class or "exception").lower()
+        SYSTEM_ERRORS.labels(component=comp, error_class=err_cls).inc()
+    except Exception:
+        pass
+
+
 def exposition() -> bytes:
     """Return the OpenMetrics-compatible scrape payload."""
     refresh_resource_metrics()
     return generate_latest(REGISTRY)
+

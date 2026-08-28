@@ -17,6 +17,13 @@ from ada.application.services.healthcheck import (
     llm_judge,
     requires_mcp,
 )
+from ada.infrastructure.prometheus_metrics import (
+    record_healthcheck_batch,
+    record_healthcheck_judge,
+    record_healthcheck_run,
+    set_active_healthcheck_batches,
+    update_category_pass_rate,
+)
 from ada.interfaces.web.doctor import HealthDoctor
 from ada.interfaces.web.state import (
     WebSessionState,
@@ -269,7 +276,21 @@ def _execute_healthcheck_batch(runtime: Dict[str, Any], prompts: List[Dict[str, 
         )
         store.mark_batch_item(run_id, evaluation["passed"])
 
+        record_healthcheck_run(
+            item.get("category", "general"),
+            item.get("capability", item.get("category", "general")),
+            status_name,
+            evaluation.get("elapsed_seconds", 0.0),
+        )
+        if "judge" in evaluation and isinstance(evaluation["judge"], dict):
+            record_healthcheck_judge(
+                item.get("category", "general"),
+                evaluation["judge"].get("model") or "unknown",
+                evaluation["judge"].get("score", 0.0),
+            )
+
     store.finish_batch(run_id)
+    record_healthcheck_batch("completed")
 
 
 @health_bp.route("/api/healthcheck/runs/active", methods=["GET"])
@@ -320,6 +341,8 @@ def healthcheck_run_cancel_api(run_id):
     changed = store.interrupt_batch(run_id)
     with _healthcheck_active_runs_lock:
         _healthcheck_active_run_ids.discard(run_id)
+        set_active_healthcheck_batches(len(_healthcheck_active_run_ids))
+    record_healthcheck_batch("interrupted")
     batch = store.batch(run_id)
     if not batch:
         return jsonify({"error": "healthcheck_run_not_found"}), 404
@@ -358,6 +381,8 @@ def healthcheck_run_api():
     store.begin_batch(run_id, [item["id"] for item in prompts])
     with _healthcheck_active_runs_lock:
         _healthcheck_active_run_ids.add(run_id)
+        set_active_healthcheck_batches(len(_healthcheck_active_run_ids))
+    record_healthcheck_batch("started")
 
     try:
         executor = runtime.get("healthcheck_executor")
@@ -366,6 +391,7 @@ def healthcheck_run_api():
         def healthcheck_done(done_future):
             with _healthcheck_active_runs_lock:
                 _healthcheck_active_run_ids.discard(run_id)
+                set_active_healthcheck_batches(len(_healthcheck_active_run_ids))
             try:
                 done_future.result()
             except Exception:
@@ -374,11 +400,13 @@ def healthcheck_run_api():
                     HealthcheckStore(runtime["agent"].mem).interrupt_batch(run_id)
                 except Exception:
                     pass
+                record_healthcheck_batch("interrupted")
 
         future.add_done_callback(healthcheck_done)
     except Exception:
         with _healthcheck_active_runs_lock:
             _healthcheck_active_run_ids.discard(run_id)
+            set_active_healthcheck_batches(len(_healthcheck_active_run_ids))
         raise
 
     batch = store.batch(run_id)

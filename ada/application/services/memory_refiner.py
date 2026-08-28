@@ -16,6 +16,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from ada.application.services.memory_compactor import MemoryCompactor
+from ada.infrastructure.prometheus_metrics import record_memory_refiner
 
 logger = logging.getLogger("ada.memory_refiner")
 
@@ -104,15 +105,30 @@ class MemoryRefiner:
             "compacted_messages": compacted["messages"],
             "timestamp": current_time,
         }
+        record_memory_refiner("ok", extracted_facts=extracted_facts)
         logger.info("memory_refiner_completed: %s", summary)
         return summary
 
     def _compact_conversations(self) -> Dict[str, int]:
         try:
-            sessions = self.memory.list_recent_sessions(limit=50)
+            if hasattr(self.memory, "list_recent_sessions"):
+                sessions = self.memory.list_recent_sessions(limit=50)
+            elif hasattr(self.memory, "conn") and self.memory.conn:
+                try:
+                    sessions = [
+                        row[0]
+                        for row in self.memory.conn.execute(
+                            "SELECT DISTINCT session FROM conversation_messages ORDER BY id DESC LIMIT 50"
+                        ).fetchall()
+                    ]
+                except Exception:
+                    sessions = []
+            else:
+                sessions = []
             return self.compactor.compact_sessions(sessions)
         except Exception as exc:
             logger.warning("memory_compaction_failed: %s", exc)
+            record_memory_refiner("error", extracted_facts=0)
             return {"sessions": 0, "messages": 0}
 
     def _extract_knowledge_from_conversations(self) -> int:

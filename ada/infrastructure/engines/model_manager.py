@@ -24,6 +24,8 @@ from ada.infrastructure.prometheus_metrics import (
     OLLAMA_EXECUTIONS,
     OLLAMA_IN_FLIGHT,
     estimate_token_count,
+    record_llm_generation,
+    record_llm_retry,
     record_stage_duration,
     set_llm_token_usage,
 )
@@ -927,10 +929,15 @@ class ModelManager:
             else:
                 raise RuntimeError("No hay un proveedor de modelos disponible: %s" % provider)
             set_llm_token_usage(token_usage, response=result, max_context=ctx_limit)
+            duration = time.monotonic() - started
+            resp_tokens = estimate_token_count(result)
+            total_tokens = int(token_usage.get("total", 0)) + resp_tokens if isinstance(token_usage, dict) else resp_tokens
+            record_llm_generation(str(model_tag), resp_tokens, duration, context_used=total_tokens, context_max=ctx_limit)
             return result
-        except Exception:
+        except Exception as exc:
             failed = True
             self.metrics.increment("provider.errors", tags=tags)
+            record_llm_retry(str(model_tag), type(exc).__name__)
             raise
         finally:
             if exclusive_acquired:
