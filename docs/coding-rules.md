@@ -75,8 +75,11 @@
 
 ## CI gratuito
 
-- `mvn verify` es el check funcional principal y genera cobertura JaCoCo en
-  `target/site/jacoco`.
+- El workflow `CI` está organizado por dependencias: `validate` habilita
+  `test` y `quality` en paralelo; `package` espera ambas etapas y `coverage`
+  corre en paralelo después de los tests.
+- `mvn verify` sigue siendo el check funcional local principal. El job de
+  cobertura ejecuta `mvn test jacoco:report` y publica `target/site/jacoco`.
 - Spotless valida formato y el compilador de Maven bloquea errores de código.
 - CodeQL analiza seguridad de Java y publica los resultados en GitHub
   Code Scanning.
