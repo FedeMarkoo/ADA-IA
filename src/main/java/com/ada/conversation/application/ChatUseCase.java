@@ -22,6 +22,7 @@ public class ChatUseCase {
   private final List<RequestFilter> filters;
   private final List<ToolExecutor> tools;
   private final MessageStateTracker tracker;
+  private final MessageResultStore results;
 
   @Qualifier("conversationExecutor") private final Executor executor;
 
@@ -88,12 +89,15 @@ public class ChatUseCase {
       }
       tracker.update(id, new MessageExecutionState.Completed());
       metrics.recordRequest("conversation", "chat", "success");
-      return new ChatResult(
-          id,
-          completion.content(),
-          completion.model(),
-          completion.inputTokens(),
-          completion.outputTokens());
+      var result =
+          new ChatResult(
+              id,
+              completion.content(),
+              completion.model(),
+              completion.inputTokens(),
+              completion.outputTokens());
+      results.save(result);
+      return result;
     } catch (RuntimeException e) {
       tracker.update(
           id,
