@@ -3,6 +3,8 @@ package com.ada.conversation.application;
 import com.ada.conversation.application.dto.*;
 import com.ada.conversation.application.port.in.RequestFilter;
 import com.ada.conversation.application.port.out.*;
+import com.ada.conversation.manager.MemoryManager;
+import com.ada.conversation.manager.ToolManager;
 import com.ada.shared.observability.AdaMetrics;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -20,7 +22,8 @@ public class ChatUseCase {
   private final LlmClient client;
   private final AdaMetrics metrics;
   private final List<RequestFilter> filters;
-  private final List<ToolExecutor> tools;
+  private final ToolManager toolManager;
+  private final MemoryManager memoryManager;
   private final MessageStateTracker tracker;
   private final MessageResultStore results;
 
@@ -61,15 +64,7 @@ public class ChatUseCase {
                 completion.toolCalls()));
         for (var call : completion.toolCalls()) {
           tracker.update(id, new MessageExecutionState.InvokingTool(call.name()));
-          var executor =
-              tools.stream()
-                  .filter(x -> x.supports(call.name()))
-                  .findFirst()
-                  .orElseThrow(
-                      () ->
-                          new IllegalStateException(
-                              "No executor available for tool '" + call.name() + "'"));
-          var result = metrics.measureStage("tool_invoke", () -> executor.execute(call));
+          var result = metrics.measureStage("tool_invoke", () -> toolManager.execute(call));
           messages.add(
               new LlmMessage(
                   LlmMessageRole.TOOL,
@@ -98,6 +93,7 @@ public class ChatUseCase {
               completion.inputTokens(),
               completion.outputTokens(),
               aggregateTokenUsage(tokenUsage));
+      memoryManager.review(r, result.content());
       results.save(result);
       return result;
     } catch (RuntimeException e) {

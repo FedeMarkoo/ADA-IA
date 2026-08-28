@@ -43,10 +43,17 @@ src/main/java/com/ada/
 El contexto que se envía al modelo se compone en `conversation.context`. Cada
 fragmento tiene un `ContextItem` independiente (`system`, `prompt`, `tools`,
 `memories`, `tool_response`, `compacted_prompt` y `response`).
-`ContextAssembler` recibe `List<ContextItem>` y respeta el orden declarado con
+`ContextManager` recibe `List<ContextItem>` y respeta el orden declarado con
 `@Order`. Cada item recibe el estado acumulado y devuelve el siguiente estado;
 por eso `CompactedPromptContextItem` puede eliminar mensajes anteriores y
 reemplazarlos por `compacted_prompt` antes de continuar.
+
+La coordinación de capacidades vive en `conversation.manager`: `ContextManager`
+ensambla el contexto, `ToolManager` reúne proveedores y ejecutores de tools, y
+`MemoryManager` evalúa si una interacción contiene una instrucción explícita y
+durable que justifique guardarla. Las memorias no se crean por una conversación
+ordinaria; la política evita capturar información accidental y queda preparada
+para reemplazar el almacenamiento en memoria por un puerto persistente.
 
 Los nombres concretos pueden variar por contexto, pero no se mezclan entradas,
 casos de uso, dominio y salidas en la misma clase.

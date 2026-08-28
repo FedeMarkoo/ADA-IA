@@ -38,6 +38,10 @@
 - Las partes del contexto enviado al modelo son componentes independientes bajo
   `conversation.context`. Se agregan mediante `List<ContextItem>` y orden
   explícito; no se centralizan variantes en un `if/when` creciente.
+- La coordinación vive en `conversation.manager`: `ContextManager` ensambla el
+  contexto, `ToolManager` selecciona y ejecuta tools, y `MemoryManager` decide
+  si una interacción tiene valor durable. No se guarda una conversación completa
+  por defecto ni se registran secretos o datos personales.
 - Los nombres de archivo, package e imports deben reflejar la responsabilidad
   real; no usar archivos comodín como `Models.kt`, `Dtos.kt` o `Common.kt`.
 - Un provider de prompt, LLM, persistencia o servicio externo es un adapter de
