@@ -31,6 +31,20 @@ jobs:
       - name: Validate
         run: mvn --batch-mode --no-transfer-progress validate
 
+  mcp:
+    name: Test MCP servers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test web search MCP
+        run: python3 -m unittest discover -s mcp/web-search -p 'test_*.py'
+      - name: Test SQLite smoke runner
+        run: python3 -m unittest discover -s scripts/testing -p 'test_*.py'
+
   test:
     name: Run tests
     needs: validate

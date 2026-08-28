@@ -9,6 +9,9 @@ RUN mvn -B -DskipTests package
 
 FROM eclipse-temurin:21-jre
 
+ARG ADA_COMMIT_ID=unknown
+ENV ADA_BUILD_COMMIT_ID=${ADA_COMMIT_ID}
+
 WORKDIR /app
 RUN useradd --system --create-home --uid 10001 ada
 COPY --from=build /workspace/target/ada-*.jar /app/ada.jar

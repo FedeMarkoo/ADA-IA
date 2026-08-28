@@ -1,9 +1,8 @@
 package com.ada.conversation.context;
 
-import com.ada.conversation.application.ToolProvider;
 import com.ada.conversation.application.dto.*;
+import com.ada.conversation.manager.ToolManager;
 import com.ada.shared.observability.MeasuredContextItem;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -13,7 +12,7 @@ import org.springframework.stereotype.Component;
 @MeasuredContextItem("tools")
 @RequiredArgsConstructor
 public class ToolsContextItem implements ContextItem {
-  private final List<ToolProvider> providers;
+  private final ToolManager toolManager;
 
   public LlmContentComponent component() {
     return LlmContentComponent.TOOLS;
@@ -21,7 +20,7 @@ public class ToolsContextItem implements ContextItem {
 
   public ContextState apply(ChatRequest r, ContextState c) {
     var t = new java.util.ArrayList<>(c.tools());
-    providers.forEach(p -> t.addAll(p.tools()));
+    t.addAll(toolManager.availableTools());
     return new ContextState(c.messages(), t);
   }
 }

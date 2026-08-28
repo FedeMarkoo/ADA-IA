@@ -1,0 +1,17 @@
+[
+  {
+    "id": "architecture_hexagonal",
+    "name": "Arquitectura hexagonal",
+    "prompt": "Explicá en tres puntos qué es una arquitectura hexagonal y cómo se separan dominio, aplicación e infraestructura."
+  },
+  {
+    "id": "image_formats",
+    "name": "Formatos de imagen",
+    "prompt": "Compará JPG, PNG y RAW para conservar fotografías. Indicá una ventaja y una desventaja de cada formato."
+  },
+  {
+    "id": "simple_meal",
+    "name": "Comida simple",
+    "prompt": "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora."
+  }
+]

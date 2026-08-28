@@ -8,6 +8,8 @@ services:
       ADA_LLM_BASE_URL: ${ADA_LLM_BASE_URL:-http://litellm:4000}
       ADA_LLM_API_KEY: ${ADA_LLM_API_KEY:-}
       ADA_LLM_DEFAULT_MODEL: ${ADA_LLM_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      ADA_DEPLOYED_VERSION: ${ADA_VERSION:-latest}
+      ADA_MCP_WEB_SEARCH_URL: http://mcp-web-search:8000/mcp
       MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
     ports:
       - "127.0.0.1:8080:8080"
@@ -16,6 +18,8 @@ services:
       - ${ADA_DATA_DIR:-../ada-data}:/data
     depends_on:
       litellm:
+        condition: service_healthy
+      mcp-web-search:
         condition: service_healthy
 
   litellm:
@@ -63,6 +67,15 @@ services:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     command: ["ollama pull $${OLLAMA_MODEL:-llama3.2:1b}"]
+
+  mcp-web-search:
+    build: ./mcp/web-search
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/mcp', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   prometheus:
     image: prom/prometheus:v2.55.1
