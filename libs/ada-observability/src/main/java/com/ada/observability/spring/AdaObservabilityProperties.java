@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("ada.observability")
 public class AdaObservabilityProperties {
   private boolean enabled = true;
-  private String applicationName = "${spring.application.name:ada}";
+  private String applicationName = "ada";
   private List<String> hiddenFields =
       new ArrayList<>(List.of("authorization", "token", "password", "apiKey", "client_secret"));
   private List<String> ignoredPaths =
