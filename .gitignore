@@ -1,6 +1,8 @@
 .gradle/
 build/
 target/
+__pycache__/
+*.pyc
 out/
 !src/main/java/**/out/
 !src/main/java/**/out/**
