@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+target
+build
+data
+backups
+logs
+*.db
+*.sqlite
+*.sqlite3
+*.env
+application-local.yml
