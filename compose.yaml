@@ -16,7 +16,7 @@ services:
       - ${ADA_DATA_DIR:-../ada-data}:/data
     depends_on:
       litellm:
-        condition: service_started
+        condition: service_healthy
 
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
@@ -28,6 +28,41 @@ services:
     volumes:
       - ${LITELLM_CONFIG:-./deploy/litellm/config.yaml}:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-model:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ollama:
+    image: ollama/ollama:0.33.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ollama-model:
+    image: ollama/ollama:0.33.1
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull $${OLLAMA_MODEL:-llama3.2:1b}"]
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -54,3 +89,4 @@ services:
 volumes:
   prometheus-data:
   grafana-data:
+  ollama-data:
