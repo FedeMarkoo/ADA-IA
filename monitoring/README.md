@@ -14,7 +14,7 @@ También puede consumir el export de prompts respaldado fuera del repositorio:
 
 ```bash
 python3 scripts/testing/run-smoke-prompts.py \
-  --prompts-file /home/fedemarkoo/Desktop/ADA_Data/backups/<backup>/healthcheck-prompts.json
+  --prompts-file "$ADA_DATA_DIR/backups/<backup>/healthcheck-prompts.json"
 ```
 
 Para que Grafana pueda consultar las métricas, debe existir un Prometheus en
