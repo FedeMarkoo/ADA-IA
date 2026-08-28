@@ -34,8 +34,8 @@ pequeños y verificables.
 ## Comandos previstos
 
 ```bash
-./gradlew test
-./gradlew check
+mvn test
+mvn verify
 ```
 
 El despliegue local de LiteLLM y el layout de datos están documentados en
