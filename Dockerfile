@@ -2,6 +2,7 @@ FROM maven:3.9.11-eclipse-temurin-21 AS build
 
 WORKDIR /workspace
 COPY pom.xml .
+COPY libs/ada-observability ./libs/ada-observability
 RUN mvn -B -DskipTests dependency:go-offline
 
 COPY src ./src

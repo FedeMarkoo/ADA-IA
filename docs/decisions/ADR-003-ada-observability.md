@@ -7,16 +7,17 @@ por ejecución del chat. El caso de uso registra metadatos técnicos mínimos y
 el resultado (`success`/`failure`) sin persistir prompts ni respuestas del
 modelo en el log automático.
 
-La librería se desarrolla en el repo hermano `ada-observability` y se resuelve
-localmente durante esta etapa mediante `mvn install`; al publicarse en un
-registry interno se reemplazará únicamente la fuente de resolución.
+La librería se desarrolla en el repo hermano `ada-observability` y se integra en
+ADA como el módulo Maven `libs/ada-observability`. El código se mantiene como
+subtree para que un clone limpio y la imagen Docker de Git sean autosuficientes.
+Si luego se publica en un registry interno, podrá reemplazarse el módulo por la
+dependencia remota.
 
 ## Integración local
 
 Desde el checkout de ADA:
 
 ```bash
-mvn -f ../ada-observability/pom.xml install
 mvn verify
 ```
 
