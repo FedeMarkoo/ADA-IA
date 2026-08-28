@@ -7,6 +7,8 @@ import com.ada.conversation.manager.AdaInfoManager;
 import com.ada.conversation.manager.MemoryManager;
 import com.ada.conversation.manager.ToolManager;
 import com.ada.observability.api.AdaObservability;
+import com.ada.observability.api.OperationScope;
+import com.ada.observability.api.TraceContext;
 import com.ada.shared.observability.AdaMetrics;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -35,20 +37,21 @@ public class ChatUseCase {
 
   public ChatResult execute(ChatRequest input) {
     String id = UUID.randomUUID().toString();
-    return execute(id, input);
+    return execute(id, input, observability.currentTrace());
   }
 
   public String start(ChatRequest input) {
     String id = UUID.randomUUID().toString();
+    var traceContext = observability.currentTrace();
     tracker.update(id, new MessageExecutionState.Received());
-    CompletableFuture.runAsync(() -> execute(id, input), executor);
+    CompletableFuture.runAsync(() -> execute(id, input, traceContext), executor);
     return id;
   }
 
-  private ChatResult execute(String id, ChatRequest input) {
+  private ChatResult execute(String id, ChatRequest input, TraceContext traceContext) {
     long startedAtNanos = metrics.startRequest();
     var tokenUsage = new ArrayList<TokenUsageComponent>();
-    try (var operation = observability.start("conversation.chat", "EVENT")) {
+    try (var operation = startObservabilityOperation(traceContext)) {
       operation.event("messageId", id).event("inputType", input.getClass().getSimpleName());
       try {
         tracker.update(id, new MessageExecutionState.FilteringCommand());
@@ -119,6 +122,12 @@ public class ChatUseCase {
         metrics.finishRequest(startedAtNanos);
       }
     }
+  }
+
+  private OperationScope startObservabilityOperation(TraceContext traceContext) {
+    return traceContext == null
+        ? observability.start("conversation.chat", "EVENT")
+        : observability.start("conversation.chat", "EVENT", traceContext);
   }
 
   private ChatResult executeInfoCommand(String id) {
