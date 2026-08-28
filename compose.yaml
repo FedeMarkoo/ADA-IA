@@ -20,7 +20,7 @@ services:
       litellm:
         condition: service_healthy
       mcp-web-search:
-        condition: service_started
+        condition: service_healthy
 
   litellm:
     image: ghcr.io/berriai/litellm:main-latest

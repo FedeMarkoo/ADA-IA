@@ -100,6 +100,8 @@ def main():
     parser.add_argument("--seed-file", type=Path, help="JSON fixture used to upsert prompts into SQLite")
     parser.add_argument("--limit", type=int, default=3)
     args = parser.parse_args()
+    if args.limit <= 0:
+        parser.error("--limit must be greater than zero")
     database = database_path(args.database)
     database.parent.mkdir(parents=True, exist_ok=True)
     if args.seed_file:

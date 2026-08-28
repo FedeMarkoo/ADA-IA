@@ -18,7 +18,7 @@ class MemoryManagerTest {
     Mockito.when(client.complete(Mockito.any()))
         .thenReturn(
             new LlmCompletion(
-                "{\"shouldRemember\":true,\"memory\":\"prefiere respuestas breves\"}",
+                "{\"shouldRemember\":true,\"subject\":\"respuestas\",\"memory\":\"prefiere respuestas breves\"}",
                 "test",
                 1L,
                 1L));
@@ -45,6 +45,87 @@ class MemoryManagerTest {
     manager.review(new ChatRequest("¿Qué tiempo hace hoy?", null), "No tengo ubicación");
 
     assertThat(manager.relevantMemories(new ChatRequest("tiempo", null))).isEmpty();
+  }
+
+  @Test
+  void replacesMemoryWithSameSubject() {
+    var client = Mockito.mock(com.ada.conversation.application.port.out.LlmClient.class);
+    Mockito.when(client.complete(Mockito.any()))
+        .thenReturn(
+            new LlmCompletion(
+                "{\"shouldRemember\":true,\"subject\":\"respuesta\",\"memory\":\"prefiere respuestas breves\"}",
+                "test",
+                1L,
+                1L),
+            new LlmCompletion(
+                "{\"shouldRemember\":true,\"subject\":\"respuesta\",\"memory\":\"prefiere respuestas detalladas\"}",
+                "test",
+                1L,
+                1L));
+    var manager = manager(client);
+    var request = new ChatRequest("Recordá mi preferencia", null, "conversation-1");
+
+    manager.review(request, "Entendido");
+    manager.review(request, "Entendido");
+
+    assertThat(manager.relevantMemories(new ChatRequest("¿Qué prefiere?", null, "conversation-1")))
+        .containsExactly("prefiere respuestas detalladas");
+  }
+
+  @Test
+  void isolatesMemoriesByConversation() {
+    var client = Mockito.mock(com.ada.conversation.application.port.out.LlmClient.class);
+    Mockito.when(client.complete(Mockito.any()))
+        .thenReturn(
+            new LlmCompletion(
+                "{\"shouldRemember\":true,\"subject\":\"preferencia\",\"memory\":\"prefiere café\"}",
+                "test",
+                1L,
+                1L));
+    var manager = manager(client);
+    manager.review(new ChatRequest("Recordá que prefiero café", null, "one"), "Ok");
+
+    assertThat(manager.relevantMemories(new ChatRequest("¿Qué prefiero?", null, "one")))
+        .containsExactly("prefiere café");
+    assertThat(manager.relevantMemories(new ChatRequest("¿Qué prefiero?", null, "two"))).isEmpty();
+  }
+
+  @Test
+  void rejectsSensitiveMemoryCategories() {
+    var client = Mockito.mock(com.ada.conversation.application.port.out.LlmClient.class);
+    Mockito.when(client.complete(Mockito.any()))
+        .thenReturn(
+            new LlmCompletion(
+                "{\"shouldRemember\":true,\"subject\":\"dato\",\"memory\":\"tiene información médica\"}",
+                "test",
+                1L,
+                1L),
+            new LlmCompletion(
+                "{\"shouldRemember\":true,\"subject\":\"dato\",\"memory\":\"tiene información financiera\"}",
+                "test",
+                1L,
+                1L),
+            new LlmCompletion(
+                "{\"shouldRemember\":true,\"subject\":\"dato\",\"memory\":\"tiene un asunto legal\"}",
+                "test",
+                1L,
+                1L));
+    var manager = manager(client);
+
+    manager.review(new ChatRequest("guardá esto", null, "medical"), "Ok");
+    manager.review(new ChatRequest("guardá esto", null, "financial"), "Ok");
+    manager.review(new ChatRequest("guardá esto", null, "legal"), "Ok");
+
+    assertThat(manager.relevantMemories(new ChatRequest("dato", null, "medical"))).isEmpty();
+    assertThat(manager.relevantMemories(new ChatRequest("dato", null, "financial"))).isEmpty();
+    assertThat(manager.relevantMemories(new ChatRequest("dato", null, "legal"))).isEmpty();
+  }
+
+  private MemoryManager manager(com.ada.conversation.application.port.out.LlmClient client) {
+    var manager =
+        new MemoryManager(client, metricsThatExecutesMeasuredOperations(), new ObjectMapper());
+    ReflectionTestUtils.setField(manager, "evaluationModel", "test");
+    return manager;
   }
 
   private AdaMetrics metricsThatExecutesMeasuredOperations() {

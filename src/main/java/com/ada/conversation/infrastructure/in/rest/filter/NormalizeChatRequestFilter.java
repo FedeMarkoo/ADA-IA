@@ -13,6 +13,7 @@ public class NormalizeChatRequestFilter implements RequestFilter {
   }
 
   public ChatRequest apply(ChatRequest request) {
-    return new ChatRequest(request.message().trim(), request.requestedModel());
+    return new ChatRequest(
+        request.message().trim(), request.requestedModel(), request.conversationId());
   }
 }

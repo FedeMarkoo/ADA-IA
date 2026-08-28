@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 public class MemoryManager {
   private static final String EVALUATION_SYSTEM_PROMPT =
       "Evaluate whether the interaction contains durable, useful user context. "
-          + "Return only JSON with boolean shouldRemember, string memory, and string reason. "
+          + "Return only JSON with boolean shouldRemember, string subject, string memory, and string reason. "
           + "Do not remember secrets, credentials, health, financial, legal, or highly personal data. "
           + "Remember preferences, stable working conventions, and explicitly requested facts.";
 
@@ -37,16 +37,24 @@ public class MemoryManager {
   public List<String> relevantMemories(ChatRequest request) {
     var query = request.message().toLowerCase();
     return memories.stream()
-        .filter(memory -> sharesMeaningfulWord(memory.subject(), query))
+        .filter(memory -> memory.conversationId().equals(request.conversationId()))
+        .filter(
+            memory ->
+                sharesMeaningfulWord(memory.subject(), query)
+                    || sharesMeaningfulWord(memory.content(), query))
         .map(MemoryCandidate::content)
         .toList();
   }
 
   public MemoryCandidate review(ChatRequest request, String response) {
     try {
-      var candidate = parseCandidate(evaluate(request, response).content());
+      var candidate =
+          parseCandidate(evaluate(request, response).content(), request.conversationId());
       if (candidate == null || !isSafe(candidate)) return null;
-      memories.removeIf(item -> item.subject().equalsIgnoreCase(candidate.subject()));
+      memories.removeIf(
+          item ->
+              item.conversationId().equals(candidate.conversationId())
+                  && item.subject().equalsIgnoreCase(candidate.subject()));
       memories.add(candidate);
       return candidate;
     } catch (RuntimeException error) {
@@ -76,13 +84,15 @@ public class MemoryManager {
     return completion;
   }
 
-  private MemoryCandidate parseCandidate(String content) {
+  MemoryCandidate parseCandidate(String content, String conversationId) {
     try {
       var json = objectMapper.readTree(content);
       if (!json.path("shouldRemember").asBoolean(false)) return null;
       var memory = json.path("memory").asText("").trim();
       if (memory.isBlank()) return null;
-      return new MemoryCandidate(memory.split("\\s+")[0], memory);
+      var subject = json.path("subject").asText("").trim();
+      var stableSubject = subject.isBlank() ? normalize(memory) : normalize(subject);
+      return new MemoryCandidate(stableSubject, memory, conversationId);
     } catch (JsonProcessingException error) {
       return null;
     }
@@ -90,7 +100,29 @@ public class MemoryManager {
 
   private boolean isSafe(MemoryCandidate candidate) {
     var text = candidate.content().toLowerCase();
-    return List.of("password", "contraseña", "secret", "token", "api key", "credential", "tarjeta")
+    return List.of(
+            "password",
+            "contraseña",
+            "secret",
+            "token",
+            "api key",
+            "credential",
+            "tarjeta",
+            "medical",
+            "médic",
+            "salud",
+            "health",
+            "financial",
+            "financier",
+            "finanza",
+            "banco",
+            "legal",
+            "abogado",
+            "contrato",
+            "dni",
+            "documento",
+            "dirección",
+            "domicilio")
         .stream()
         .noneMatch(text::contains);
   }
@@ -99,5 +131,9 @@ public class MemoryManager {
     return List.of(subject.toLowerCase().split("\\W+")).stream()
         .filter(word -> word.length() >= 5)
         .anyMatch(word -> query.contains(word.substring(0, Math.min(word.length(), 6))));
+  }
+
+  private String normalize(String value) {
+    return value.toLowerCase().replaceAll("\\s+", " ").trim();
   }
 }

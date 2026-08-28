@@ -80,6 +80,12 @@ infraestructura. Entidades y BO nunca se exponen directamente por HTTP.
 application y lee la versión activa desde `system_prompts` en SQLite. No hay un
 prompt default hardcodeado en el código.
 
+Las memorias se aíslan por `conversationId`, que forma parte del request de
+application y se propaga desde el DTO REST. El manager nunca mezcla memorias de
+dos conversaciones. El evaluador LLM devuelve un `subject` estable para
+reemplazar una preferencia existente; si no lo devuelve, se usa el contenido
+completo normalizado, nunca solo la primera palabra.
+
 Las invocaciones de los `ContextItem` se miden transversalmente con
 `ContextMetricsAspect`: se registra un contador de invocaciones y un `Timer` de
 duración por componente.

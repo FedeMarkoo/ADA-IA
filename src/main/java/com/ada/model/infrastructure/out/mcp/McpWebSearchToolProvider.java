@@ -12,6 +12,6 @@ public class McpWebSearchToolProvider implements ToolProvider {
         new LlmTool(
             "web_search",
             "Search the public internet for current information.",
-            "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"max_results\":{\"type\":\"integer\"}},\"required\":[\"query\"]}"));
+            "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"max_results\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}},\"required\":[\"query\"]}"));
   }
 }
