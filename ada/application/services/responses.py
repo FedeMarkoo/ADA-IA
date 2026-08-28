@@ -80,7 +80,7 @@ def text_from_result(result):
                 for item in calendars
             ]
             return "Calendarios encontrados:\n" + "\n".join(f"• {name}" for name in names)
-        if result.get("fallback") == "google-rest" and result.get("kind") == "calendar#events":
+        if result.get("kind") == "calendar#events" or (isinstance(result.get("items"), list) and ("timeZone" in result or "summary" in result)):
             events = result.get("items") or []
             if not events:
                 query = result.get("search_query")
@@ -89,7 +89,7 @@ def text_from_result(result):
                 month = result.get("search_month")
                 if month:
                     return f"No encontré eventos en Google Calendar durante {month[:7]} .".replace(" .", ".")
-                return "No encontré eventos próximos en Google Calendar durante los próximos días; no hay título, fecha ni hora para mostrar."
+                return "No encontré eventos próximos programados en Google Calendar."
             lines = ["Eventos encontrados:"]
             for event in events[:20]:
                 title = (event.get("summary") or "(sin título)") if isinstance(event, dict) else str(event)

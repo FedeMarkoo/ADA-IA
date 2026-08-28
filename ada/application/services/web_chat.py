@@ -96,6 +96,19 @@ class WebChatService:
             version = "0.1.0"
         return {"reply": f"ADA versión {version}", "model": "ADA · sistema"}
 
+    def _natural_capabilities_summary(self):
+        """Build a user-friendly conversational summary of main capabilities."""
+        return (
+            "Soy ADA, tu asistente personal y agente local. Puedo ayudarte con:\n\n"
+            "📸 **Fotografía y Archivos:** Organización inteligente de carpetas, análisis y conteo de fotos RAW/JPG, y gestión de sidecars XMP.\n"
+            "📅 **Google Calendar:** Consulta de eventos, agenda del día y recordatorios.\n"
+            "✉️ **Gmail:** Lectura y búsqueda de correos recientes y alertas en tu bandeja de entrada.\n"
+            "🍳 **Cocina y Compras:** Sugerencias de recetas con lo que tenés en la alacena y lista de compras.\n"
+            "🌐 **Búsqueda Web:** Noticias actualizadas, cotizaciones y datos en tiempo real.\n"
+            "🧠 **Memoria Persistente:** Recordar notas, preferencias y contexto de conversaciones.\n\n"
+            "¿En qué te puedo dar una mano hoy?"
+        )
+
     def _capability_summary(self):
         """Build a user-facing capability list from the live MCP registry."""
         if not self.mcp_manager:
@@ -424,16 +437,21 @@ class WebChatService:
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · sistema"}, 200
 
+        if re.search(r"\b(herramientas\s+mcp|listar\s+herramientas|inventario\s+mcp|tools\s+mcp)\b", text, re.I):
+            reply = self._capability_summary()
+            self._remember(state, text, reply)
+            return {"reply": reply, "model": "ADA · herramientas"}, 200
+
         if (
             re.search(
-                r"\b(que|qué)\s+(podes|puedes|haces|sabes hacer|funciones tenes|funciones tienes|herramientas tenes|MCPs? tenes|capacidades tenes)\b",
+                r"\b(que|qué)\s+(podes|podés|puedes|haces|hacés|sabes hacer|sabés hacer|funciones tenes|funciones tenés|capacidades tenes|capacidades tenés)\b",
                 text,
                 re.I,
             )
-            or re.search(r"\b(en que|en qué)\s+(me podes|me puedes|ayudas|me ayudas)\b", text, re.I)
+            or re.search(r"\b(en que|en qué)\s+(me podes|me podés|me puedes|ayudas|ayudás|me ayudas|me ayudás)\b", text, re.I)
             or re.search(r"\b(quien|quién)\s+(sos|eres)\b", text, re.I)
         ):
-            reply = self._capability_summary()
+            reply = self._natural_capabilities_summary()
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · asistente"}, 200
 
@@ -745,6 +763,8 @@ class WebChatService:
                     reply = f"Hay {count} {noun} en {output.get('dir')}."
             elif summarize_folder and isinstance(output, dict) and output.get("action") == "list_dirs":
                 reply = self._folder_overview(output)
+            elif hasattr(self.agent, "synthesize_response") and action == "mcp_call":
+                reply = self.agent.synthesize_response(text, action, output, conversation_context)
             else:
                 reply = text_from_result(output)
         if isinstance(output, dict) and not output.get("error") and output.get("dir"):

@@ -72,40 +72,71 @@ class Agent:
     @staticmethod
     def _memory_tool_request(result):
         """Decode the single bounded memory-as-a-tool request, if present."""
-        try:
-            candidate = result if isinstance(result, dict) else json.loads(str(result).strip())
-        except (TypeError, ValueError, json.JSONDecodeError):
+        text = str(result or "").strip()
+        if "memory.search" not in text:
             return None
-        call = candidate.get("tool_call") if isinstance(candidate, dict) else None
-        if not isinstance(call, dict) or call.get("name") != "memory.search":
-            return None
-        arguments = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
-        query = str(arguments.get("query") or "").strip()
-        if not query:
-            return None
-        try:
-            limit = int(arguments.get("limit", 3) or 3)
-        except (TypeError, ValueError):
-            limit = 3
+
+        match = re.search(r'\{\s*"tool_call"\s*:\s*\{.*?\}\s*\}', text, re.DOTALL)
+        if match:
+            try:
+                candidate = json.loads(match.group(0))
+                call = candidate.get("tool_call") or {}
+                if call.get("name") == "memory.search":
+                    args = call.get("arguments") or {}
+                    query = str(args.get("query") if args.get("query") is not None else "").strip()
+                    limit = int(args.get("limit", 3) or 3)
+                    return {"query": query, "limit": min(3, max(1, limit))}
+            except Exception:
+                pass
+
+        match = re.search(r'\{[^{}]*memory\.search[^{}]*\}', text, re.DOTALL)
+        if match:
+            try:
+                candidate = json.loads(match.group(0))
+                if isinstance(candidate, dict):
+                    args = candidate.get("arguments") if isinstance(candidate.get("arguments"), dict) else candidate
+                    query = str(args.get("query") if args.get("query") is not None else "").strip()
+                    limit = int(args.get("limit", 3) or 3)
+                    return {"query": query, "limit": min(3, max(1, limit))}
+            except Exception:
+                pass
+
+        q_match = re.search(r'["\']query["\']\s*:\s*["\']([^"\']*)["\']', text)
+        query = q_match.group(1).strip() if q_match else ""
+        l_match = re.search(r'["\']limit["\']\s*:\s*(\d+)', text)
+        limit = int(l_match.group(1)) if l_match else 3
         return {"query": query, "limit": min(3, max(1, limit))}
 
     def _complete_with_memory_tool(self, provider, prompt, result, call_options):
         """Execute at most one explicit memory lookup, then resume generation."""
         request = self._memory_tool_request(result)
         if not request or not self.mcp_manager or not self.cfg.get("memory_as_tool", True):
+            if isinstance(result, str) and "memory.search" in result:
+                cleaned = re.sub(r'SO\s*\{.*?memory\.search.*?\}', '', result, flags=re.DOTALL)
+                cleaned = re.sub(r'\{\s*"tool_call"\s*:\s*\{.*?\}\s*\}', '', cleaned, flags=re.DOTALL)
+                cleaned = re.sub(r'\{[^{}]*memory\.search[^{}]*\}', '', cleaned, flags=re.DOTALL).strip()
+                if cleaned:
+                    return cleaned
             return result
         with measure_stage("memory_tool_lookup"):
             lookup = self.mcp_manager.execute_tool("memory.search", {**request, "_request": request["query"]}, self)
-            lookup_str = (
-                "\n\nResultado de memory.search (usalo como fuente, no inventes otros recuerdos):\n"
-                + json.dumps(lookup, ensure_ascii=False)
-                + "\nRespondé ahora al usuario sin volver a pedir otra herramienta."
+            synthesis_prompt = (
+                f"{str(prompt)}\n\n"
+                "Resultados de memoria recuperados:\n"
+                f"{json.dumps(lookup, ensure_ascii=False)}\n\n"
+                "Instrucción: Respondé al usuario de forma clara, natural y concisa en español basándote en los recuerdos recuperados. Habla en primera persona como ADA sin mostrar JSON ni código."
             )
-            continuation_text = str(prompt) + lookup_str
             usage = dict(getattr(prompt, "token_usage", {}))
-            usage["tool_response"] = usage.get("tool_response", 0) + estimate_token_count(lookup_str)
-            continuation = PromptWithUsage(continuation_text, usage)
-            return self.model_manager.call(provider, continuation, token_usage=usage, **call_options)
+            usage["tool_response"] = usage.get("tool_response", 0) + estimate_token_count(synthesis_prompt)
+            continuation = PromptWithUsage(synthesis_prompt, usage)
+            final_resp = self.model_manager.call(provider, continuation, token_usage=usage, **call_options)
+            if isinstance(final_resp, str):
+                cleaned = re.sub(r'SO\s*\{.*?\}', '', final_resp, flags=re.DOTALL)
+                cleaned = re.sub(r'\{\s*"tool_call"\s*:\s*\{.*?\}\s*\}', '', cleaned, flags=re.DOTALL)
+                cleaned = re.sub(r'\{[^{}]*memory\.search[^{}]*\}', '', cleaned, flags=re.DOTALL).strip()
+                if cleaned:
+                    return cleaned
+            return final_resp
 
     def plan_request(self, text):
         """Turn a routed request into a validated, non-executing plan."""
@@ -286,6 +317,49 @@ class Agent:
             result["provider"] = provider
             self.operations.record_task(task, result, provider=provider, success=False)
             return {"model": provider, "result": result}
+
+    def synthesize_response(self, user_prompt, action, tool_output, conversation_context=""):
+        """Use the chat LLM to synthesize a natural, helpful, grounded response from tool execution data."""
+        if isinstance(tool_output, dict):
+            if tool_output.get("error") == "confirmation_required":
+                return tr("confirmation_required", self.lang)
+            if "reply" in tool_output and isinstance(tool_output["reply"], str):
+                return tool_output["reply"]
+
+        context_preview = f"\nContexto previo:\n{conversation_context[-1000:]}\n" if conversation_context else ""
+        synthesis_prompt = (
+            "Sos ADA, un asistente personal de IA local. Respondé de forma clara, amable, concisa y en español al usuario basándote EXCLUSIVAMENTE en los datos reales devueltos por la herramienta.\n\n"
+            f"{context_preview}"
+            f"PEDIDO DEL USUARIO: {user_prompt}\n"
+            f"HERRAMIENTA EJECUTADA: {action}\n"
+            f"DATOS OBTENIDOS:\n{json.dumps(tool_output, ensure_ascii=False)[:3500]}\n\n"
+            "INSTRUCCIONES:\n"
+            "1. Si los datos están vacíos o no hay elementos (0 eventos, 0 correos, sin resultados), explicá amablemente que no encontraste elementos según lo pedido.\n"
+            "2. Si hay elementos (correos, eventos, recetas, archivos, fotos), resumilos de forma limpia y legible con viñetas.\n"
+            "3. Habla siempre en lenguaje humano natural: NUNCA devuelvas bloques JSON, ni nombres técnicos de variables internas ni fragmentos de código.\n"
+        )
+        task = {
+            "type": None,
+            "prompt": synthesis_prompt,
+            "complexity": 2,
+            "mode": "agent",
+            "model_role": "chat",
+        }
+        try:
+            result = self.decide_and_run(task)
+            reply = result.get("result") if isinstance(result, dict) else str(result)
+            if isinstance(reply, dict):
+                reply = reply.get("response") or reply.get("text") or str(reply)
+            clean_reply = str(reply).strip()
+            if "tool_call" in clean_reply:
+                clean_reply = re.sub(r'\{\s*"tool_call"\s*:\s*\{.*?\}\s*\}', '', clean_reply, flags=re.DOTALL).strip()
+            if clean_reply:
+                return clean_reply
+        except Exception as exc:
+            logger.warning("synthesize_response failed error=%s", exc)
+
+        from ada.application.services.responses import text_from_result
+        return text_from_result(tool_output)
 
     @staticmethod
     def _food_request_has_specific_ingredients(request):

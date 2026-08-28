@@ -154,7 +154,7 @@ class IntentRouter:
         lowered = text.lower()
         if not self.mcp_manager:
             return {}
-        if re.search(r"\b(calendar|calendario|evento|eventos|agenda|reuni[oó]n|reuniones)\b", lowered):
+        if re.search(r"\b(calendar|calendarios?|eventos?|agenda|reuni[oó]n|reuniones)\b", lowered):
             candidates = ["google_calendar.list_events", "google_calendar.search_events"]
             for name in candidates:
                 tool = self.tool_registry.get(name)
@@ -173,7 +173,7 @@ class IntentRouter:
                         "latency": "balanced",
                         "requires_tool_calling": True,
                     }
-        if re.search(r"\b(gmail|correo|correos|mails?|bandeja|remitente|asuntos?)\b", lowered):
+        if re.search(r"\b(gmail|correos?|mails?|bandeja|inbox|remitentes?|asuntos?)\b", lowered):
             candidates = ["gmail.read_inbox", "gmail.search_threads"]
             for name in candidates:
                 tool = self.tool_registry.get(name)
@@ -192,7 +192,7 @@ class IntentRouter:
                         "latency": "balanced",
                         "requires_tool_calling": True,
                     }
-        if re.search(r"\b(internet|web|noticia|noticias|fuente|fuentes|precio|d[oó]lar|cripto|acci[oó]n|acciones)\b", lowered):
+        if re.search(r"\b(internet|web|noticias?|fuentes?|precios?|d[oó]lar(?:es)?|cripto|acci[oó]n|acciones)\b", lowered):
             tool = self.tool_registry.get("web_search.search")
             if tool and tool.get("enabled"):
                 record_router_fallback("deterministic_web_search")
@@ -245,8 +245,8 @@ class IntentRouter:
             external_hint = bool(
                 self.mcp_manager
                 and re.search(
-                    r"\b(calendar|calendario|evento|gmail|correo|mails?|drive|internet|fuente|d[oó]lar|"
-                    r"busc[aá]|investig[aá]|verific[aá]|confirm[aá]|actual|hoy|últim[oa]|noticia|precio|"
+                    r"\b(calendar|calendarios?|eventos?|agenda|reuni[oó]n|reuniones|gmail|correos?|mails?|bandeja|inbox|drive|google drive|internet|fuentes?|d[oó]lar(?:es)?|"
+                    r"busc[aá]|investig[aá]|verific[aá]|confirm[aá]|actual(?:es)?|hoy|últim[oa]s?|noticias?|precios?|"
                     r"no\s+(?:sé|se)|duda|qué\s+pas[oó]|qui[eé]n\s+es)\b",
                     text.lower(),
                 )
@@ -308,20 +308,32 @@ class IntentRouter:
                     )
                 logger.info("router raw=%s", str(raw)[:1000])
                 normalized = self._normalize(self._decode(raw), fallback, memory_candidates, text=text)
-                if external_hint and normalized.get("action") != "mcp_call":
-                    det_mcp = self._deterministic_mcp_fallback(text)
-                    if det_mcp:
-                        record_router_decision(det_mcp.get("action", "mcp_call"), intent_type="mcp_grounding_fallback", status="ok", confidence=det_mcp.get("confidence", 0.9))
-                        return det_mcp
-                    res = {
-                        "action": "ask",
-                        "routing_error": "external_request_not_grounded",
-                        "complexity": 4,
-                        "confidence": 0.0,
-                    }
-                    record_router_error("external_request_not_grounded")
-                    record_router_decision("ask", intent_type="error", status="error", confidence=0.0)
-                    return res
+                if external_hint:
+                    lowered = text.lower()
+                    selected_tool = str(normalized.get("tool") or "")
+                    is_cal = bool(re.search(r"\b(calendar|calendarios?|eventos?|agenda|reuni[oó]n|reuniones)\b", lowered))
+                    is_mail = bool(re.search(r"\b(gmail|correos?|mails?|bandeja|inbox|remitentes?)\b", lowered))
+                    is_web = bool(re.search(r"\b(internet|web|noticias?|fuentes?|d[oó]lar(?:es)?|cripto)\b", lowered))
+                    mismatched = (
+                        normalized.get("action") != "mcp_call"
+                        or (is_cal and not selected_tool.startswith("google_calendar"))
+                        or (is_mail and not selected_tool.startswith("gmail"))
+                        or (is_web and not selected_tool.startswith("web_search"))
+                    )
+                    if mismatched:
+                        det_mcp = self._deterministic_mcp_fallback(text)
+                        if det_mcp:
+                            record_router_decision(det_mcp.get("action", "mcp_call"), intent_type="mcp_grounding_fallback", status="ok", confidence=det_mcp.get("confidence", 0.9))
+                            return det_mcp
+                        res = {
+                            "action": "ask",
+                            "routing_error": "external_request_not_grounded",
+                            "complexity": 4,
+                            "confidence": 0.0,
+                        }
+                        record_router_error("external_request_not_grounded")
+                        record_router_decision("ask", intent_type="error", status="error", confidence=0.0)
+                        return res
                 if normalized.get("action") == "food" and normalized.get("food_action") in FOOD_MUTATIONS:
                     verified = self._verify_food_mutation(provider, text, normalized)
                     if not verified:
