@@ -85,7 +85,9 @@
   Code Scanning.
 - El workflow `Security` bloquea secretos con Gitleaks, archivos privados y
   rutas locales con una política versionada, y vulnerabilidades altas nuevas
-  con Dependency Review. Un secreto detectado debe revocarse, no solamente
-  borrarse del commit.
+  con Dependency Review cuando `DEPENDENCY_GRAPH_ENABLED=true` está configurado
+  en el repositorio. Un secreto detectado debe revocarse, no solamente borrarse
+  del commit. Las excepciones de Gitleaks requieren fingerprint exacto y
+  justificación.
 - CodeRabbit complementa estas herramientas con revisión contextual del diff;
   no reemplaza los checks deterministas del CI.

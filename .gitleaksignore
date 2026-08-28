@@ -1,0 +1,3 @@
+# Historical backup contains a literal redaction placeholder, not a secret.
+# Keep the exception tied to the exact commit, file and rule fingerprint.
+e7a52435b1c5e39a1955ebfc1c3f8c454550d7b2:ada/interfaces/web/routes/core.py:generic-api-key:160
