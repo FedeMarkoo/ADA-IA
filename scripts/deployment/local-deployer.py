@@ -35,8 +35,15 @@ def compose(args, env, *parts):
 
 
 def image_id(args, env):
-    result = compose(args, env, "images", "-q", "ada")
-    return result.stdout.strip()
+    image = f"{env.get('ADA_IMAGE', 'ghcr.io/fedemarkoo/ada-ia')}:{env.get('ADA_VERSION', 'latest')}"
+    result = subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
 def backup_database(data_dir):

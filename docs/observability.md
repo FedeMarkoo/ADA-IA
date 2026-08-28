@@ -76,3 +76,12 @@ Ollama no informa modelos activos, la serie queda en `unknown` y no se inventa
 una atribución. La memoria global se conserva en
 `ada_host_system_memory_bytes{state="total|used|available"}`. El exporter no
 publica command lines, prompts, credenciales ni datos personales.
+
+## Permisos del volumen de datos
+
+La imagen ejecuta ADA con el usuario no root `ada` (UID/GID `10001`). En una
+instalación nueva, el directorio configurado en `ADA_DATA_DIR` debe existir y
+ser escribible por ese UID/GID, o se deben definir explícitamente
+`ADA_CONTAINER_UID` y `ADA_CONTAINER_GID` en `deploy/.env`. El primer arranque
+con una ruta nueva debe validarse revisando `/actuator/health` y los logs del
+servicio.

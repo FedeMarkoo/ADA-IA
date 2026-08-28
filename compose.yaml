@@ -1,7 +1,7 @@
 services:
   ada:
     image: ${ADA_IMAGE:-ghcr.io/fedemarkoo/ada-ia}:${ADA_VERSION:-latest}
-    user: "${ADA_CONTAINER_UID:-1000}:${ADA_CONTAINER_GID:-1000}"
+    user: "${ADA_CONTAINER_UID:-10001}:${ADA_CONTAINER_GID:-10001}"
     restart: unless-stopped
     environment:
       ADA_DATA_DIR: /data
