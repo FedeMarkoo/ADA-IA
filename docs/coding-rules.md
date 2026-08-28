@@ -34,6 +34,9 @@
 - Comentarios para decisiones, invariantes o riesgos; no para repetir el código.
 - No introducir patrones por obligación: Strategy y Filter se usan cuando hay
   variantes reemplazables o una cadena de reglas real.
+- Las partes del contexto enviado al modelo son componentes independientes bajo
+  `conversation.context`. Se agregan mediante `List<ContextItem>` y orden
+  explícito; no se centralizan variantes en un `if/when` creciente.
 - Los nombres de archivo, package e imports deben reflejar la responsabilidad
   real; no usar archivos comodín como `Models.kt`, `Dtos.kt` o `Common.kt`.
 - Un provider de prompt, LLM, persistencia o servicio externo es un adapter de
@@ -45,6 +48,9 @@
   No construir DTOs externos con `copy`, constructores manuales dentro del
   controller ni reflexión. El dominio y los casos de uso no dependen de
   MapStruct.
+- Las métricas transversales de componentes se implementan con AOP cuando la
+  medición es uniforme. Los componentes de contexto deben declarar su nombre
+  con `@MeasuredContextItem`; no agregan llamadas manuales a métricas.
 
 ## Spring
 

@@ -40,6 +40,13 @@ src/main/kotlin/com/ada/
 └── observability/
 ```
 
+El contexto que se envía al modelo se compone en `conversation.context`. Cada
+fragmento tiene un `ContextItem` independiente (`system`, `prompt`, `tools`,
+`memories`, `tool_response`, `compacted_prompt` y `response`).
+`ContextAssembler` recibe `List<ContextItem>` y respeta el orden declarado con
+`@Order`, por lo que agregar una fuente nueva no requiere modificar un
+`if/when` central.
+
 Los nombres concretos pueden variar por contexto, pero no se mezclan entradas,
 casos de uso, dominio y salidas en la misma clase.
 
@@ -61,9 +68,13 @@ Un controller transforma explícitamente su DTO REST a un DTO de application.
 Un adapter externo transforma entre el contrato de application y su DTO de
 infraestructura. Entidades y BO nunca se exponen directamente por HTTP.
 
-`DefaultSystemPromptProvider` es un adapter de salida: implementa un puerto de
-application y vive en `conversation.infrastructure.out.prompt`. No es una
-entrada REST ni debe ubicarse junto a controllers o DTOs HTTP.
+`SqliteSystemPromptProvider` es un adapter de salida: implementa un puerto de
+application y lee la versión activa desde `system_prompts` en SQLite. No hay un
+prompt default hardcodeado en el código.
+
+Las invocaciones de los `ContextItem` se miden transversalmente con
+`ContextMetricsAspect`: se registra un contador de invocaciones y un `Timer` de
+duración por componente.
 
 ## Strategy y Filter
 

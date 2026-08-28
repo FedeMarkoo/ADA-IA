@@ -14,6 +14,11 @@ reviews:
       instructions: |
         Verificar puertos explícitos, casos de uso pequeños y que Strategy/Filter
         se consuman mediante listas de interfaces sin if/when centralizado.
+    - path: "src/main/kotlin/**/conversation/context/**"
+      instructions: |
+        Verificar que cada fragmento del contexto sea una implementación pequeña
+        de ContextItem, que se componga mediante List<ContextItem> y que use
+        @MeasuredContextItem para invocaciones y duración.
     - path: "src/main/kotlin/**/infrastructure/**"
       instructions: |
         Revisar timeouts, reintentos, redacción de secretos, métricas, logs y

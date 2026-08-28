@@ -2,6 +2,10 @@ package com.ada.conversation.application
 
 import com.ada.conversation.application.dto.ChatRequest
 import com.ada.conversation.application.dto.LlmTool
+import com.ada.conversation.context.ContextAssembler
+import com.ada.conversation.context.PromptContextItem
+import com.ada.conversation.context.SystemContextItem
+import com.ada.conversation.context.ToolsContextItem
 import com.ada.shared.observability.TokenUsageEstimator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -9,16 +13,20 @@ import org.junit.jupiter.api.Test
 class LlmRequestTest {
     @Test
     fun `factory builds the complete request context and token breakdown`() {
-        val factory = LlmRequestFactory(
-            systemPromptProvider = object : SystemPromptProvider {
-                override fun content(): String = "system rules"
-            },
-            toolProviders = listOf(
-                object : ToolProvider {
-                    override fun tools() = listOf(LlmTool("search", "Search data", "{}"))
-                },
+        val contextAssembler = ContextAssembler(
+            listOf(
+                SystemContextItem(object : SystemPromptProvider {
+                    override fun content(): String = "system rules"
+                }),
+                PromptContextItem(),
+                ToolsContextItem(
+                    listOf(object : ToolProvider {
+                        override fun tools() = listOf(LlmTool("search", "Search data", "{}"))
+                    }),
+                ),
             ),
         )
+        val factory = LlmRequestFactory(contextAssembler)
 
         val request = factory.create(ChatRequest("user prompt"), "provider/model")
 
