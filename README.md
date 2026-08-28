@@ -1,163 +1,42 @@
 # ADA
 
-ADA es un asistente local, multiagente y orientado a la autonomía controlada.
-Combina conversación, memoria persistente, capabilities ejecutables y motores locales
-para ayudar con archivos, fotografías, organización, compras y futuras tareas
-basadas en eventos.
+ADA es un asistente local y extensible construido con Kotlin y Spring Boot.
+El proyecto se reinicia desde cero manteniendo los principios del sistema
+anterior: local-first, privacidad, modularidad, trazabilidad, reversibilidad y
+uso responsable de recursos.
 
-## Objetivo
+## Estado actual
 
-ADA no debe depender únicamente de prompts manuales. La dirección del proyecto
-es evolucionar hacia un asistente que pueda recibir eventos autorizados,
-interpretarlos, crear tareas, usar el agente o motor adecuado, pedir
-confirmación cuando corresponda y registrar qué hizo y por qué.
+Esta primera iteración define la arquitectura, las reglas de desarrollo y los
+contratos operativos. La implementación funcional se incorporará por cortes
+pequeños y verificables.
 
-Los principios son local-first, privacidad, modularidad, trazabilidad,
-reversibilidad y uso responsable de CPU, memoria, batería y red.
+## Documentación
 
-## Capacidades actuales
+- [Arquitectura](docs/architecture.md)
+- [Reglas de código](docs/coding-rules.md)
+- [Observabilidad y métricas](docs/observability.md)
+- [Integraciones y configuración](docs/integrations.md)
+- [Decisiones de arquitectura](docs/decisions/README.md)
 
-- chat local por web y CLI;
-- entrada opcional por Telegram mediante el mismo endpoint interno que la web;
-- memoria persistente SQLite;
-- routing de capabilities y arquitectura multiagente;
-- motores locales mediante Ollama;
-- análisis fotográfico RAW/JPG con feedback de fotógrafo;
-- selección de lotes y generación de XMP para Lightroom;
-- detección conservadora de ráfagas;
-- herramientas para archivos, ejecución controlada, SQLite y MCP;
-- límites de concurrencia y CPU para no saturar el equipo.
+## Principios no negociables
 
-## Estructura del repositorio
+1. El dominio no conoce Spring, SQLite, LiteLLM ni proveedores externos.
+2. Las dependencias apuntan hacia el dominio y los casos de uso.
+3. Los componentes extensibles se consumen mediante listas de interfaces,
+   nunca mediante `if`/`when` centralizados que conozcan todas las variantes.
+4. Toda operación relevante deja métricas, logs estructurados y, cuando
+   corresponde, un registro de auditoría.
+5. Los datos locales viven fuera del repositorio mediante `ADA_DATA_DIR`.
+6. Los secretos llegan por variables de entorno o un gestor externo; nunca por
+   archivos versionados.
 
-```text
-ADA/
-├── ada/          código de aplicación, agentes, capabilities e infraestructura
-├── mcps/         servidores MCP modulares (archivos, fotos, git, comida, búsqueda, transporte)
-├── telegram/     bot y adaptador independiente de Telegram
-├── dashboard/    interfaz web y panel de control
-├── docs/         documentación separada por responsabilidad
-└── tests/        pruebas automatizadas
-```
-
-## Índices de documentación
-
-- [Documentación general](docs/README.md)
-- [Presentación](docs/01-presentacion/README.md)
-- [Instalación y primer uso](docs/02-instalacion-y-primer-uso/README.md)
-- [Tecnologías y arquitectura](docs/03-tecnologias-y-arquitectura/README.md)
-- [Flujos completos](docs/03-tecnologias-y-arquitectura/flujos/README.md)
-- [Métricas y operaciones](docs/04-observabilidad-y-operaciones/README.md)
-- [Mejoras, roadmap y changelog](docs/05-evolucion-del-proyecto/README.md)
-- [Documentación histórica](docs_old/README.md)
-
-## Instalación y ejecución
+## Comandos previstos
 
 ```bash
-python3 -m venv .venv
-python3 -m pip install -e '.[dev]'
-ada serve
+./gradlew test
+./gradlew check
 ```
 
-En Windows usá `.venv\\Scripts\\python.exe` y `.venv\\Scripts\\pip.exe` en lugar
-de los comandos POSIX. Copiá `config.example.json` a `config.json` y ajustá las
-rutas locales; `config.json` no se versiona.
-
-La interfaz queda disponible en `http://127.0.0.1:5005/`.
-
-Para abrir ADA como una aplicación independiente, sin iniciar Chrome:
-
-```bash
-ada desktop
-```
-
-En Linux, la ventana usa el WebKitGTK del sistema y levanta la misma interfaz
-web/API local. Si faltan los componentes gráficos, instalalos con:
-
-```bash
-sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1
-```
-
-La web sigue disponible en `http://127.0.0.1:5005/` cuando usás `ada serve`.
-
-Para usar el servidor ASGI desde el CLI: `ada serve --asgi`.
-También podés definir `web_framework: "asgi"` en la configuración; Flask queda
-disponible como fallback con `ADA_WEB_FRAMEWORK=flask`.
-
-El proveedor activo y los modelos se configuran en `config.json`. Por ejemplo,
-la configuración inicial usa un proveedor local con estos modelos:
-
-```bash
-ollama pull llama3.2:3b
-ollama pull qwen2.5vl:3b
-```
-
-El análisis técnico puede ejecutarse sin modelo visual; el análisis semántico de
-fotos necesita un modelo con visión.
-
-La interfaz ASGI opcional se inicia con:
-
-```bash
-python3 -m uvicorn ada.interfaces.web.asgi:create_app --factory --host 127.0.0.1 --port 5006
-```
-
-Para cambiar el proveedor conversacional, modificá `engine_provider` y la
-sección correspondiente (`models` o `gpt4all`) en `config.json`. Las interfaces
-y el router no necesitan cambios.
-
-## Pruebas
-
-```bash
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/pre-commit run --all-files
-```
-
-La memoria se puede respaldar sin copiar manualmente el archivo WAL:
-
-```bash
-.venv/bin/ada backup --path ~/Desktop/ada-backups/memory.db
-```
-
-## Seguridad y datos
-
-Las acciones que mueven, copian, crean o eliminan archivos requieren
-confirmación. Los tokens de servicios externos deben configurarse mediante
-variables de entorno y nunca guardarse en Git. Ollama y la API local no deben
-exponerse directamente a internet.
-
-Las bases SQLite, modelos descargados, entornos virtuales y archivos de prueba
-locales están excluidos del repositorio mediante `.gitignore` cuando
-corresponde.
-
-Para autonomía controlada, configurá `watch_folders`, ejecutá
-`ada-autonomous` y revisá la auditoría mediante `/api/audit`. Las acciones
-externas requieren confirmación y las operaciones de archivos devuelven un
-manifiesto utilizable por la acción `undo`.
-
-Las reglas evento→acción se configuran en `event_rules`; por defecto solo se
-ejecutan automáticamente acciones no riesgosas. Las acciones sensibles quedan
-como propuestas auditadas hasta recibir confirmación explícita.
-
-### Resumen diario de Google Calendar por Telegram
-
-El daemon autónomo puede enviar una vez por día los eventos de los próximos
-siete días. Configurá el `chat_id` de destino y habilitá ambos niveles:
-
-```json
-"triggers": {
-  "cron": {
-    "enabled": true,
-    "calendar_weekly_digest": {
-      "enabled": true,
-      "hour": 11,
-      "minute": 0,
-      "chat_id": "TU_CHAT_ID"
-    }
-  }
-}
-```
-
-El job consulta `google_calendar.list_events` en modo solo lectura y envía el
-mensaje únicamente si la consulta MCP termina correctamente. El test
-`tests/test_calendar_digest.py` valida la ventana de siete días, el contenido,
-el destinatario y que no se envíe nada ante un error de Calendar.
+El despliegue local de LiteLLM y el layout de datos están documentados en
+[Integraciones y configuración](docs/integrations.md).

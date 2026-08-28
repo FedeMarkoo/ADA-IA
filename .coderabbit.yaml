@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: es-AR
+reviews:
+  profile: chill
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  path_instructions:
+    - path: "src/main/kotlin/**/domain/**"
+      instructions: |
+        Verificar que el dominio no dependa de Spring, SQLite, LiteLLM ni HTTP.
+        Revisar invariantes, nombres, métodos pequeños y errores tipados.
+    - path: "src/main/kotlin/**/application/**"
+      instructions: |
+        Verificar puertos explícitos, casos de uso pequeños y que Strategy/Filter
+        se consuman mediante listas de interfaces sin if/when centralizado.
+    - path: "src/main/kotlin/**/adapters/**"
+      instructions: |
+        Revisar timeouts, reintentos, redacción de secretos, métricas, logs y
+        mapeo correcto de errores externos.
+    - path: "src/test/**"
+      instructions: |
+        Exigir pruebas de regresión, unitarias para reglas y tests de integración
+        para adaptadores y contratos externos.
+chat:
+  auto_reply: true

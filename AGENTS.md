@@ -1,6 +1,33 @@
-# Reglas y Pautas del Proyecto (ADA)
+# Reglas de trabajo de ADA
 
-## Regla de Oro: Commits Relevantes y Push a Main
-- **Subida Obligatoria:** Cada cambio, feature o corrección realizada debe organizarse en commits relevantes y subirse a la rama `main` (`git push origin main`).
-- **Commits Atómicos:** Estructurar los mensajes de commit de manera clara y profesional por componente (`feat`, `fix`, `refactor`, `test`, `docs`).
-- **Verificación:** Ejecutar y validar la suite de pruebas (`pytest`) antes de realizar push a `main`.
+## Flujo de cambios
+
+- Trabajar siempre en una rama `codex/<descripcion-corta>` o en una rama de
+  feature equivalente.
+- Un commit debe representar una unidad coherente: `feat`, `fix`, `refactor`,
+  `test`, `docs`, `build` o `chore`.
+- Todo cambio de comportamiento requiere pruebas automatizadas y toda decisión
+  transversal requiere documentación o un ADR.
+- Un PR no se considera listo hasta que pasen `./gradlew check`, la revisión de
+  CodeRabbit y la revisión humana.
+- No hacer push directo a `main`; la integración ocurre mediante PR.
+
+## Límites de arquitectura
+
+- `domain` contiene reglas de negocio puras.
+- `application` coordina casos de uso y define puertos.
+- `adapters/in` traduce entradas externas a casos de uso.
+- `adapters/out` implementa puertos contra tecnología concreta.
+- Spring se permite en wiring y adaptadores; no en entidades ni servicios de
+  dominio.
+
+## Calidad
+
+- Preferir métodos pequeños, nombres explícitos, tipos de dominio y guard
+  clauses.
+- No introducir abstracciones especulativas: cada interfaz debe representar un
+  puerto, una estrategia, un filtro o una política real.
+- No ocultar errores con `catch (Exception)` sin clasificación, contexto y una
+  decisión explícita de recuperación.
+- No registrar prompts, tokens, credenciales ni datos personales sin una razón
+  documentada y redacción apropiada.
