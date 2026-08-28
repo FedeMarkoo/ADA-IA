@@ -22,6 +22,17 @@ TOOL = {
 }
 
 
+def read_chunked_body(stream):
+    chunks = []
+    while True:
+        size = int(stream.readline().split(b";", 1)[0], 16)
+        if size == 0:
+            stream.readline()
+            return b"".join(chunks)
+        chunks.append(stream.read(size))
+        stream.readline()
+
+
 def search(query, max_results):
     url = "https://lite.duckduckgo.com/lite/?" + urllib.parse.urlencode({"q": query})
     request = urllib.request.Request(url, headers={"User-Agent": "ADA-MCP-WebSearch/1.0"})
@@ -54,6 +65,11 @@ def rpc_response(request_id, result=None, error=None):
 
 
 class McpHandler(BaseHTTPRequestHandler):
+    def read_request_body(self):
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            return read_chunked_body(self.rfile)
+        return self.rfile.read(int(self.headers.get("Content-Length", "0")))
+
     def do_GET(self):
         if self.path == "/mcp":
             self.send_response(200)
@@ -66,7 +82,7 @@ class McpHandler(BaseHTTPRequestHandler):
         if self.path != "/mcp":
             self.send_error(404)
             return
-        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        body = self.read_request_body()
         message = json.loads(body)
         request_id = message.get("id")
         if request_id is None:

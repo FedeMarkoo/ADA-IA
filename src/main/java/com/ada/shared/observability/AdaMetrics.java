@@ -110,6 +110,20 @@ public class AdaMetrics {
     }
   }
 
+  public <T> T measureMcp(String tool, java.util.function.Supplier<T> operation) {
+    var timer = Timer.start(registry);
+    try {
+      var result = operation.get();
+      registry.counter("ada_mcp_calls_total", "tool", tool, "outcome", "success").increment();
+      return result;
+    } catch (RuntimeException error) {
+      registry.counter("ada_mcp_calls_total", "tool", tool, "outcome", "failure").increment();
+      throw error;
+    } finally {
+      timer.stop(registry.timer("ada_mcp_duration_seconds", "tool", tool));
+    }
+  }
+
   public <T> T measureStage(String stage, Supplier<T> operation) {
     AtomicLong lastDuration =
         lastStageDurationsNanos.computeIfAbsent(

@@ -39,4 +39,38 @@ class AdaMetricsTest {
                 .value()
             >= 0);
   }
+
+  @Test
+  void recordsMcpSuccessAndFailureWithDuration() {
+    var registry = new SimpleMeterRegistry();
+    var metrics = new AdaMetrics(registry, new TokenUsageEstimator());
+    metrics.measureMcp("web_search", () -> "ok");
+    try {
+      metrics.measureMcp(
+          "web_search",
+          () -> {
+            throw new IllegalStateException("failure");
+          });
+    } catch (IllegalStateException ignored) {
+      // The operation error must remain visible to the caller.
+    }
+
+    assertEquals(
+        1.0,
+        registry
+            .get("ada_mcp_calls_total")
+            .tag("tool", "web_search")
+            .tag("outcome", "success")
+            .counter()
+            .count());
+    assertEquals(
+        1.0,
+        registry
+            .get("ada_mcp_calls_total")
+            .tag("tool", "web_search")
+            .tag("outcome", "failure")
+            .counter()
+            .count());
+    assertTrue(registry.get("ada_mcp_duration_seconds").timer().count() == 2);
+  }
 }

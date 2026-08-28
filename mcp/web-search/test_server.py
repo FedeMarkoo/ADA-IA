@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import pathlib
 import sys
 import unittest
@@ -13,6 +14,11 @@ SPEC.loader.exec_module(SERVER)
 
 
 class WebSearchTest(unittest.TestCase):
+    def test_reads_chunked_http_body(self):
+        stream = io.BytesIO(b"4\r\ntest\r\n5\r\n body\r\n0\r\n\r\n")
+
+        self.assertEqual(SERVER.read_chunked_body(stream), b"test body")
+
     @patch("web_search_server.urllib.request.urlopen")
     def test_search_parses_result(self, urlopen):
         response = urlopen.return_value.__enter__.return_value

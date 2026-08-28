@@ -3,6 +3,7 @@ package com.ada.model.infrastructure.out.mcp;
 import com.ada.conversation.application.dto.LlmToolCall;
 import com.ada.conversation.application.dto.ToolExecutionResult;
 import com.ada.conversation.application.port.out.ToolExecutor;
+import com.ada.shared.observability.AdaMetrics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +21,7 @@ import org.springframework.web.client.RestClientException;
 public class McpWebSearchToolExecutor implements ToolExecutor {
   private final RestClient.Builder builder;
   private final ObjectMapper objectMapper;
+  private final AdaMetrics metrics;
   private RestClient client;
 
   @Value("${ada.mcp.web-search-url:http://mcp-web-search:8000/mcp}")
@@ -35,6 +37,10 @@ public class McpWebSearchToolExecutor implements ToolExecutor {
   }
 
   public ToolExecutionResult execute(LlmToolCall call) {
+    return metrics.measureMcp(call.name(), () -> executeUnmeasured(call));
+  }
+
+  private ToolExecutionResult executeUnmeasured(LlmToolCall call) {
     try {
       var arguments = objectMapper.readTree(call.arguments());
       initializeSession();
