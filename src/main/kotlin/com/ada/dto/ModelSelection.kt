@@ -1,3 +1,3 @@
-package com.ada.model.application.port.out
+package com.ada.dto
 
 data class ModelSelection(val model: String)

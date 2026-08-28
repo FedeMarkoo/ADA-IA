@@ -1,8 +1,8 @@
 package com.ada.model.adapters.out
 
 import com.ada.conversation.application.port.out.LlmClient
-import com.ada.conversation.application.port.out.LlmCompletion
 import com.ada.dto.LlmRequest
+import com.ada.dto.LlmCompletion
 import com.ada.dto.LiteLlmChoice
 import com.ada.dto.LiteLlmMessage
 import com.ada.dto.LiteLlmRequest

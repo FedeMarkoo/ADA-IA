@@ -2,7 +2,7 @@ package com.ada.shared.observability
 
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
-import com.ada.conversation.application.port.out.LlmCompletion
+import com.ada.dto.LlmCompletion
 import com.ada.dto.LlmRequest
 import org.springframework.stereotype.Component
 

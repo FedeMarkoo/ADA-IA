@@ -8,7 +8,7 @@ import java.nio.file.Path
 
 @Validated
 @ConfigurationProperties(prefix = "ada")
-data class AdaProperties(
+class AdaProperties(
     @field:NotBlank val dataDir: String,
     val llm: LlmProperties,
 ) {

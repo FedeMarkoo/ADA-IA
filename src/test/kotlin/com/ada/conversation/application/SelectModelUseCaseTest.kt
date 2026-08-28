@@ -2,7 +2,7 @@ package com.ada.conversation.application
 
 import com.ada.dto.ChatRequest
 import com.ada.conversation.application.port.`in`.RequestFilter
-import com.ada.model.application.port.out.ModelSelection
+import com.ada.dto.ModelSelection
 import com.ada.model.application.port.out.ModelSelectionStrategy
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
