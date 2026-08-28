@@ -10,14 +10,16 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.SmartLifecycle;
+import jakarta.annotation.PreDestroy;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "ada.telegram", name = "enabled", havingValue = "true")
-public class TelegramMessageListener implements SmartLifecycle {
+public class TelegramMessageListener {
   private static final Logger log = LoggerFactory.getLogger(TelegramMessageListener.class);
   private final ChatUseCase chatUseCase;
   private final TelegramBotClient telegram;
@@ -26,27 +28,17 @@ public class TelegramMessageListener implements SmartLifecycle {
   private final AtomicBoolean running = new AtomicBoolean();
   private volatile Thread worker;
 
-  @Override
+  @EventListener(ApplicationReadyEvent.class)
   public void start() {
     if (!running.compareAndSet(false, true)) return;
     worker = Thread.ofVirtual().name("ada-telegram-listener").start(this::poll);
   }
 
-  @Override
+  @PreDestroy
   public void stop() {
     running.set(false);
     var current = worker;
     if (current != null) current.interrupt();
-  }
-
-  @Override
-  public boolean isRunning() {
-    return running.get();
-  }
-
-  @Override
-  public boolean isAutoStartup() {
-    return true;
   }
 
   private void poll() {
