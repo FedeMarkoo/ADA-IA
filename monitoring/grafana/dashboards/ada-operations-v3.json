@@ -3,46 +3,245 @@
   "editable": true,
   "graphTooltip": 1,
   "panels": [
-    {"id": 1, "type": "row", "title": "ESTADO OPERATIVO", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}},
-    {"id": 2, "type": "stat", "title": "Peticiones en el período", "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1}, "targets": [{"expr": "sum(increase(ada_requests_total[$__range]))"}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0"}}, "options": {"graphMode": "none", "colorMode": "value"}},
-    {"id": 3, "type": "stat", "title": "Ritmo de peticiones", "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1}, "targets": [{"expr": "sum(rate(ada_requests_total[$__rate_interval])) * 60"}], "fieldConfig": {"defaults": {"unit": "reqpm", "decimals": 2, "noValue": "0 req/min"}}, "options": {"graphMode": "none", "colorMode": "value"}},
-    {"id": 4, "type": "stat", "title": "Invocaciones LLM", "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1}, "targets": [{"expr": "sum(increase(ada_llm_duration_seconds_count[$__range]))"}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0"}}, "options": {"graphMode": "none", "colorMode": "value"}},
-    {"id": 5, "type": "stat", "title": "CPU ADA", "gridPos": {"h": 4, "w": 4, "x": 12, "y": 1}, "targets": [{"expr": "process_cpu_usage * 100"}], "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "SIN DATOS", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 70}, {"color": "red", "value": 90}]}}}, "options": {"graphMode": "none", "colorMode": "background"}},
-    {"id": 6, "type": "stat", "title": "Heap ADA", "gridPos": {"h": 4, "w": 4, "x": 16, "y": 1}, "targets": [{"expr": "sum(jvm_memory_used_bytes{area=\"heap\"})"}], "fieldConfig": {"defaults": {"unit": "bytes", "decimals": 1, "noValue": "0 B"}}, "options": {"graphMode": "none", "colorMode": "value"}},
-    {"id": 7, "type": "stat", "title": "ADA disponible", "gridPos": {"h": 4, "w": 4, "x": 20, "y": 1}, "targets": [{"expr": "max(up{job=\"ada\"})"}], "fieldConfig": {"defaults": {"unit": "short", "noValue": "SIN DATOS", "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}}, "options": {"graphMode": "none", "colorMode": "background"}},
-    {"id": 8, "type": "row", "title": "ÚLTIMA PETICIÓN: TIEMPO REAL", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5}},
-    {"id": 9, "type": "stat", "title": "Duración total última petición", "gridPos": {"h": 4, "w": 6, "x": 0, "y": 6}, "targets": [{"expr": "ada_request_last_duration_seconds"}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "noValue": "SIN DATOS"}}, "options": {"graphMode": "none", "colorMode": "background"}},
-    {"id": 10, "type": "stat", "title": "Peticiones en curso", "gridPos": {"h": 4, "w": 6, "x": 6, "y": 6}, "targets": [{"expr": "ada_requests_active"}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0"}}, "options": {"graphMode": "none", "colorMode": "background"}},
-    {"id": 11, "type": "stat", "title": "Antigüedad del último dato", "gridPos": {"h": 4, "w": 6, "x": 12, "y": 6}, "targets": [{"expr": "(time() - ada_request_last_completed_at_epoch_seconds) and (ada_request_last_completed_at_epoch_seconds > 0)"}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 1, "noValue": "SIN DATOS"}}, "options": {"graphMode": "none", "colorMode": "background"}},
-    {"id": 12, "type": "stat", "title": "Errores de peticiones", "gridPos": {"h": 4, "w": 6, "x": 18, "y": 6}, "targets": [{"expr": "sum(increase(ada_requests_total{outcome!=\"success\"}[$__range]))"}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0"}}, "options": {"graphMode": "none", "colorMode": "background"}},
-    {"id": 13, "type": "table", "title": "Duración de cada etapa de la última petición", "gridPos": {"h": 7, "w": 12, "x": 0, "y": 10}, "targets": [{"expr": "ada_pipeline_stage_last_duration_seconds", "format": "table", "instant": true}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 3}}, "options": {"showHeader": true}},
-    {"id": 14, "type": "timeseries", "title": "Duración promedio por etapa (histórico)", "gridPos": {"h": 7, "w": 12, "x": 12, "y": 10}, "targets": [{"expr": "sum by (stage) (rate(ada_pipeline_stage_duration_seconds_sum[$__rate_interval])) / sum by (stage) (rate(ada_pipeline_stage_duration_seconds_count[$__rate_interval]))", "legendFormat": "{{stage}}"}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 15, "type": "row", "title": "ROUTING Y CONTEXTO LLM", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17}},
-    {"id": 16, "type": "timeseries", "title": "Latencia por modelo", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18}, "targets": [{"expr": "sum by (model) (rate(ada_llm_duration_seconds_sum[$__rate_interval])) / sum by (model) (rate(ada_llm_duration_seconds_count[$__rate_interval]))", "legendFormat": "Promedio · {{model}}"}, {"expr": "max by (model) (ada_llm_duration_seconds_max)", "legendFormat": "Máximo · {{model}}"}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 17, "type": "timeseries", "title": "Contexto usado por modelo", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18}, "targets": [{"expr": "ada_llm_context_tokens_last", "legendFormat": "{{model}}"}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 18, "type": "timeseries", "title": "Tokens por componente del contexto", "gridPos": {"h": 8, "w": 14, "x": 0, "y": 26}, "targets": [{"expr": "sum by (component) (rate(ada_llm_tokens_total[$__rate_interval])) * 60", "legendFormat": "{{component}} / min"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"fillOpacity": 35, "stacking": {"mode": "normal"}, "showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 19, "type": "table", "title": "Selección de contexto en el período", "gridPos": {"h": 8, "w": 10, "x": 14, "y": 26}, "targets": [{"expr": "sum by (type, item) (increase(ada_context_selection_items_total[$__range]))", "format": "table", "instant": true}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}}, "options": {"showHeader": true}},
-    {"id": 20, "type": "timeseries", "title": "Tokens del proveedor: entrada vs salida", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 34}, "targets": [{"expr": "sum by (direction, model) (rate(ada_llm_provider_tokens_total[$__rate_interval])) * 60", "legendFormat": "{{model}} · {{direction}} / min"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 21, "type": "timeseries", "title": "Latencia del selector 1B", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 34}, "targets": [{"expr": "sum by (model) (rate(ada_context_selection_duration_seconds_sum[$__rate_interval])) / sum by (model) (rate(ada_context_selection_duration_seconds_count[$__rate_interval]))", "legendFormat": "{{model}}"}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 22, "type": "row", "title": "MCP Y TOOLS", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 42}},
-    {"id": 23, "type": "stat", "title": "Invocaciones MCP", "gridPos": {"h": 4, "w": 6, "x": 0, "y": 43}, "targets": [{"expr": "sum(increase(ada_mcp_calls_total[$__range]))"}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0"}}, "options": {"graphMode": "none", "colorMode": "value"}},
-    {"id": 24, "type": "stat", "title": "Errores MCP", "gridPos": {"h": 4, "w": 6, "x": 6, "y": 43}, "targets": [{"expr": "sum(increase(ada_mcp_calls_total{outcome=\"failure\"}[$__range]))"}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0"}}, "options": {"graphMode": "none", "colorMode": "background"}},
-    {"id": 25, "type": "timeseries", "title": "MCP: llamadas por herramienta y resultado", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 47}, "targets": [{"expr": "sum by (tool, outcome) (rate(ada_mcp_calls_total[$__rate_interval])) * 60", "legendFormat": "{{tool}} · {{outcome}} / min"}], "fieldConfig": {"defaults": {"unit": "reqpm", "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 26, "type": "timeseries", "title": "MCP: latencia por herramienta", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 47}, "targets": [{"expr": "sum by (tool) (rate(ada_mcp_duration_seconds_sum[$__rate_interval])) / sum by (tool) (rate(ada_mcp_duration_seconds_count[$__rate_interval]))", "legendFormat": "{{tool}}"}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 27, "type": "row", "title": "RECURSOS DEL HOST Y JVM", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 55}},
-    {"id": 28, "type": "timeseries", "title": "Memoria por componente, modelo, otros y libre", "gridPos": {"h": 10, "w": 24, "x": 0, "y": 56}, "targets": [{"expr": "ada_host_component_memory_bytes{component!=\"ollama\"}", "legendFormat": "{{component}}"}, {"expr": "ada_host_ollama_model_memory_bytes", "legendFormat": "modelo: {{model}}"}, {"expr": "clamp_min(ada_host_component_memory_bytes{component=\"ollama\"} - scalar(sum(ada_host_ollama_model_memory_bytes)), 0)", "legendFormat": "ollama proceso base"}, {"expr": "clamp_min(ada_host_system_memory_bytes{state=\"used\"} - scalar(sum(ada_host_component_memory_bytes)), 0)", "legendFormat": "otros"}, {"expr": "ada_host_system_memory_bytes{state=\"available\"}", "legendFormat": "libre"}], "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"fillOpacity": 55, "stacking": {"mode": "normal"}, "showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}},
-    {"id": 29, "type": "timeseries", "title": "CPU de ADA y del sistema", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 66}, "targets": [{"expr": "process_cpu_usage * 100", "legendFormat": "ADA proceso (%)"}, {"expr": "system_cpu_usage * 100", "legendFormat": "Sistema (%)"}, {"expr": "system_load_average_1m", "legendFormat": "Load average 1m"}], "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 30, "type": "timeseries", "title": "Memoria JVM por área", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 66}, "targets": [{"expr": "sum by (id) (jvm_memory_used_bytes)", "legendFormat": "Usada · {{id}}"}, {"expr": "sum by (id) (jvm_memory_committed_bytes)", "legendFormat": "Comprometida · {{id}}"}], "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 31, "type": "timeseries", "title": "Threads JVM y pool de tareas", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 74}, "targets": [{"expr": "jvm_threads_live_threads", "legendFormat": "Threads JVM"}, {"expr": "executor_active_threads", "legendFormat": "Executor activos"}, {"expr": "executor_pool_size_threads", "legendFormat": "Executor pool"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"showPoints": "never"}}}, "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}},
-    {"id": 32, "type": "stat", "title": "Memoria host disponible", "gridPos": {"h": 4, "w": 6, "x": 12, "y": 74}, "targets": [{"expr": "ada_host_system_memory_bytes{state=\"available\"}"}], "fieldConfig": {"defaults": {"unit": "bytes", "decimals": 1, "noValue": "SIN DATOS"}}, "options": {"graphMode": "none", "colorMode": "value"}},
-    {"id": 33, "type": "stat", "title": "Carga host 1m", "gridPos": {"h": 4, "w": 6, "x": 18, "y": 74}, "targets": [{"expr": "system_load_average_1m"}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 2, "noValue": "SIN DATOS"}}, "options": {"graphMode": "none", "colorMode": "value"}}
+    {
+      "id": 1,
+      "type": "row",
+      "title": "OPERACIÓN",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Promedio",
+      "description": "Duración promedio de punta a punta durante el período seleccionado.",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+      "targets": [{"expr": "rate(ada_request_duration_seconds_sum[$__range]) / rate(ada_request_duration_seconds_count[$__range])", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "noValue": "SIN DATOS"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Pico",
+      "description": "Mayor duración de una petición completa durante el período seleccionado.",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+      "targets": [{"expr": "max_over_time(ada_request_duration_seconds_max[$__range])", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "noValue": "SIN DATOS"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "LLM",
+      "description": "Invocaciones a modelos durante el período seleccionado.",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1},
+      "targets": [{"expr": "sum(increase(ada_llm_duration_seconds_count[$__range])) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Estado",
+      "description": "Estado del último scrape de Prometheus para ADA.",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+      "targets": [{"expr": "max(up{job=\"ada\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "noValue": "SIN DATOS", "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}]}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "FLUJO Y LATENCIAS",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Etapas del flujo — duración promedio",
+      "description": "Promedio por etapa: selección de contexto, creación de contexto, invocación al modelo, tools y memoria.",
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 6},
+      "targets": [{"expr": "sum by (stage) (rate(ada_pipeline_stage_duration_seconds_sum[$__rate_interval])) / sum by (stage) (rate(ada_pipeline_stage_duration_seconds_count[$__rate_interval]))", "legendFormat": "{{stage}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Pico por etapa",
+      "description": "Mayor duración observada por etapa durante el período seleccionado.",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 6},
+      "targets": [{"expr": "max_over_time(ada_pipeline_stage_duration_seconds_max[$__range])", "instant": true, "legendFormat": "{{stage}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "color": {"mode": "continuous-GrYlRd"}}, "overrides": []},
+      "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"]}, "showUnfilled": true}
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Petición completa",
+      "description": "Duración promedio y máxima de punta a punta.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [{"expr": "rate(ada_request_duration_seconds_sum[$__rate_interval]) / rate(ada_request_duration_seconds_count[$__rate_interval])", "legendFormat": "promedio", "refId": "A"}, {"expr": "ada_request_duration_seconds_max", "legendFormat": "máximo", "refId": "B"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 6, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Modelo — latencia",
+      "description": "Tiempo promedio y máximo para cada modelo configurado.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [{"expr": "sum by (model) (rate(ada_llm_duration_seconds_sum[$__rate_interval])) / sum by (model) (rate(ada_llm_duration_seconds_count[$__rate_interval]))", "legendFormat": "promedio · {{model}}", "refId": "A"}, {"expr": "max by (model) (ada_llm_duration_seconds_max)", "legendFormat": "máximo · {{model}}", "refId": "B"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 6, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "CONTEXTO Y ROUTING",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 24}
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Contexto enviado por modelo",
+      "description": "Tokens estimados de contexto de la última invocación de cada modelo.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 25},
+      "targets": [{"expr": "ada_llm_context_tokens_last", "legendFormat": "{{model}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "custom": {"drawStyle": "line", "lineWidth": 2, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Tokens por parte del contexto",
+      "description": "Desagregación de system, prompt, tools, memories, compacted prompt y respuesta.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 25},
+      "targets": [{"expr": "sum by (component) (rate(ada_llm_tokens_total[$__rate_interval])) * 60", "legendFormat": "{{component}} / min", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 18, "stacking": {"mode": "normal"}, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Proveedor — entrada y salida",
+      "description": "Tokens informados por LiteLLM/Ollama, separados por modelo y dirección.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
+      "targets": [{"expr": "sum by (direction, model) (rate(ada_llm_provider_tokens_total[$__rate_interval])) * 60", "legendFormat": "{{model}} · {{direction}} / min", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 12, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Selector de contexto",
+      "description": "Tiempo de selección de MCPs, tools y memorias por el modelo de routing.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 33},
+      "targets": [{"expr": "sum(rate(ada_pipeline_stage_duration_seconds_sum{stage=\"context_selection\"}[$__rate_interval])) / sum(rate(ada_pipeline_stage_duration_seconds_count{stage=\"context_selection\"}[$__rate_interval]))", "legendFormat": "promedio", "refId": "A"}, {"expr": "ada_pipeline_stage_duration_seconds_max{stage=\"context_selection\"}", "legendFormat": "máximo", "refId": "B"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "MCP Y TOOLS",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41}
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Llamadas MCP",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 42},
+      "targets": [{"expr": "sum(increase(ada_mcp_calls_total[$__range])) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0"}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value_and_name"}
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Errores MCP",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 42},
+      "targets": [{"expr": "sum(increase(ada_mcp_calls_total{outcome=\"failure\"}[$__range])) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "noValue": "0", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value_and_name"}
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Llamadas MCP por herramienta",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 46},
+      "targets": [{"expr": "sum by (tool, outcome) (rate(ada_mcp_calls_total[$__rate_interval])) * 60", "legendFormat": "{{tool}} · {{outcome}} / min", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "reqpm", "custom": {"drawStyle": "line", "lineWidth": 2, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Latencia MCP por herramienta",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 46},
+      "targets": [{"expr": "sum by (tool) (rate(ada_mcp_duration_seconds_sum[$__rate_interval])) / sum by (tool) (rate(ada_mcp_duration_seconds_count[$__rate_interval]))", "legendFormat": "{{tool}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "custom": {"drawStyle": "line", "lineWidth": 2, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 21,
+      "type": "row",
+      "title": "RECURSOS",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 54}
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Memoria — componentes, modelos, otros y libre",
+      "description": "Vista completa de la RAM del host: ADA, Grafana, Prometheus, Telegram, Ollama/modelos, otros procesos y memoria libre.",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 55},
+      "targets": [{"expr": "ada_host_component_memory_bytes{component!=\"ollama\"}", "legendFormat": "{{component}}", "refId": "A"}, {"expr": "ada_host_ollama_model_memory_bytes", "legendFormat": "modelo: {{model}}", "refId": "B"}, {"expr": "clamp_min(ada_host_component_memory_bytes{component=\"ollama\"} - scalar(sum(ada_host_ollama_model_memory_bytes)), 0)", "legendFormat": "ollama base", "refId": "C"}, {"expr": "clamp_min(ada_host_system_memory_bytes{state=\"used\"} - scalar(sum(ada_host_component_memory_bytes)), 0)", "legendFormat": "otros", "refId": "D"}, {"expr": "ada_host_system_memory_bytes{state=\"available\"}", "legendFormat": "libre", "refId": "E"}],
+      "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 52, "stacking": {"mode": "normal"}, "showPoints": "never"}}, "overrides": [{"matcher": {"id": "byName", "options": "otros"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#64748B"}}, {"id": "custom.fillOpacity", "value": 38}]}, {"matcher": {"id": "byName", "options": "libre"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#3F9C35"}}, {"id": "custom.fillOpacity", "value": 30}]}, {"matcher": {"id": "byName", "options": "ada"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#80D25B"}}]}]},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "CPU — ADA y sistema",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 67},
+      "targets": [{"expr": "process_cpu_usage * 100", "legendFormat": "ADA (%)", "refId": "A"}, {"expr": "system_cpu_usage * 100", "legendFormat": "sistema (%)", "refId": "B"}, {"expr": "system_load_average_1m", "legendFormat": "load 1m", "refId": "C"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "custom": {"drawStyle": "line", "lineWidth": 2, "showPoints": "never"}}, "overrides": [{"matcher": {"id": "byName", "options": "load 1m"}, "properties": [{"id": "unit", "value": "short"}, {"id": "custom.axisPlacement", "value": "right"}]}]},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "Memoria JVM",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 67},
+      "targets": [{"expr": "sum by (area) (jvm_memory_used_bytes)", "legendFormat": "usada · {{area}}", "refId": "A"}, {"expr": "sum by (area) (jvm_memory_committed_bytes)", "legendFormat": "reservada · {{area}}", "refId": "B"}],
+      "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"drawStyle": "line", "lineWidth": 2, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Threads y executor",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 75},
+      "targets": [{"expr": "jvm_threads_live_threads", "legendFormat": "threads JVM", "refId": "A"}, {"expr": "executor_active_threads", "legendFormat": "executor activos", "refId": "B"}, {"expr": "executor_pool_size_threads", "legendFormat": "executor pool", "refId": "C"}],
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 2, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "Memoria disponible del host",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 75},
+      "targets": [{"expr": "ada_host_system_memory_bytes{state=\"available\"}", "legendFormat": "libre", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 16, "showPoints": "never"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"]}, "tooltip": {"mode": "multi"}}
+    }
   ],
   "schemaVersion": 39,
   "tags": ["ada", "operations", "llm", "resources", "tokens"],
   "templating": {"list": []},
-  "time": {"from": "now-30m", "to": "now"},
-  "timepicker": {"refresh_intervals": ["5s", "10s", "30s", "1m"]},
-  "title": "ADA - Operaciones, latencias y recursos",
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]},
+  "title": "ADA — Operación y recursos",
   "uid": "ada-operations-v3",
-  "version": 1
+  "version": 2
 }
