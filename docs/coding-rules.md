@@ -45,6 +45,7 @@
 - Los mapeos entre DTOs de frontera se hacen con MapStruct en un mapper dedicado.
   Los mappers viven en el package `mapper` de la frontera correspondiente:
   `infrastructure.in.rest.mapper` o `infrastructure.out.<provider>.mapper`.
+  Los clientes externos solo invocan el mapper; no construyen DTOs wire.
   No construir DTOs externos con `copy`, constructores manuales dentro del
   controller ni reflexión. El dominio y los casos de uso no dependen de
   MapStruct.

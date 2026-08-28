@@ -31,6 +31,10 @@ reviews:
       instructions: |
         Verificar que el mapper esté en package mapper, use MapStruct, tenga
         componentModel spring y que el controller lo reciba por inyección.
+    - path: "src/main/kotlin/**/infrastructure/out/**/mapper/**"
+      instructions: |
+        Verificar que los mappers de proveedores externos usen MapStruct, estén
+        separados del cliente HTTP y preserven la semántica del contrato wire.
     - path: "src/test/**"
       instructions: |
         Exigir pruebas de regresión, unitarias para reglas y tests de integración

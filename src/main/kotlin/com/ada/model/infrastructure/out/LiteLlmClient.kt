@@ -3,12 +3,8 @@ package com.ada.model.infrastructure.out
 import com.ada.conversation.application.port.out.LlmClient
 import com.ada.conversation.application.dto.LlmRequest
 import com.ada.conversation.application.dto.LlmCompletion
-import com.ada.model.infrastructure.out.litellm.dto.LiteLlmChoice
-import com.ada.model.infrastructure.out.litellm.dto.LiteLlmMessage
-import com.ada.model.infrastructure.out.litellm.dto.LiteLlmRequest
 import com.ada.model.infrastructure.out.litellm.dto.LiteLlmResponse
-import com.ada.model.infrastructure.out.litellm.dto.LiteLlmTool
-import com.ada.model.infrastructure.out.litellm.dto.LiteLlmUsage
+import com.ada.model.infrastructure.out.litellm.mapper.LiteLlmMapper
 import com.ada.shared.infrastructure.AdaProperties
 import com.ada.shared.observability.AdaMetrics
 import org.springframework.http.MediaType
@@ -20,6 +16,7 @@ class LiteLlmClient(
     builder: RestClient.Builder,
     private val properties: AdaProperties,
     private val metrics: AdaMetrics,
+    private val mapper: LiteLlmMapper,
 ) : LlmClient {
     private val client = builder.baseUrl(properties.llm.baseUrl).build()
 
@@ -32,13 +29,7 @@ class LiteLlmClient(
                     headers.setBearerAuth(properties.llm.apiKey)
                 }
             }
-            .body(LiteLlmRequest(
-                model = request.model,
-                messages = request.messages.map { LiteLlmMessage(it.role.name.lowercase(), it.content) },
-                tools = request.tools.map { LiteLlmTool(it.name, it.description, it.inputSchema) },
-                temperature = request.temperature,
-                maxTokens = request.maxTokens,
-            ))
+            .body(mapper.toRequest(request))
             .retrieve()
             .body(LiteLlmResponse::class.java)
             ?: error("LiteLLM returned an empty response")

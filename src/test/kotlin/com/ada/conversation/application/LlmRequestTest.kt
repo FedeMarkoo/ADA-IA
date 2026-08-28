@@ -33,9 +33,11 @@ class LlmRequestTest {
         assertEquals("provider/model", request.model)
         assertEquals(listOf("system", "prompt"), request.messages.map { it.component.name.lowercase() })
         assertEquals(listOf("search"), request.tools.map { it.name })
+        val components = TokenUsageEstimator().components(request)
         assertEquals(
             listOf("system", "prompt", "tools", "total"),
-            TokenUsageEstimator().components(request).map { it.component },
+            components.map { it.component },
         )
+        assertEquals(listOf(3L, 3L, 6L, 12L), components.map { it.tokens })
     }
 }
