@@ -1,4 +1,4 @@
-package com.ada.conversation.infrastructure.in.rest.filter
+package com.ada.conversation.infrastructure.`in`.rest.filter
 
 import com.ada.dto.ChatRequest
 import com.ada.conversation.application.port.`in`.RequestFilter
