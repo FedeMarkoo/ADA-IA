@@ -8,7 +8,7 @@
   `test`, `docs`, `build` o `chore`.
 - Todo cambio de comportamiento requiere pruebas automatizadas y toda decisión
   transversal requiere documentación o un ADR.
-- Un PR no se considera listo hasta que pasen `./gradlew check`, la revisión de
+- Un PR no se considera listo hasta que pasen `mvn verify`, la revisión de
   CodeRabbit y la revisión humana.
 - No hacer push directo a `main`; la integración ocurre mediante PR.
 

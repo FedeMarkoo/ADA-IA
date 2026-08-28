@@ -1,3 +1,11 @@
+spring:
+  application:
+    name: ada
+  config:
+    import: optional:file:./application-local.yml
+  jackson:
+    default-property-inclusion: non_null
+
 ada:
   data-dir: ${ADA_DATA_DIR:../ada-data}
   llm:
@@ -9,11 +17,5 @@ management:
   server:
     address: 127.0.0.1
     port: 8081
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus,metrics
-  endpoint:
-    health:
-      probes:
-        enabled: true
+  endpoints.web.exposure.include: health,info,prometheus,metrics
+  endpoint.health.probes.enabled: true
