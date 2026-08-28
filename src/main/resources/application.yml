@@ -22,6 +22,8 @@ logging:
 
 ada:
   data-dir: ${ADA_DATA_DIR:../ada-data}
+  observability:
+    application-name: ${spring.application.name:ada}
   llm:
     base-url: ${ADA_LLM_BASE_URL:http://127.0.0.1:4000}
     api-key: ${ADA_LLM_API_KEY:}
