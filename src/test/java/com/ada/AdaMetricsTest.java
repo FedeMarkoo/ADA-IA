@@ -3,9 +3,16 @@ package com.ada;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ada.conversation.application.dto.LlmCompletion;
+import com.ada.conversation.application.dto.LlmContentComponent;
+import com.ada.conversation.application.dto.LlmMessage;
+import com.ada.conversation.application.dto.LlmMessageRole;
+import com.ada.conversation.application.dto.LlmRequest;
+import com.ada.conversation.application.dto.LlmRequestMetadata;
 import com.ada.shared.observability.AdaMetrics;
 import com.ada.shared.observability.TokenUsageEstimator;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class AdaMetricsTest {
@@ -72,5 +79,25 @@ class AdaMetricsTest {
             .counter()
             .count());
     assertTrue(registry.get("ada_mcp_duration_seconds").timer().count() == 2);
+  }
+
+  @Test
+  void recordsLastContextTokensPerModel() {
+    var registry = new SimpleMeterRegistry();
+    var metrics = new AdaMetrics(registry, new TokenUsageEstimator());
+    var request =
+        new LlmRequest(
+            "ollama/test",
+            List.of(
+                new LlmMessage(LlmMessageRole.SYSTEM, "system", LlmContentComponent.SYSTEM),
+                new LlmMessage(LlmMessageRole.USER, "prompt", LlmContentComponent.PROMPT)),
+            List.of(),
+            new LlmRequestMetadata("id"));
+
+    metrics.recordTokenBreakdown(request, new LlmCompletion("answer", "ollama/test", 2L, 1L));
+
+    assertTrue(
+        registry.get("ada_llm_context_tokens_last").tag("model", "ollama/test").gauge().value()
+            > 0);
   }
 }

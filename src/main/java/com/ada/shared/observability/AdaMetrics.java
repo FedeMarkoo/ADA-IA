@@ -22,6 +22,7 @@ public class AdaMetrics {
   private final AtomicLong lastRequestDurationNanos = new AtomicLong();
   private final AtomicLong lastRequestCompletedAtMillis = new AtomicLong();
   private final Map<String, AtomicLong> lastStageDurationsNanos = new ConcurrentHashMap<>();
+  private final Map<String, AtomicLong> lastContextTokens = new ConcurrentHashMap<>();
 
   @PostConstruct
   public void registerGauges() {
@@ -59,6 +60,17 @@ public class AdaMetrics {
   public java.util.List<TokenUsageComponent> recordTokenBreakdown(LlmRequest r, LlmCompletion c) {
     var components = new java.util.ArrayList<>(estimator.components(r));
     components.removeIf(x -> x.component().equals("total"));
+    var contextTokens = components.stream().mapToLong(TokenUsageComponent::tokens).sum();
+    var contextGauge =
+        lastContextTokens.computeIfAbsent(
+            r.model(),
+            model ->
+                registry.gauge(
+                    "ada_llm_context_tokens_last",
+                    Tags.of("model", model),
+                    new AtomicLong(),
+                    value -> value.get()));
+    contextGauge.set(contextTokens);
     components.stream()
         .filter(x -> !x.component().equals("total"))
         .forEach(
