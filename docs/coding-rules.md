@@ -71,3 +71,15 @@
 - Tests de contrato para puertos externos.
 - Cada bug corregido incorpora un test que lo reproduce.
 - No depender de red, reloj real o base de datos compartida en unit tests.
+
+## CI gratuito
+
+- `mvn verify` es el check funcional principal y genera cobertura JaCoCo en
+  `target/site/jacoco`.
+- Ktlint valida formato y Detekt reporta code smells y complejidad. Durante la
+  reorganización inicial sus jobs son informativos (`continue-on-error`); cuando
+  la base quede estable se deben convertir en checks bloqueantes.
+- CodeQL analiza seguridad de Java/Kotlin y publica los resultados en GitHub
+  Code Scanning.
+- CodeRabbit complementa estas herramientas con revisión contextual del diff;
+  no reemplaza los checks deterministas del CI.

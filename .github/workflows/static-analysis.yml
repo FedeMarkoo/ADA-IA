@@ -1,0 +1,83 @@
+name: Static analysis
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ktlint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run Ktlint
+        continue-on-error: true
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/pinterest/ktlint/releases/download/1.8.0/ktlint \
+            --output ktlint
+          chmod +x ktlint
+          ./ktlint --relative --reporter=plain
+
+  detekt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run Detekt
+        continue-on-error: true
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/detekt/detekt/releases/download/v2.0.0-alpha.6/detekt-cli-2.0.0-alpha.6-all.jar \
+            --output detekt-cli.jar
+          mkdir -p reports
+          java -jar detekt-cli.jar \
+            --input src/main/kotlin \
+            --report xml:reports/detekt.xml \
+            --report sarif:reports/detekt.sarif
+      - name: Upload Detekt report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detekt-report
+          path: reports/
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Generate JaCoCo report
+        run: mvn --batch-mode --no-transfer-progress verify
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
