@@ -5,6 +5,8 @@ import com.ada.conversation.application.port.in.RequestFilter;
 import com.ada.conversation.application.port.out.*;
 import com.ada.shared.observability.AdaMetrics;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +19,7 @@ public class ChatUseCase {
   private final List<RequestFilter> filters;
   private final List<ToolExecutor> tools;
   private final MessageStateTracker tracker;
+  private final Executor executor;
 
   public ChatUseCase(
       SelectModelUseCase s,
@@ -25,7 +28,8 @@ public class ChatUseCase {
       AdaMetrics m,
       List<RequestFilter> filters,
       List<ToolExecutor> tools,
-      MessageStateTracker t) {
+      MessageStateTracker t,
+      Executor executor) {
     selector = s;
     factory = f;
     client = c;
@@ -33,11 +37,22 @@ public class ChatUseCase {
     this.filters = filters;
     this.tools = tools;
     tracker = t;
+    this.executor = executor;
   }
 
   public ChatResult execute(ChatRequest input) {
     String id = UUID.randomUUID().toString();
+    return execute(id, input);
+  }
+
+  public String start(ChatRequest input) {
+    String id = UUID.randomUUID().toString();
     tracker.update(id, new MessageExecutionState.Received());
+    CompletableFuture.runAsync(() -> execute(id, input), executor);
+    return id;
+  }
+
+  private ChatResult execute(String id, ChatRequest input) {
     try {
       tracker.update(id, new MessageExecutionState.FilteringCommand());
       var r = input;
@@ -71,7 +86,11 @@ public class ChatUseCase {
           var result = executor.execute(call);
           messages.add(
               new LlmMessage(
-                  LlmMessageRole.TOOL, result.content(), LlmContentComponent.TOOL_RESPONSE));
+                  LlmMessageRole.TOOL,
+                  result.content(),
+                  LlmContentComponent.TOOL_RESPONSE,
+                  List.of(),
+                  result.toolCallId()));
         }
         req =
             new LlmRequest(

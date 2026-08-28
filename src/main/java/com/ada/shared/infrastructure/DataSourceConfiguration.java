@@ -8,7 +8,7 @@ import org.sqlite.SQLiteDataSource;
 @Configuration(proxyBeanMethods = false)
 public class DataSourceConfiguration {
   @Bean
-  DataSource dataSource(AdaProperties p) throws Exception {
+  public DataSource dataSource(AdaProperties p) throws Exception {
     Path d = p.getNormalizedDataDirectory().resolve("db");
     Files.createDirectories(d);
     var ds = new SQLiteDataSource();

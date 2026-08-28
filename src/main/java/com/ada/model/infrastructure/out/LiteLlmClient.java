@@ -15,22 +15,20 @@ public class LiteLlmClient implements LlmClient {
   private final RestClient client;
   private final LiteLlmMapper mapper;
   private final AdaMetrics metrics;
+  private final String apiKey;
 
   public LiteLlmClient(RestClient.Builder b, AdaProperties p, LiteLlmMapper m, AdaMetrics a) {
     client = b.baseUrl(p.getLlm().baseUrl()).build();
     mapper = m;
     metrics = a;
+    apiKey = p.getLlm().apiKey();
   }
 
   public LlmCompletion complete(LlmRequest r) {
-    var response =
-        client
-            .post()
-            .uri("/v1/chat/completions")
-            .contentType(MediaType.APPLICATION_JSON)
-            .body(mapper.toRequest(r))
-            .retrieve()
-            .body(LiteLlmResponse.class);
+    var request = client.post().uri("/v1/chat/completions").contentType(MediaType.APPLICATION_JSON);
+    if (apiKey != null && !apiKey.isBlank())
+      request.headers(headers -> headers.setBearerAuth(apiKey));
+    var response = request.body(mapper.toRequest(r)).retrieve().body(LiteLlmResponse.class);
     if (response == null || response.choices().isEmpty())
       throw new IllegalStateException("LiteLLM returned no choices");
     var c = response.choices().getFirst();
@@ -39,6 +37,7 @@ public class LiteLlmClient implements LlmClient {
             .map(x -> new LlmToolCall(x.id(), x.function().name(), x.function().arguments()))
             .toList();
     var u = response.usage();
+    if (u != null) metrics.recordProviderTokens(r.model(), u.promptTokens(), u.completionTokens());
     return new LlmCompletion(
         c.message().content() == null ? "" : c.message().content(),
         response.model() == null ? r.model() : response.model(),

@@ -1,4 +1,4 @@
-package com.ada.conversation.application;
+package com.ada.conversation.application.port.out;
 
 import com.ada.conversation.application.dto.MessageExecutionState;
 

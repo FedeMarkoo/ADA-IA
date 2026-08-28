@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>InMemoryMessageStateTracker.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ada</a> &gt; <a href="index.source.html" class="el_package">com.ada.conversation.infrastructure.out.state</a> &gt; <span class="el_source">InMemoryMessageStateTracker.java</span></div><h1>InMemoryMessageStateTracker.java</h1><pre class="source lang-java linenums">package com.ada.conversation.infrastructure.out.state;
+
+import com.ada.conversation.application.dto.MessageExecutionState;
+import com.ada.conversation.application.port.out.MessageStateTracker;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+@Component
+public class InMemoryMessageStateTracker implements MessageStateTracker {
+<span class="nc" id="L13">  private record Entry(MessageExecutionState state, Instant expiresAt) {}</span>
+
+<span class="nc" id="L15">  private final ConcurrentHashMap&lt;String, Entry&gt; states = new ConcurrentHashMap&lt;&gt;();</span>
+  private final int maxEntries;
+  private final Duration ttl;
+
+  public InMemoryMessageStateTracker(
+      @Value(&quot;${ada.message-state.max-entries:10000}&quot;) int maxEntries,
+<span class="nc" id="L21">      @Value(&quot;${ada.message-state.ttl:PT1H}&quot;) Duration ttl) {</span>
+<span class="nc" id="L22">    this.maxEntries = maxEntries;</span>
+<span class="nc" id="L23">    this.ttl = ttl;</span>
+<span class="nc" id="L24">  }</span>
+
+  public void update(String id, MessageExecutionState s) {
+<span class="nc bnc" id="L27" title="All 2 branches missed.">    if (states.size() &gt;= maxEntries) {</span>
+<span class="nc" id="L28">      states.entrySet().stream()</span>
+<span class="nc" id="L29">          .min(</span>
+<span class="nc" id="L30">              java.util.Map.Entry.comparingByValue(</span>
+<span class="nc" id="L31">                  java.util.Comparator.comparing(Entry::expiresAt)))</span>
+<span class="nc" id="L32">          .ifPresent(entry -&gt; states.remove(entry.getKey()));</span>
+    }
+<span class="nc" id="L34">    states.put(id, new Entry(s, Instant.now().plus(ttl)));</span>
+<span class="nc" id="L35">  }</span>
+
+  public MessageExecutionState current(String id) {
+<span class="nc" id="L38">    var entry = states.get(id);</span>
+<span class="nc bnc" id="L39" title="All 2 branches missed.">    if (entry == null) return null;</span>
+<span class="nc bnc" id="L40" title="All 2 branches missed.">    if (entry.expiresAt().isBefore(Instant.now())) {</span>
+<span class="nc" id="L41">      states.remove(id, entry);</span>
+<span class="nc" id="L42">      return null;</span>
+    }
+<span class="nc" id="L44">    return entry.state();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>

@@ -1,10 +1,12 @@
 package com.ada.conversation.infrastructure.in.rest;
 
-import com.ada.conversation.application.*;
+import com.ada.conversation.application.ChatUseCase;
+import com.ada.conversation.application.port.out.MessageStateTracker;
 import com.ada.conversation.infrastructure.in.rest.dto.*;
 import com.ada.conversation.infrastructure.in.rest.mapper.ChatRestMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -22,8 +24,9 @@ public class ChatController {
   }
 
   @PostMapping
-  public ChatHttpResponse chat(@Valid @RequestBody ChatHttpRequest r) {
-    return mapper.toResponse(useCase.execute(mapper.toApplication(r)));
+  public ResponseEntity<ChatAcceptedHttpResponse> chat(@Valid @RequestBody ChatHttpRequest r) {
+    return ResponseEntity.accepted()
+        .body(new ChatAcceptedHttpResponse(useCase.start(mapper.toApplication(r))));
   }
 
   @GetMapping("/{messageId}/status")

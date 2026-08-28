@@ -19,8 +19,8 @@ public class AdaMetrics {
   }
 
   public void recordTokenBreakdown(LlmRequest r, LlmCompletion c) {
-    estimator
-        .components(r)
+    estimator.components(r).stream()
+        .filter(x -> !x.component().equals("total"))
         .forEach(
             x ->
                 registry

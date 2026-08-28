@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdaMetrics.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ada</a> &gt; <a href="index.source.html" class="el_package">com.ada.shared.observability</a> &gt; <span class="el_source">AdaMetrics.java</span></div><h1>AdaMetrics.java</h1><pre class="source lang-java linenums">package com.ada.shared.observability;
+
+import com.ada.conversation.application.dto.*;
+import io.micrometer.core.instrument.*;
+import org.springframework.stereotype.Component;
+
+@Component
+public class AdaMetrics {
+  private final MeterRegistry registry;
+  private final TokenUsageEstimator estimator;
+
+<span class="nc" id="L12">  public AdaMetrics(MeterRegistry r, TokenUsageEstimator e) {</span>
+<span class="nc" id="L13">    registry = r;</span>
+<span class="nc" id="L14">    estimator = e;</span>
+<span class="nc" id="L15">  }</span>
+
+  public void recordRequest(String c, String u, String o) {
+<span class="nc" id="L18">    registry.counter(&quot;ada_requests_total&quot;, &quot;context&quot;, c, &quot;use_case&quot;, u, &quot;outcome&quot;, o).increment();</span>
+<span class="nc" id="L19">  }</span>
+
+  public void recordTokenBreakdown(LlmRequest r, LlmCompletion c) {
+<span class="nc" id="L22">    estimator.components(r).stream()</span>
+<span class="nc bnc" id="L23" title="All 2 branches missed.">        .filter(x -&gt; !x.component().equals(&quot;total&quot;))</span>
+<span class="nc" id="L24">        .forEach(</span>
+            x -&gt;
+<span class="nc" id="L26">                registry</span>
+<span class="nc" id="L27">                    .counter(</span>
+                        &quot;ada_llm_tokens_total&quot;,
+                        &quot;model&quot;,
+<span class="nc" id="L30">                        r.model(),</span>
+                        &quot;component&quot;,
+<span class="nc" id="L32">                        x.component(),</span>
+                        &quot;source&quot;,
+<span class="nc" id="L34">                        x.source().name().toLowerCase())</span>
+<span class="nc" id="L35">                    .increment(x.tokens()));</span>
+<span class="nc bnc" id="L36" title="All 2 branches missed.">    if (c.outputTokens() != null)</span>
+<span class="nc" id="L37">      registry</span>
+<span class="nc" id="L38">          .counter(</span>
+              &quot;ada_llm_tokens_total&quot;,
+              &quot;model&quot;,
+<span class="nc" id="L41">              r.model(),</span>
+              &quot;component&quot;,
+              &quot;response&quot;,
+              &quot;source&quot;,
+              &quot;provider&quot;)
+<span class="nc" id="L46">          .increment(c.outputTokens());</span>
+<span class="nc" id="L47">  }</span>
+
+  public void recordProviderTokens(String m, Long i, Long o) {
+<span class="nc bnc" id="L50" title="All 2 branches missed.">    if (i != null)</span>
+<span class="nc" id="L51">      registry</span>
+<span class="nc" id="L52">          .counter(&quot;ada_llm_provider_tokens_total&quot;, &quot;model&quot;, m, &quot;direction&quot;, &quot;input&quot;)</span>
+<span class="nc" id="L53">          .increment(i);</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">    if (o != null)</span>
+<span class="nc" id="L55">      registry</span>
+<span class="nc" id="L56">          .counter(&quot;ada_llm_provider_tokens_total&quot;, &quot;model&quot;, m, &quot;direction&quot;, &quot;output&quot;)</span>
+<span class="nc" id="L57">          .increment(o);</span>
+<span class="nc" id="L58">  }</span>
+
+  public &lt;T&gt; T measureLlm(String m, java.util.function.Supplier&lt;T&gt; op) {
+<span class="nc" id="L61">    var s = Timer.start(registry);</span>
+    try {
+<span class="nc" id="L63">      return op.get();</span>
+    } finally {
+<span class="nc" id="L65">      s.stop(registry.timer(&quot;ada_llm_duration_seconds&quot;, &quot;model&quot;, m));</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.13.202504020838</span></div></body></html>
