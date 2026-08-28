@@ -3,6 +3,7 @@ package com.ada.conversation.application;
 import com.ada.conversation.application.dto.*;
 import com.ada.conversation.application.port.in.RequestFilter;
 import com.ada.conversation.application.port.out.*;
+import com.ada.conversation.manager.AdaInfoManager;
 import com.ada.conversation.manager.MemoryManager;
 import com.ada.conversation.manager.ToolManager;
 import com.ada.shared.observability.AdaMetrics;
@@ -24,6 +25,7 @@ public class ChatUseCase {
   private final List<RequestFilter> filters;
   private final ToolManager toolManager;
   private final MemoryManager memoryManager;
+  private final AdaInfoManager adaInfoManager;
   private final MessageStateTracker tracker;
   private final MessageResultStore results;
 
@@ -47,6 +49,7 @@ public class ChatUseCase {
     try {
       tracker.update(id, new MessageExecutionState.FilteringCommand());
       var r = metrics.measureStage("filtering_command", () -> applyFilters(input));
+      if (adaInfoManager.supports(r.message())) return executeInfoCommand(id);
       var selection = selector.execute(r);
       tracker.update(id, new MessageExecutionState.CreatingContext());
       var req =
@@ -105,6 +108,14 @@ public class ChatUseCase {
     } finally {
       metrics.finishRequest(startedAtNanos);
     }
+  }
+
+  private ChatResult executeInfoCommand(String id) {
+    tracker.update(id, new MessageExecutionState.Completed());
+    metrics.recordRequest("command", "info", "success");
+    var result = new ChatResult(id, adaInfoManager.describe(), "command", null, null, List.of());
+    results.save(result);
+    return result;
   }
 
   private ChatRequest applyFilters(ChatRequest input) {

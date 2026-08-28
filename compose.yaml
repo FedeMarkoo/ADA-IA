@@ -8,6 +8,7 @@ services:
       ADA_LLM_BASE_URL: ${ADA_LLM_BASE_URL:-http://litellm:4000}
       ADA_LLM_API_KEY: ${ADA_LLM_API_KEY:-}
       ADA_LLM_DEFAULT_MODEL: ${ADA_LLM_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      ADA_DEPLOYED_VERSION: ${ADA_VERSION:-latest}
       MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
     ports:
       - "127.0.0.1:8080:8080"
