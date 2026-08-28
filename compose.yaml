@@ -8,6 +8,7 @@ services:
       ADA_LLM_BASE_URL: ${ADA_LLM_BASE_URL:-http://litellm:4000}
       ADA_LLM_API_KEY: ${ADA_LLM_API_KEY:-}
       ADA_LLM_DEFAULT_MODEL: ${ADA_LLM_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      ADA_LLM_ROUTING_MODEL: ${ADA_LLM_ROUTING_MODEL:-ollama/llama3.2:1b}
       ADA_DEPLOYED_VERSION: ${ADA_VERSION:-latest}
       ADA_MCP_WEB_SEARCH_URL: http://mcp-web-search:8000/mcp
       MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
@@ -50,7 +51,7 @@ services:
     ports:
       - "127.0.0.1:11434:11434"
     volumes:
-      - ollama-data:/root/.ollama
+      - ${OLLAMA_DATA_DIR:-ollama-data}:/root/.ollama
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 5s
@@ -66,7 +67,7 @@ services:
       ollama:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
-    command: ["ollama pull $${OLLAMA_MODEL:-llama3.2:1b}"]
+    command: ["ollama pull $${OLLAMA_ROUTING_MODEL:-llama3.2:1b} && ollama pull $${OLLAMA_MODEL:-qwen2.5:7b}"]
 
   mcp-web-search:
     build: ./mcp/web-search

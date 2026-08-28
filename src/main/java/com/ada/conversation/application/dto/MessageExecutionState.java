@@ -3,6 +3,7 @@ package com.ada.conversation.application.dto;
 public sealed interface MessageExecutionState
     permits MessageExecutionState.Received,
         MessageExecutionState.FilteringCommand,
+        MessageExecutionState.SelectingContext,
         MessageExecutionState.CreatingContext,
         MessageExecutionState.InvokingModel,
         MessageExecutionState.InvokingTool,
@@ -35,6 +36,16 @@ public sealed interface MessageExecutionState
   record CreatingContext() implements MessageExecutionState {
     public String code() {
       return "creating_context";
+    }
+
+    public String detail() {
+      return null;
+    }
+  }
+
+  record SelectingContext() implements MessageExecutionState {
+    public String code() {
+      return "selecting_context";
     }
 
     public String detail() {

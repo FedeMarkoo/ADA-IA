@@ -13,9 +13,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ContextManager {
   private final List<ContextItem> items;
+  private final ContextSelectionManager selectionManager;
 
   public ContextState build(ChatRequest request) {
-    var current = new ContextState();
+    var current = new ContextState(List.of(), List.of(), selectionManager.select(request));
     var orderedItems = new ArrayList<>(items);
     orderedItems.sort(AnnotationAwareOrderComparator.INSTANCE);
     for (var item : orderedItems) current = item.apply(request, current);

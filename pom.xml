@@ -19,12 +19,18 @@
 
     <properties>
         <java.version>21</java.version>
+        <ada-observability.version>0.1.0-SNAPSHOT</ada-observability.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <jacoco.version>0.8.13</jacoco.version>
         <spotless.version>2.44.3</spotless.version>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.ada</groupId>
+            <artifactId>ada-observability</artifactId>
+            <version>${ada-observability.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>

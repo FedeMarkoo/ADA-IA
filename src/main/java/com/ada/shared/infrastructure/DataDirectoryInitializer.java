@@ -12,7 +12,7 @@ public class DataDirectoryInitializer {
   private final AdaProperties properties;
 
   @Bean
-  ApplicationRunner initializeDataDirectory() {
+  public ApplicationRunner initializeDataDirectory() {
     return args -> {
       for (String d : List.of("db", "logs", "backups", "exports", "models", "runtime"))
         Files.createDirectories(properties.getNormalizedDataDirectory().resolve(d));

@@ -19,8 +19,12 @@ public class ToolsContextItem implements ContextItem {
   }
 
   public ContextState apply(ChatRequest r, ContextState c) {
+    var selected =
+        c.selection() == null
+            ? toolManager.availableTools()
+            : toolManager.selectedTools(c.selection().tools());
     var t = new java.util.ArrayList<>(c.tools());
-    t.addAll(toolManager.availableTools());
-    return new ContextState(c.messages(), t);
+    t.addAll(selected);
+    return new ContextState(c.messages(), t, c.selection());
   }
 }

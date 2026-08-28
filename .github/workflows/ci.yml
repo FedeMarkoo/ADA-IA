@@ -28,6 +28,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install vendored observability library
+        run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
       - name: Validate
         run: mvn --batch-mode --no-transfer-progress validate
 
@@ -61,6 +63,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install vendored observability library
+        run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
       - name: Test
         run: mvn --batch-mode --no-transfer-progress test
 
@@ -84,6 +88,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install vendored observability library
+        run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
       - name: Check formatting
         if: matrix.check == 'format'
         run: mvn --batch-mode --no-transfer-progress spotless:check
@@ -107,6 +113,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install vendored observability library
+        run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
       - name: Package
         run: mvn --batch-mode --no-transfer-progress -DskipTests package
 
@@ -126,6 +134,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install vendored observability library
+        run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
       - name: Test with coverage
         run: mvn --batch-mode --no-transfer-progress test jacoco:report
       - name: Upload JaCoCo report

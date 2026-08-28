@@ -142,3 +142,13 @@ Reglas:
 
 Las acciones potencialmente destructivas o externas requieren confirmación
 explícita y deben poder producir un manifiesto de reversión cuando sea viable.
+## Selección de contexto y modelos
+
+ADA usa dos roles de modelo configurables:
+
+- `ada.llm.routing-model` (`llama3.2:1b` por defecto) recibe un catálogo liviano y devuelve JSON con los MCPs, tools y memorias relevantes, además de indicar si debe compactarse el contexto.
+- `ada.llm.default-model` (`qwen2.5:7b` por defecto) recibe únicamente el contexto y las tools seleccionadas y genera la respuesta o ejecuta el loop de tools.
+
+La aplicación valida los nombres seleccionados contra los proveedores registrados. La selección no ejecuta herramientas y los tool-calls solo se aceptan cuando llegan en el campo estructurado del proveedor; nunca se interpreta texto arbitrario como una invocación.
+
+El almacenamiento de modelos de Ollama se configura con `OLLAMA_DATA_DIR` en el entorno local y se monta como volumen. La ruta no se versiona.

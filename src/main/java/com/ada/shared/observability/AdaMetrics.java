@@ -161,4 +161,23 @@ public class AdaMetrics {
               .register(registry));
     }
   }
+
+  public void recordStageOutcome(String stage, String outcome) {
+    registry
+        .counter("ada_pipeline_stage_outcomes_total", "stage", stage, "outcome", outcome)
+        .increment();
+  }
+
+  public void recordContextSelection(String model, ContextSelection selection) {
+    registry
+        .counter("ada_context_selection_total", "model", model, "outcome", "success")
+        .increment();
+    selection.mcps().forEach(mcp -> recordSelectedContext("mcp", mcp));
+    selection.tools().forEach(tool -> recordSelectedContext("tool", tool));
+    selection.memories().forEach(memory -> recordSelectedContext("memory", memory));
+  }
+
+  private void recordSelectedContext(String type, String name) {
+    registry.counter("ada_context_selection_items_total", "type", type, "item", name).increment();
+  }
 }

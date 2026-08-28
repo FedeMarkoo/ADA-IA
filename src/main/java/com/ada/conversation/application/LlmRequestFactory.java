@@ -14,6 +14,11 @@ public class LlmRequestFactory {
   public LlmRequest create(ChatRequest r, String model) {
     var c = assembler.build(r);
     return new LlmRequest(
-        model, c.messages(), c.tools(), new LlmRequestMetadata(UUID.randomUUID().toString()));
+        model,
+        c.messages(),
+        c.tools(),
+        0.2,
+        1024,
+        new LlmRequestMetadata(UUID.randomUUID().toString()));
   }
 }
