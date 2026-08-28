@@ -22,6 +22,10 @@ reviews:
       instructions: |
         Estos son DTOs HTTP de entrada. No deben contener reglas de negocio ni
         exponerse fuera del adapter REST; verificar package y mapeo a application.
+    - path: "src/main/kotlin/**/infrastructure/in/rest/*Mapper.kt"
+      instructions: |
+        Verificar que el mapper use MapStruct, tenga componentModel spring y que
+        el controller lo reciba por inyección en lugar de construirlo manualmente.
     - path: "src/test/**"
       instructions: |
         Exigir pruebas de regresión, unitarias para reglas y tests de integración

@@ -38,6 +38,10 @@
 - Un provider de prompt, LLM, persistencia o servicio externo es un adapter de
   salida y vive bajo `infrastructure.out`; un controller, mapper o DTO HTTP es
   un adapter de entrada bajo `infrastructure.in`.
+- Los mapeos entre DTOs de frontera se hacen con MapStruct en un mapper dedicado.
+  No construir DTOs externos con `copy`, constructores manuales dentro del
+  controller ni reflexión. El dominio y los casos de uso no dependen de
+  MapStruct.
 
 ## Spring
 
