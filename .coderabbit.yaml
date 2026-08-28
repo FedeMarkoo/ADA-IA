@@ -14,13 +14,42 @@ reviews:
       instructions: |
         Verificar puertos explícitos, casos de uso pequeños y que Strategy/Filter
         se consuman mediante listas de interfaces sin if/when centralizado.
-    - path: "src/main/kotlin/**/adapters/**"
+    - path: "src/main/kotlin/**/conversation/context/**"
+      instructions: |
+        Verificar que cada fragmento del contexto sea una implementación pequeña
+        de ContextItem, que se componga mediante List<ContextItem> y que use
+        @MeasuredContextItem para invocaciones y duración.
+    - path: "src/main/kotlin/**/infrastructure/**"
       instructions: |
         Revisar timeouts, reintentos, redacción de secretos, métricas, logs y
         mapeo correcto de errores externos.
+    - path: "src/main/kotlin/**/infrastructure/in/rest/dto/**"
+      instructions: |
+        Estos son DTOs HTTP de entrada. No deben contener reglas de negocio ni
+        exponerse fuera del adapter REST; verificar package y mapeo a application.
+    - path: "src/main/kotlin/**/infrastructure/in/rest/mapper/**"
+      instructions: |
+        Verificar que el mapper esté en package mapper, use MapStruct, tenga
+        componentModel spring y que el controller lo reciba por inyección.
+    - path: "src/main/kotlin/**/infrastructure/out/**/mapper/**"
+      instructions: |
+        Verificar que los mappers de proveedores externos usen MapStruct, estén
+        separados del cliente HTTP y preserven la semántica del contrato wire.
     - path: "src/test/**"
       instructions: |
         Exigir pruebas de regresión, unitarias para reglas y tests de integración
         para adaptadores y contratos externos.
+    - path: "docs/coding-rules.md"
+      instructions: |
+        Tratar este documento como guía normativa del repositorio. Verificar en
+        cada review que exista un único tipo top-level por archivo, que todos los
+        DTOs estén en el package dto de su frontera, que los mappers estén en
+        package mapper y que entities/BOs estén separados.
+    - path: "src/**/*.kt"
+      instructions: |
+        Aplicar las reglas de docs/coding-rules.md: un único tipo top-level por
+        archivo; todos los DTOs por frontera; mappers en package mapper;
+        entities en domain.entity; BOs en domain.bo;
+        controllers únicamente en infrastructure.in.
 chat:
   auto_reply: true

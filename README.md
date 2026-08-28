@@ -1,6 +1,6 @@
 # ADA
 
-ADA es un asistente local y extensible construido con Kotlin y Spring Boot.
+ADA es un asistente local y extensible construido con Java 21, Maven y Spring Boot.
 El proyecto se reinicia desde cero manteniendo los principios del sistema
 anterior: local-first, privacidad, modularidad, trazabilidad, reversibilidad y
 uso responsable de recursos.
@@ -40,3 +40,6 @@ mvn verify
 
 El despliegue local de LiteLLM y el layout de datos están documentados en
 [Integraciones y configuración](docs/integrations.md).
+
+El smoke runner HTTP y el dashboard local de Grafana están documentados en
+[Monitoreo local](monitoring/README.md).

@@ -5,6 +5,9 @@ spring:
     import: optional:file:./application-local.yml
   jackson:
     default-property-inclusion: non_null
+  sql:
+    init:
+      mode: always
 
 ada:
   data-dir: ${ADA_DATA_DIR:../ada-data}

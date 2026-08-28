@@ -8,8 +8,8 @@ paquetes por contexto evitan que el proyecto se convierta en un único paquete
 `service` o `util`.
 
 ```text
-adapters/in  ->  application  ->  domain
-adapters/out ->  application  ->  domain
+infrastructure/in  ->  application  ->  domain
+infrastructure/out ->  application  ->  domain
                     ^
                     |
           puertos definidos por application
@@ -21,47 +21,91 @@ clientes y métricas. El dominio debe poder probarse sin levantar Spring.
 ## Estructura inicial
 
 ```text
-src/main/kotlin/com/ada/
+src/main/java/com/ada/
 ├── shared/
 │   ├── domain/          tipos y errores transversales mínimos
 │   └── application/     clock, ids, resultado y políticas comunes
 ├── conversation/
 │   ├── domain/
 │   ├── application/
+│   │   ├── dto/         contratos internos de casos de uso
 │   │   ├── port/in/     casos de uso públicos
 │   │   └── port/out/    dependencias requeridas
-│   └── adapters/
-│       ├── input/       REST, CLI, eventos
-│       └── output/      LiteLLM, SQLite, auditoría
+│   └── infrastructure/
+│       ├── in/rest/     controllers, dto/ y mapper/
+│       └── out/         LiteLLM, SQLite, auditoría
 ├── memory/
 ├── capability/
 ├── model/
 └── observability/
 ```
 
+El contexto que se envía al modelo se compone en `conversation.context`. Cada
+fragmento tiene un `ContextItem` independiente (`system`, `prompt`, `tools`,
+`memories`, `tool_response`, `compacted_prompt` y `response`).
+`ContextAssembler` recibe `List<ContextItem>` y respeta el orden declarado con
+`@Order`. Cada item recibe el estado acumulado y devuelve el siguiente estado;
+por eso `CompactedPromptContextItem` puede eliminar mensajes anteriores y
+reemplazarlos por `compacted_prompt` antes de continuar.
+
 Los nombres concretos pueden variar por contexto, pero no se mezclan entradas,
 casos de uso, dominio y salidas en la misma clase.
+
+## Separación de modelos
+
+```text
+infrastructure.in.rest.dto  -> JSON HTTP; no sale del adapter REST
+infrastructure.in.rest.mapper -> mapeos HTTP <-> application
+application.dto              -> entrada/salida de casos de uso
+application.mapper           -> mapeos internos de application, si fueran necesarios
+shared.infrastructure.dto    -> configuración transversal transportada como DTO
+domain.entity                -> identidad, persistencia y ciclo de vida
+domain.bo                    -> reglas de negocio e invariantes
+infrastructure.out.*.dto     -> formato específico de un proveedor externo
+infrastructure.out.*.mapper  -> mapeos application <-> proveedor externo
+```
+
+Un controller transforma explícitamente su DTO REST a un DTO de application.
+Un adapter externo transforma entre el contrato de application y su DTO de
+infraestructura. Entidades y BO nunca se exponen directamente por HTTP.
+
+`SqliteSystemPromptProvider` es un adapter de salida: implementa un puerto de
+application y lee la versión activa desde `system_prompts` en SQLite. No hay un
+prompt default hardcodeado en el código.
+
+Las invocaciones de los `ContextItem` se miden transversalmente con
+`ContextMetricsAspect`: se registra un contador de invocaciones y un `Timer` de
+duración por componente.
+
+Cada ejecución genera un `messageId` y actualiza `MessageExecutionState` en
+cada etapa del flujo. El estado se puede consultar en
+`GET /api/v1/chat/{messageId}/status`; los estados con modelo o tool incluyen
+el nombre en `detail`.
+
+El loop de tools agrega la respuesta del modelo como `response` y cada resultado
+como `tool_response` antes de volver a invocar el modelo. Tiene un máximo de
+ocho rondas para evitar loops infinitos.
 
 ## Strategy y Filter
 
 Las variantes dinámicas se registran como componentes y se inyectan como
 colecciones de interfaces:
 
-```kotlin
+```java
 interface ModelSelectionStrategy {
-    fun supports(request: ModelSelectionRequest): Boolean
-    fun select(request: ModelSelectionRequest): ModelSelection
+    boolean supports(ChatRequest request);
+    ModelSelection select(ChatRequest request);
 }
 
 interface RequestFilter {
-    fun supports(request: ChatRequest): Boolean
-    fun apply(request: ChatRequest): ChatRequest
+    boolean supports(ChatRequest request);
+    ChatRequest apply(ChatRequest request);
 }
 
-class SelectModelUseCase(
-    private val strategies: List<ModelSelectionStrategy>,
-    private val filters: List<RequestFilter>,
-)
+class SelectModelUseCase {
+    SelectModelUseCase(List<ModelSelectionStrategy> strategies,
+                       List<RequestFilter> filters) { }
+}
 ```
 
 Reglas:

@@ -16,8 +16,8 @@
 
 - `domain` contiene reglas de negocio puras.
 - `application` coordina casos de uso y define puertos.
-- `adapters/in` traduce entradas externas a casos de uso.
-- `adapters/out` implementa puertos contra tecnología concreta.
+- `infrastructure/in` traduce entradas externas a casos de uso.
+- `infrastructure/out` implementa puertos contra tecnología concreta.
 - Spring se permite en wiring y adaptadores; no en entidades ni servicios de
   dominio.
 
@@ -25,9 +25,18 @@
 
 - Preferir métodos pequeños, nombres explícitos, tipos de dominio y guard
   clauses.
+- Mantener un único tipo top-level por archivo. Ubicar todos los DTOs en el
+  package `dto` de su frontera (`infrastructure.in.rest.dto`, `application.dto`,
+  `shared.infrastructure.dto` o `infrastructure.out.<provider>.dto`), y cada mapper en
+  el package `mapper` correspondiente. Entities van en `domain.entity` y BOs en
+  `domain.bo`.
 - No introducir abstracciones especulativas: cada interfaz debe representar un
   puerto, una estrategia, un filtro o una política real.
 - No ocultar errores con `catch (Exception)` sin clasificación, contexto y una
   decisión explícita de recuperación.
 - No registrar prompts, tokens, credenciales ni datos personales sin una razón
   documentada y redacción apropiada.
+- Todo cambio debe pasar `mvn verify`; el CI publica cobertura JaCoCo y ejecuta
+  Spotless/Google Java Format y CodeQL según los workflows del repositorio.
+- Todo cambio debe pasar el workflow `Security`: no se versionan secretos,
+  credenciales, bases SQLite, archivos privados ni rutas absolutas locales.
