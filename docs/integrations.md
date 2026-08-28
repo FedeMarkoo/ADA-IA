@@ -54,6 +54,25 @@ El endpoint de gestión queda atado a `127.0.0.1:8081`; así Prometheus y los
 endpoints de Actuator no quedan expuestos por la interfaz HTTP de la aplicación.
 En un despliegue remoto debe agregarse autenticación o una ACL de red.
 
+## Telegram
+
+ADA puede enviar una notificación al iniciar y otra al comenzar el apagado a un
+chat de Telegram mediante un bot. La función está desactivada por defecto. El
+token y el chat ID se guardan cifrados con AES-GCM en `ada_secrets`; la clave
+maestra nunca se guarda en SQLite:
+
+```text
+ADA_TELEGRAM_ENABLED=true
+ADA_SECRET_MASTER_KEY=<base64 de 32 bytes>
+ADA_TELEGRAM_BOOTSTRAP_BOT_TOKEN=...
+ADA_TELEGRAM_BOOTSTRAP_CHAT_ID=...
+```
+
+Las variables `ADA_TELEGRAM_BOOTSTRAP_*` solo se usan para insertar el secreto
+si todavía no existe; luego pueden retirarse del entorno. Generá la clave, por
+ejemplo, con `openssl rand -base64 32`. Los errores de Telegram no impiden
+iniciar ni apagar ADA y no se registran tokens ni credenciales.
+
 ## SQLite fuera del repositorio
 
 `ADA_DATA_DIR` es obligatorio en entornos no efímeros y por defecto debe

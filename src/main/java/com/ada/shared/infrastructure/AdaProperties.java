@@ -1,6 +1,8 @@
 package com.ada.shared.infrastructure;
 
 import com.ada.shared.infrastructure.dto.LlmProperties;
+import com.ada.shared.infrastructure.dto.SecretsProperties;
+import com.ada.shared.infrastructure.dto.TelegramProperties;
 import jakarta.validation.constraints.NotBlank;
 import java.nio.file.*;
 import lombok.Getter;
@@ -18,6 +20,8 @@ import org.springframework.validation.annotation.Validated;
 public class AdaProperties {
   @NotBlank private String dataDir;
   @NestedConfigurationProperty private LlmProperties llm;
+  @NestedConfigurationProperty private TelegramProperties telegram;
+  @NestedConfigurationProperty private SecretsProperties secrets;
 
   public Path getNormalizedDataDirectory() {
     return Path.of(dataDir).toAbsolutePath().normalize();
