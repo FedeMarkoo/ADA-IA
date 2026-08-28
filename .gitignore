@@ -1,6 +1,9 @@
 .gradle/
 build/
 out/
+# El nombre `out` también se usa para puertos hexagonales de salida.
+!src/main/kotlin/**/out/
+!src/main/kotlin/**/out/**
 .idea/
 *.iml
 .DS_Store
