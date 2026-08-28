@@ -77,6 +77,16 @@ una atribución. La memoria global se conserva en
 `ada_host_system_memory_bytes{state="total|used|available"}`. El exporter no
 publica command lines, prompts, credenciales ni datos personales.
 
+## Persistencia de Grafana
+
+Grafana se ejecuta en Docker con una versión fijada en `compose.yaml` y usa el
+volumen nombrado `grafana-data` para conservar usuarios, configuración y
+dashboards entre recreaciones del contenedor. El datasource de Prometheus y el
+dashboard operativo se provisionan desde `monitoring/grafana`, por lo que una
+instalación nueva o un volumen vacío puede reconstruirse sin depender de una
+edición manual en la UI. No se debe ejecutar `docker compose down -v` salvo que
+se quiera eliminar explícitamente esos datos.
+
 ## Permisos del volumen de datos
 
 La imagen ejecuta ADA con el usuario no root `ada` (UID/GID `10001`). En una
