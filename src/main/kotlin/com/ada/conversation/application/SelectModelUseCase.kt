@@ -11,6 +11,13 @@ class SelectModelUseCase(
     private val filters: List<RequestFilter>,
     private val strategies: List<ModelSelectionStrategy>,
 ) {
+    /**
+     * Selects a model for the chat request after applying supported request filters.
+     *
+     * @param request The chat request to process.
+     * @return The model selection produced by the first compatible strategy.
+     * @throws IllegalStateException If no strategy supports the filtered request.
+     */
     fun execute(request: ChatRequest): ModelSelection {
         val filteredRequest = filters
             .filter { it.supports(request) }
