@@ -8,7 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 @Configuration
-class DataDirectoryInitializer(
+open class DataDirectoryInitializer(
     @Value("\${ada.data-dir:../ada-data}") private val dataDirectory: String,
 ) {
     @Bean
