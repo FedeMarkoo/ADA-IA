@@ -1,0 +1,89 @@
+package com.ada.model.infrastructure.out.mcp;
+
+import com.ada.conversation.application.dto.LlmToolCall;
+import com.ada.conversation.application.dto.ToolExecutionResult;
+import com.ada.conversation.application.port.out.ToolExecutor;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+
+@Component
+@RequiredArgsConstructor
+public class McpWebSearchToolExecutor implements ToolExecutor {
+  private final RestClient.Builder builder;
+  private final ObjectMapper objectMapper;
+  private RestClient client;
+
+  @Value("${ada.mcp.web-search-url:http://mcp-web-search:8000/mcp}")
+  private String endpoint;
+
+  @jakarta.annotation.PostConstruct
+  void initialize() {
+    client = builder.build();
+  }
+
+  public boolean supports(String toolName) {
+    return "web_search".equals(toolName);
+  }
+
+  public ToolExecutionResult execute(LlmToolCall call) {
+    try {
+      var arguments = objectMapper.readTree(call.arguments());
+      initializeSession();
+      var result = callTool(arguments);
+      return new ToolExecutionResult(call.id(), call.name(), extractText(result));
+    } catch (JsonProcessingException | RestClientException error) {
+      throw new IllegalStateException("MCP web search failed", error);
+    }
+  }
+
+  private void initializeSession() {
+    post(
+        "initialize",
+        Map.of(
+            "protocolVersion", "2024-11-05",
+            "capabilities", Map.of(),
+            "clientInfo", Map.of("name", "ada", "version", "1.0.0")));
+  }
+
+  private JsonNode callTool(JsonNode arguments) {
+    return post("tools/call", Map.of("name", "web_search", "arguments", arguments));
+  }
+
+  private JsonNode post(String method, Object params) {
+    var body =
+        Map.of(
+            "jsonrpc",
+            "2.0",
+            "id",
+            UUID.randomUUID().toString(),
+            "method",
+            method,
+            "params",
+            params);
+    var response =
+        client
+            .post()
+            .uri(endpoint)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body)
+            .retrieve()
+            .body(JsonNode.class);
+    if (response == null || response.has("error")) {
+      throw new IllegalStateException("Invalid MCP response");
+    }
+    return response.path("result");
+  }
+
+  private String extractText(JsonNode result) {
+    return result.path("content").path(0).path("text").asText("[]");
+  }
+}

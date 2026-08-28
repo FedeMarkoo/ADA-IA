@@ -36,6 +36,20 @@ saludable, descarga el modelo configurado y recién después inicia LiteLLM y
 ADA. El puerto de Ollama queda limitado a `127.0.0.1:11434` para diagnóstico
 local; LiteLLM lo consume por la red interna de Compose.
 
+## MCP de búsqueda web
+
+Los servidores MCP externos a ADA viven en `mcp/<nombre>`. El primer servidor
+es `mcp/web-search`, un proceso Python independiente que implementa el
+transporte JSON-RPC de MCP y expone la tool `web_search`. ADA la publica al
+modelo mediante `McpWebSearchToolProvider` y ejecuta las llamadas mediante
+`McpWebSearchToolExecutor`; el servidor MCP hace la búsqueda pública y devuelve
+enlaces y snippets.
+
+Compose levanta el MCP en la red interna como `mcp-web-search:8000`. No se
+publica el puerto al host. Para reemplazar el proveedor o agregar otra tool,
+se crea otro subdirectorio bajo `mcp/` y su adapter correspondiente en
+`infrastructure.out`.
+
 El endpoint de gestión queda atado a `127.0.0.1:8081`; así Prometheus y los
 endpoints de Actuator no quedan expuestos por la interfaz HTTP de la aplicación.
 En un despliegue remoto debe agregarse autenticación o una ACL de red.
