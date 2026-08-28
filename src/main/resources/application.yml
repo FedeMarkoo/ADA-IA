@@ -22,6 +22,8 @@ logging:
 
 ada:
   data-dir: ${ADA_DATA_DIR:../ada-data}
+  observability:
+    application-name: ${spring.application.name:ada}
   llm:
     base-url: ${ADA_LLM_BASE_URL:http://127.0.0.1:4000}
     api-key: ${ADA_LLM_API_KEY:}
@@ -29,6 +31,12 @@ ada:
     routing-model: ${ADA_LLM_ROUTING_MODEL:ollama/llama3.2:1b}
   mcp:
     web-search-url: ${ADA_MCP_WEB_SEARCH_URL:http://127.0.0.1:8000/mcp}
+  telegram:
+    enabled: ${ADA_TELEGRAM_ENABLED:false}
+    bootstrap-bot-token: ${ADA_TELEGRAM_BOOTSTRAP_BOT_TOKEN:}
+    bootstrap-chat-id: ${ADA_TELEGRAM_BOOTSTRAP_CHAT_ID:}
+  secrets:
+    master-key: ${ADA_SECRET_MASTER_KEY:}
 
 management:
   server:
