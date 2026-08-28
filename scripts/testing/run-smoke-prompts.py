@@ -40,7 +40,8 @@ def run_prompt(base_url, prompt, poll_seconds):
             print(
                 f"  response model={result.get('model')} "
                 f"input_tokens={result.get('inputTokens')} "
-                f"output_tokens={result.get('outputTokens')}",
+                f"output_tokens={result.get('outputTokens')} "
+                f"token_usage={result.get('tokenUsage')}",
                 flush=True,
             )
             print(f"  response: {result.get('content')}", flush=True)

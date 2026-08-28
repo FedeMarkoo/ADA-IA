@@ -40,6 +40,7 @@ public class ChatUseCase {
 
   private ChatResult execute(String id, ChatRequest input) {
     long startedAtNanos = metrics.startRequest();
+    var tokenUsage = new ArrayList<TokenUsageComponent>();
     try {
       tracker.update(id, new MessageExecutionState.FilteringCommand());
       var r = metrics.measureStage("filtering_command", () -> applyFilters(input));
@@ -47,7 +48,7 @@ public class ChatUseCase {
       tracker.update(id, new MessageExecutionState.CreatingContext());
       var req =
           metrics.measureStage("context_creation", () -> factory.create(r, selection.model()));
-      var completion = invoke(id, req);
+      var completion = invoke(id, req, tokenUsage);
       int rounds = 0;
       while (!completion.toolCalls().isEmpty()) {
         if (rounds++ >= 8) throw new IllegalStateException("Maximum tool rounds exceeded");
@@ -85,7 +86,7 @@ public class ChatUseCase {
                 req.temperature(),
                 req.maxTokens(),
                 req.metadata());
-        completion = invoke(id, req);
+        completion = invoke(id, req, tokenUsage);
       }
       tracker.update(id, new MessageExecutionState.Completed());
       metrics.recordRequest("conversation", "chat", "success");
@@ -95,7 +96,8 @@ public class ChatUseCase {
               completion.content(),
               completion.model(),
               completion.inputTokens(),
-              completion.outputTokens());
+              completion.outputTokens(),
+              aggregateTokenUsage(tokenUsage));
       results.save(result);
       return result;
     } catch (RuntimeException e) {
@@ -117,12 +119,27 @@ public class ChatUseCase {
     return result;
   }
 
-  private LlmCompletion invoke(String id, LlmRequest r) {
+  private LlmCompletion invoke(String id, LlmRequest r, List<TokenUsageComponent> tokenUsage) {
     tracker.update(id, new MessageExecutionState.InvokingModel(r.model()));
     var c =
         metrics.measureStage(
             "model_invoke", () -> metrics.measureLlm(r.model(), () -> client.complete(r)));
-    metrics.recordTokenBreakdown(r, c);
+    tokenUsage.addAll(metrics.recordTokenBreakdown(r, c));
     return c;
+  }
+
+  private List<TokenUsageComponent> aggregateTokenUsage(List<TokenUsageComponent> usage) {
+    var totals = new LinkedHashMap<String, Long>();
+    var sources = new LinkedHashMap<String, TokenUsageSource>();
+    usage.forEach(
+        item -> {
+          totals.merge(item.component(), item.tokens(), Long::sum);
+          sources.put(item.component(), item.source());
+        });
+    return totals.entrySet().stream()
+        .map(
+            item ->
+                new TokenUsageComponent(item.getKey(), item.getValue(), sources.get(item.getKey())))
+        .toList();
   }
 }
