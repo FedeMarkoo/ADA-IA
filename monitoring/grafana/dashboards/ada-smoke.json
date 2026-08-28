@@ -1,0 +1,43 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "PFA108859C64DAD74"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "list"}},
+      "targets": [{"expr": "sum(ada_requests_total)", "legendFormat": "requests", "refId": "A"}],
+      "title": "ADA requests",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "PFA108859C64DAD74"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "list"}},
+      "targets": [{"expr": "sum(rate(ada_llm_duration_seconds_count[5m]))", "legendFormat": "LLM calls", "refId": "A"}],
+      "title": "LLM calls",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "PFA108859C64DAD74"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table"}},
+      "targets": [{"expr": "sum by (model, component) (ada_llm_tokens_total)", "legendFormat": "{{model}} / {{component}}", "refId": "A"}],
+      "title": "LLM tokens by component",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["ada", "smoke", "llm"],
+  "templating": {"list": []},
+  "time": {"from": "now-30m", "to": "now"},
+  "title": "ADA - Smoke and LLM metrics",
+  "uid": "ada-smoke-llm",
+  "version": 1
+}

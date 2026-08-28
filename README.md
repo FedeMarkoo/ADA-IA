@@ -40,3 +40,6 @@ mvn verify
 
 El despliegue local de LiteLLM y el layout de datos están documentados en
 [Integraciones y configuración](docs/integrations.md).
+
+El smoke runner HTTP y el dashboard local de Grafana están documentados en
+[Monitoreo local](monitoring/README.md).
