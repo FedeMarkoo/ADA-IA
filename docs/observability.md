@@ -62,3 +62,13 @@ ventana de Micrometer:
 El dashboard debe mostrar estos gauges separados de las tasas históricas para
 que una decisión operativa no dependa de esperar que expire una ventana de
 agregación.
+
+## Memoria por componente
+
+La sección de recursos muestra memoria RSS detectada en el host para `ada`,
+`ollama`, `telegram`, `prometheus` y `grafana` mediante
+`ada_component_memory_bytes{component}`. El consumo de los modelos cargados se
+expone como `ada_ollama_model_memory_bytes{model}` consultando Ollama; si
+Ollama no informa modelos activos, la serie queda en `unknown` y no se inventa
+una atribución. La memoria global se conserva en
+`ada_system_memory_bytes{state="total|used|free"}`.

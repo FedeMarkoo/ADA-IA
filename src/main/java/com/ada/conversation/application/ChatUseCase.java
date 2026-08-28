@@ -8,6 +8,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.stereotype.Service;
 
@@ -21,7 +22,8 @@ public class ChatUseCase {
   private final List<RequestFilter> filters;
   private final List<ToolExecutor> tools;
   private final MessageStateTracker tracker;
-  private final Executor executor;
+
+  @Qualifier("conversationExecutor") private final Executor executor;
 
   public ChatResult execute(ChatRequest input) {
     String id = UUID.randomUUID().toString();
