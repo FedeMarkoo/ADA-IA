@@ -56,10 +56,11 @@ En un despliegue remoto debe agregarse autenticación o una ACL de red.
 
 ## Telegram
 
-ADA puede enviar una notificación al iniciar y otra al comenzar el apagado a un
-chat de Telegram mediante un bot. La función está desactivada por defecto. El
-token y el chat ID se guardan cifrados con AES-GCM en `ada_secrets`; la clave
-maestra nunca se guarda en SQLite:
+ADA puede recibir mensajes y enviar respuestas, además de enviar notificaciones
+de ciclo de vida, a un chat de Telegram mediante un bot. La función está
+desactivada por defecto y usa long polling, por lo que no requiere exponer un
+webhook público. El token y el chat ID se guardan cifrados con AES-GCM en
+`ada_secrets`; la clave maestra nunca se guarda en SQLite:
 
 ```text
 ADA_TELEGRAM_ENABLED=true
@@ -72,6 +73,14 @@ Las variables `ADA_TELEGRAM_BOOTSTRAP_*` solo se usan para insertar el secreto
 si todavía no existe; luego pueden retirarse del entorno. Generá la clave, por
 ejemplo, con `openssl rand -base64 32`. Los errores de Telegram no impiden
 iniciar ni apagar ADA y no se registran tokens ni credenciales.
+
+Una vez iniciada ADA con `ADA_TELEGRAM_ENABLED=true`, el bot consulta mensajes
+nuevos y solo procesa mensajes del chat cuyo ID coincide con el chat ID
+configurado. Cada mensaje se ejecuta como una conversación con ID
+`telegram:<chat-id>` y la respuesta se envía al mismo chat. Para obtener el
+chat ID, enviá primero un mensaje al bot y consultá `getUpdates` de Telegram;
+el valor debe quedar en `ADA_TELEGRAM_BOOTSTRAP_CHAT_ID` durante el primer
+inicio.
 
 ## SQLite fuera del repositorio
 

@@ -11,4 +11,5 @@ public class TelegramProperties {
   private boolean enabled;
   private String bootstrapBotToken;
   private String bootstrapChatId;
+  private int pollingTimeoutSeconds = 25;
 }

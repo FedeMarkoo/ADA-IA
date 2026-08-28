@@ -1,4 +1,4 @@
-package com.ada.lifecycle.infrastructure.out.telegram.dto;
+package com.ada.lifecycle.infrastructure.out.telegram;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
