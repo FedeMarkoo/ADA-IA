@@ -12,7 +12,7 @@ open class DataDirectoryInitializer(
     @Value("\${ada.data-dir:../ada-data}") private val dataDirectory: String,
 ) {
     @Bean
-    fun initializeDataDirectory(): ApplicationRunner = ApplicationRunner {
+    open fun initializeDataDirectory(): ApplicationRunner = ApplicationRunner {
         listOf("db", "logs", "backups", "exports", "models", "runtime")
             .map { Path.of(dataDirectory, it) }
             .forEach(Files::createDirectories)
