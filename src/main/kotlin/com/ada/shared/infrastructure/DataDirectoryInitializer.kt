@@ -4,7 +4,6 @@ import org.springframework.boot.ApplicationRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import java.nio.file.Files
-import java.nio.file.Path
 
 @Configuration
 class DataDirectoryInitializer(
@@ -19,7 +18,7 @@ class DataDirectoryInitializer(
     fun initializeDataDirectory(): ApplicationRunner = ApplicationRunner {
         val dataDirectory = properties.normalizedDataDirectory
         listOf("db", "logs", "backups", "exports", "models", "runtime")
-            .map { Path.of(dataDirectory, it) }
+            .map(dataDirectory::resolve)
             .forEach(Files::createDirectories)
     }
 }
