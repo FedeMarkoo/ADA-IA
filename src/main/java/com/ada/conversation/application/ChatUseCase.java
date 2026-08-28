@@ -7,6 +7,7 @@ import com.ada.conversation.manager.AdaInfoManager;
 import com.ada.conversation.manager.MemoryManager;
 import com.ada.conversation.manager.ToolManager;
 import com.ada.shared.observability.AdaMetrics;
+import com.ada.observability.api.AdaObservability;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -22,6 +23,7 @@ public class ChatUseCase {
   private final LlmRequestFactory factory;
   private final LlmClient client;
   private final AdaMetrics metrics;
+  private final AdaObservability observability;
   private final List<RequestFilter> filters;
   private final ToolManager toolManager;
   private final MemoryManager memoryManager;
@@ -46,68 +48,76 @@ public class ChatUseCase {
   private ChatResult execute(String id, ChatRequest input) {
     long startedAtNanos = metrics.startRequest();
     var tokenUsage = new ArrayList<TokenUsageComponent>();
-    try {
-      tracker.update(id, new MessageExecutionState.FilteringCommand());
-      var r = metrics.measureStage("filtering_command", () -> applyFilters(input));
-      if (adaInfoManager.supports(r.message())) return executeInfoCommand(id);
-      var selection = selector.execute(r);
-      tracker.update(id, new MessageExecutionState.SelectingContext());
-      tracker.update(id, new MessageExecutionState.CreatingContext());
-      var req =
-          metrics.measureStage("context_creation", () -> factory.create(r, selection.model()));
-      var completion = invoke(id, req, tokenUsage);
-      int rounds = 0;
-      while (!completion.toolCalls().isEmpty()) {
-        if (rounds++ >= 8) throw new IllegalStateException("Maximum tool rounds exceeded");
-        var messages = new ArrayList<>(req.messages());
-        messages.add(
-            new LlmMessage(
-                LlmMessageRole.ASSISTANT,
-                completion.content(),
-                LlmContentComponent.RESPONSE,
-                completion.toolCalls()));
-        for (var call : completion.toolCalls()) {
-          tracker.update(id, new MessageExecutionState.InvokingTool(call.name()));
-          var result = metrics.measureStage("tool_invoke", () -> toolManager.execute(call));
+    try (var operation = observability.start("conversation.chat", "EVENT")) {
+      operation.event("messageId", id).event("inputType", input.getClass().getSimpleName());
+      try {
+        tracker.update(id, new MessageExecutionState.FilteringCommand());
+        var r = metrics.measureStage("filtering_command", () -> applyFilters(input));
+        if (adaInfoManager.supports(r.message())) {
+          operation.event("outcome", "success");
+          return executeInfoCommand(id);
+        }
+        var selection = selector.execute(r);
+        tracker.update(id, new MessageExecutionState.SelectingContext());
+        tracker.update(id, new MessageExecutionState.CreatingContext());
+        var req =
+            metrics.measureStage("context_creation", () -> factory.create(r, selection.model()));
+        var completion = invoke(id, req, tokenUsage);
+        int rounds = 0;
+        while (!completion.toolCalls().isEmpty()) {
+          if (rounds++ >= 8) throw new IllegalStateException("Maximum tool rounds exceeded");
+          var messages = new ArrayList<>(req.messages());
           messages.add(
               new LlmMessage(
-                  LlmMessageRole.TOOL,
-                  result.content(),
-                  LlmContentComponent.TOOL_RESPONSE,
-                  List.of(),
-                  result.toolCallId()));
+                  LlmMessageRole.ASSISTANT,
+                  completion.content(),
+                  LlmContentComponent.RESPONSE,
+                  completion.toolCalls()));
+          for (var call : completion.toolCalls()) {
+            tracker.update(id, new MessageExecutionState.InvokingTool(call.name()));
+            var result = metrics.measureStage("tool_invoke", () -> toolManager.execute(call));
+            messages.add(
+                new LlmMessage(
+                    LlmMessageRole.TOOL,
+                    result.content(),
+                    LlmContentComponent.TOOL_RESPONSE,
+                    List.of(),
+                    result.toolCallId()));
+          }
+          req =
+              new LlmRequest(
+                  req.model(),
+                  messages,
+                  req.tools(),
+                  req.temperature(),
+                  req.maxTokens(),
+                  req.metadata());
+          completion = invoke(id, req, tokenUsage);
         }
-        req =
-            new LlmRequest(
-                req.model(),
-                messages,
-                req.tools(),
-                req.temperature(),
-                req.maxTokens(),
-                req.metadata());
-        completion = invoke(id, req, tokenUsage);
+        metrics.recordRequest("conversation", "chat", "success");
+        var result =
+            new ChatResult(
+                id,
+                completion.content(),
+                completion.model(),
+                completion.inputTokens(),
+                completion.outputTokens(),
+                aggregateTokenUsage(tokenUsage));
+        memoryManager.review(r, result.content());
+        results.save(result);
+        tracker.update(id, new MessageExecutionState.Completed());
+        operation.event("outcome", "success");
+        return result;
+      } catch (RuntimeException e) {
+        operation.event("outcome", "failure").failure(e);
+        tracker.update(
+            id,
+            new MessageExecutionState.Failed(
+                e.getMessage() == null ? "unknown error" : e.getMessage()));
+        throw e;
+      } finally {
+        metrics.finishRequest(startedAtNanos);
       }
-      metrics.recordRequest("conversation", "chat", "success");
-      var result =
-          new ChatResult(
-              id,
-              completion.content(),
-              completion.model(),
-              completion.inputTokens(),
-              completion.outputTokens(),
-              aggregateTokenUsage(tokenUsage));
-      memoryManager.review(r, result.content());
-      results.save(result);
-      tracker.update(id, new MessageExecutionState.Completed());
-      return result;
-    } catch (RuntimeException e) {
-      tracker.update(
-          id,
-          new MessageExecutionState.Failed(
-              e.getMessage() == null ? "unknown error" : e.getMessage()));
-      throw e;
-    } finally {
-      metrics.finishRequest(startedAtNanos);
     }
   }
 

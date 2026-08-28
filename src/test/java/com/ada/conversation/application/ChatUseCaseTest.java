@@ -12,6 +12,8 @@ import com.ada.conversation.manager.AdaInfoManager;
 import com.ada.conversation.manager.MemoryManager;
 import com.ada.conversation.manager.ToolManager;
 import com.ada.shared.observability.AdaMetrics;
+import com.ada.observability.api.AdaObservability;
+import com.ada.observability.api.OperationScope;
 import java.util.List;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,8 @@ class ChatUseCaseTest {
     var factory = mock(LlmRequestFactory.class);
     var client = mock(LlmClient.class);
     var metrics = mock(AdaMetrics.class);
+    var observability = mock(AdaObservability.class);
+    var operation = mock(OperationScope.class);
     var toolManager = mock(ToolManager.class);
     var memoryManager = mock(MemoryManager.class);
     var infoManager = mock(AdaInfoManager.class);
@@ -31,6 +35,7 @@ class ChatUseCaseTest {
     when(infoManager.supports("/i")).thenReturn(true);
     when(infoManager.describe()).thenReturn("ADA info");
     when(metrics.startRequest()).thenReturn(1L);
+    when(observability.start(anyString(), anyString())).thenReturn(operation);
     doAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get())
         .when(metrics)
         .measureStage(anyString(), any());
@@ -41,6 +46,7 @@ class ChatUseCaseTest {
             factory,
             client,
             metrics,
+            observability,
             List.<RequestFilter>of(),
             toolManager,
             memoryManager,
