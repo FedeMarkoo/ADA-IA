@@ -41,3 +41,24 @@ Los contadores deben ser monotónicos y las duraciones histogramas.
 
 La ausencia de datos del proveedor se representa como `unknown`, nunca se
 imputa silenciosamente.
+
+## Duración inmediata de una petición
+
+Los contadores históricos (`*_total`, `*_sum`, `*_count`) deben consultarse con
+`rate` o `increase` para una ventana temporal. No representan la última
+ejecución y pueden conservar actividad mientras exista una ventana de datos.
+
+Para diagnóstico inmediato ADA expone gauges que no esperan a que expire una
+ventana de Micrometer:
+
+- `ada_request_last_duration_seconds`: duración completa de la última petición,
+  desde el inicio del flujo hasta su finalización o fallo.
+- `ada_requests_active`: peticiones actualmente en curso; vuelve a cero al
+  finalizar cada ejecución.
+- `ada_pipeline_stage_last_duration_seconds{stage="..."}`: duración de la
+  última ejecución de cada etapa (`filtering_command`, `context_creation`,
+  `model_invoke` y `tool_invoke`).
+
+El dashboard debe mostrar estos gauges separados de las tasas históricas para
+que una decisión operativa no dependa de esperar que expire una ventana de
+agregación.

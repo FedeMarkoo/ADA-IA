@@ -1,18 +1,16 @@
 package com.ada.shared.observability;
 
 import io.micrometer.core.instrument.*;
+import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.*;
 import org.aspectj.lang.annotation.*;
 import org.springframework.stereotype.Component;
 
 @Aspect
 @Component
+@RequiredArgsConstructor
 public class ContextMetricsAspect {
   private final MeterRegistry registry;
-
-  public ContextMetricsAspect(MeterRegistry r) {
-    registry = r;
-  }
 
   @Around("@within(measuredContextItem)")
   public Object measure(ProceedingJoinPoint jp, MeasuredContextItem a) throws Throwable {

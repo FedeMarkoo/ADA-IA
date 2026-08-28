@@ -36,15 +36,14 @@ public class ChatUseCase {
   }
 
   private ChatResult execute(String id, ChatRequest input) {
+    long startedAtNanos = metrics.startRequest();
     try {
       tracker.update(id, new MessageExecutionState.FilteringCommand());
-      var r = input;
-      var fs = new ArrayList<>(filters);
-      fs.sort(AnnotationAwareOrderComparator.INSTANCE);
-      for (var f : fs) if (f.supports(r)) r = f.apply(r);
+      var r = metrics.measureStage("filtering_command", () -> applyFilters(input));
       var selection = selector.execute(r);
       tracker.update(id, new MessageExecutionState.CreatingContext());
-      var req = factory.create(r, selection.model());
+      var req =
+          metrics.measureStage("context_creation", () -> factory.create(r, selection.model()));
       var completion = invoke(id, req);
       int rounds = 0;
       while (!completion.toolCalls().isEmpty()) {
@@ -66,7 +65,7 @@ public class ChatUseCase {
                       () ->
                           new IllegalStateException(
                               "No executor available for tool '" + call.name() + "'"));
-          var result = executor.execute(call);
+          var result = metrics.measureStage("tool_invoke", () -> executor.execute(call));
           messages.add(
               new LlmMessage(
                   LlmMessageRole.TOOL,
@@ -99,12 +98,24 @@ public class ChatUseCase {
           new MessageExecutionState.Failed(
               e.getMessage() == null ? "unknown error" : e.getMessage()));
       throw e;
+    } finally {
+      metrics.finishRequest(startedAtNanos);
     }
+  }
+
+  private ChatRequest applyFilters(ChatRequest input) {
+    var result = input;
+    var orderedFilters = new ArrayList<>(filters);
+    orderedFilters.sort(AnnotationAwareOrderComparator.INSTANCE);
+    for (var filter : orderedFilters) if (filter.supports(result)) result = filter.apply(result);
+    return result;
   }
 
   private LlmCompletion invoke(String id, LlmRequest r) {
     tracker.update(id, new MessageExecutionState.InvokingModel(r.model()));
-    var c = metrics.measureLlm(r.model(), () -> client.complete(r));
+    var c =
+        metrics.measureStage(
+            "model_invoke", () -> metrics.measureLlm(r.model(), () -> client.complete(r)));
     metrics.recordTokenBreakdown(r, c);
     return c;
   }
