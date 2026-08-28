@@ -21,7 +21,7 @@ clientes y métricas. El dominio debe poder probarse sin levantar Spring.
 ## Estructura inicial
 
 ```text
-src/main/kotlin/com/ada/
+src/main/java/com/ada/
 ├── shared/
 │   ├── domain/          tipos y errores transversales mínimos
 │   └── application/     clock, ids, resultado y políticas comunes
@@ -91,21 +91,21 @@ ocho rondas para evitar loops infinitos.
 Las variantes dinámicas se registran como componentes y se inyectan como
 colecciones de interfaces:
 
-```kotlin
+```java
 interface ModelSelectionStrategy {
-    fun supports(request: ModelSelectionRequest): Boolean
-    fun select(request: ModelSelectionRequest): ModelSelection
+    boolean supports(ChatRequest request);
+    ModelSelection select(ChatRequest request);
 }
 
 interface RequestFilter {
-    fun supports(request: ChatRequest): Boolean
-    fun apply(request: ChatRequest): ChatRequest
+    boolean supports(ChatRequest request);
+    ChatRequest apply(ChatRequest request);
 }
 
-class SelectModelUseCase(
-    private val strategies: List<ModelSelectionStrategy>,
-    private val filters: List<RequestFilter>,
-)
+class SelectModelUseCase {
+    SelectModelUseCase(List<ModelSelectionStrategy> strategies,
+                       List<RequestFilter> filters) { }
+}
 ```
 
 Reglas:

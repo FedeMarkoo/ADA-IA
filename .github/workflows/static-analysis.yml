@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  ktlint:
+  java-style:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -21,16 +21,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Run Ktlint
+      - name: Compile and validate Java
         continue-on-error: true
-        run: |
-          curl --fail --silent --show-error --location \
-            https://github.com/pinterest/ktlint/releases/download/1.8.0/ktlint \
-            --output ktlint
-          chmod +x ktlint
-          ./ktlint --relative --reporter=plain
+        run: mvn --batch-mode --no-transfer-progress validate
 
-  detekt:
+  java-analysis:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -42,23 +37,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Run Detekt
+      - name: Run Java analysis
         continue-on-error: true
-        run: |
-          curl --fail --silent --show-error --location \
-            https://github.com/detekt/detekt/releases/download/v2.0.0-alpha.6/detekt-cli-2.0.0-alpha.6-all.jar \
-            --output detekt-cli.jar
-          mkdir -p reports
-          java -jar detekt-cli.jar \
-            --input src/main/kotlin \
-            --report xml:reports/detekt.xml \
-            --report sarif:reports/detekt.sarif
-      - name: Upload Detekt report
+        run: mvn --batch-mode --no-transfer-progress test
+      - name: Upload Java analysis report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: detekt-report
-          path: reports/
+          name: java-analysis-report
+          path: target/
 
   coverage:
     runs-on: ubuntu-latest

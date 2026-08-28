@@ -29,11 +29,11 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: java-kotlin
+          languages: java
           build-mode: manual
       - name: Build for CodeQL
         run: mvn --batch-mode --no-transfer-progress -DskipTests package
       - name: Upload CodeQL results
         uses: github/codeql-action/analyze@v3
         with:
-          category: /language:java-kotlin
+          category: /language:java
