@@ -95,9 +95,17 @@
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-maven-plugin</artifactId>
                 <version>${kotlin.version}</version>
+                <extensions>true</extensions>
                 <configuration>
                     <jvmTarget>${java.version}</jvmTarget>
                     <javaParameters>true</javaParameters>
+                    <annotationProcessorPaths>
+                        <annotationProcessorPath>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </annotationProcessorPath>
+                    </annotationProcessorPaths>
                     <compilerPlugins>
                         <plugin>spring</plugin>
                     </compilerPlugins>
@@ -113,24 +121,6 @@
                     </dependency>
                 </dependencies>
                 <executions>
-                    <execution>
-                        <id>kapt</id>
-                        <goals><goal>kapt</goal></goals>
-                        <configuration>
-                            <sourceDirs>
-                                <sourceDir>src/main/kotlin</sourceDir>
-                                <sourceDir>src/main/java</sourceDir>
-                            </sourceDirs>
-                            <aptMode>stubsAndApt</aptMode>
-                            <annotationProcessorPaths>
-                                <annotationProcessorPath>
-                                    <groupId>org.mapstruct</groupId>
-                                    <artifactId>mapstruct-processor</artifactId>
-                                    <version>${mapstruct.version}</version>
-                                </annotationProcessorPath>
-                            </annotationProcessorPaths>
-                        </configuration>
-                    </execution>
                     <execution>
                         <id>compile</id>
                         <phase>compile</phase>
