@@ -121,7 +121,7 @@
                                 <sourceDir>src/main/kotlin</sourceDir>
                                 <sourceDir>src/main/java</sourceDir>
                             </sourceDirs>
-                            <aptMode>stubs</aptMode>
+                            <aptMode>stubsAndApt</aptMode>
                             <annotationProcessorPaths>
                                 <annotationProcessorPath>
                                     <groupId>org.mapstruct</groupId>
