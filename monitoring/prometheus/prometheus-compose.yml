@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: ada
+    static_configs:
+      - targets: ["ada:8081"]
+    metrics_path: /actuator/prometheus
+
+  - job_name: ada-host
+    static_configs:
+      - targets: ["host.docker.internal:9101"]
+    metrics_path: /metrics

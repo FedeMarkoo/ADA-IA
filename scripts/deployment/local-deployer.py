@@ -35,8 +35,15 @@ def compose(args, env, *parts):
 
 
 def image_id(args, env):
-    result = compose(args, env, "images", "-q", "ada")
-    return result.stdout.strip()
+    image = f"{env.get('ADA_IMAGE', 'ghcr.io/fedemarkoo/ada-ia')}:{env.get('ADA_VERSION', 'latest')}"
+    result = subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
 def backup_database(data_dir):
@@ -60,7 +67,7 @@ def healthcheck(url, timeout):
             with urllib.request.urlopen(url, timeout=5) as response:
                 if response.status == 200:
                     return True
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, OSError, TimeoutError):
             pass
         time.sleep(2)
     return False
@@ -84,8 +91,8 @@ def deploy(args):
     backup = backup_database(Path(env.get("ADA_DATA_DIR", "../ada-data")).expanduser().resolve())
     compose(args, env, "pull", "ada")
     new_id = image_id(args, env)
-    if old_id and old_id == new_id:
-        print("No image change; deployment skipped.")
+    if old_id and old_id == new_id and healthcheck(args.health_url, 5):
+        print("No image change and service healthy; deployment skipped.")
         return 0
     try:
         compose(args, env, "up", "-d")
@@ -103,7 +110,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compose", type=Path, default=Path("compose.yaml"))
     parser.add_argument("--env-file", type=Path, default=Path("deploy/.env"))
-    parser.add_argument("--health-url", default="http://127.0.0.1:8080/actuator/health")
+    parser.add_argument("--health-url", default="http://127.0.0.1:8081/actuator/health")
     parser.add_argument("--health-timeout", type=int, default=90)
     parser.add_argument("--once", action="store_true", help="Run one check and exit")
     parser.add_argument("--interval", type=int, default=0, help="Repeat every N seconds; 0 runs once")
