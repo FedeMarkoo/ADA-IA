@@ -37,13 +37,28 @@ def compose(args, env, *parts):
 def image_id(args, env):
     image = f"{env.get('ADA_IMAGE', 'ghcr.io/fedemarkoo/ada-ia')}:{env.get('ADA_VERSION', 'latest')}"
     result = subprocess.run(
-        ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+        ["docker", "image", "inspect", "--platform", "linux/amd64", "--format", "{{.Id}}", image],
         check=False,
         capture_output=True,
         text=True,
         env=env,
     )
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def running_image_id(args, env):
+    result = compose(args, env, "ps", "-q", "ada")
+    container_id = result.stdout.strip()
+    if not container_id:
+        return ""
+    inspected = subprocess.run(
+        ["docker", "inspect", "--format", "{{.Image}}", container_id],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return inspected.stdout.strip() if inspected.returncode == 0 else ""
 
 
 def backup_database(data_dir):
@@ -88,10 +103,11 @@ def deploy(args):
         env.setdefault(key, value)
     env.update({"ADA_IMAGE": env.get("ADA_IMAGE", "ghcr.io/fedemarkoo/ada-ia"), "ADA_VERSION": env.get("ADA_VERSION", "latest")})
     old_id = image_id(args, env)
+    running_id = running_image_id(args, env)
     backup = backup_database(Path(env.get("ADA_DATA_DIR", "../ada-data")).expanduser().resolve())
     compose(args, env, "pull", "ada")
     new_id = image_id(args, env)
-    if old_id and old_id == new_id and healthcheck(args.health_url, 5):
+    if old_id and old_id == new_id and running_id == new_id and healthcheck(args.health_url, 5):
         print("No image change and service healthy; deployment skipped.")
         return 0
     try:

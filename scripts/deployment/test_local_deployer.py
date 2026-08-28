@@ -26,7 +26,16 @@ class LocalDeployerTest(unittest.TestCase):
         self.assertEqual(image, "sha256:abc")
         self.assertEqual(
             run.call_args.args[0],
-            ["docker", "image", "inspect", "--format", "{{.Id}}", "example/ada:v1"],
+            [
+                "docker",
+                "image",
+                "inspect",
+                "--platform",
+                "linux/amd64",
+                "--format",
+                "{{.Id}}",
+                "example/ada:v1",
+            ],
         )
 
     def test_image_id_returns_empty_when_image_is_not_local(self):
