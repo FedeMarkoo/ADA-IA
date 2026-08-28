@@ -1,7 +1,5 @@
 package com.ada.conversation.application.port.out
 
-import com.ada.conversation.application.port.`in`.ChatRequest
-
 data class LlmCompletion(
     val content: String,
     val model: String,
@@ -10,5 +8,5 @@ data class LlmCompletion(
 )
 
 interface LlmClient {
-    fun complete(request: ChatRequest, model: String): LlmCompletion
+    fun complete(request: LlmRequest): LlmCompletion
 }
