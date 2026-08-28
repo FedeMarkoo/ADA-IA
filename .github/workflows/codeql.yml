@@ -26,6 +26,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install vendored observability library
+        run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:

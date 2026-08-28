@@ -7,9 +7,14 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class RedactorTest {
-  @Test void redactsConfiguredAndBuiltInFields() {
+  @Test
+  void redactsConfiguredAndBuiltInFields() {
     Redactor redactor = new Redactor(new ObjectMapper(), List.of("prompt"));
-    String json = redactor.json(java.util.Map.of("token", "secret", "prompt", "private", "ok", "value"));
-    assertThat(json).contains("\"token\":\"hidden\"").contains("\"prompt\":\"hidden\"").contains("\"ok\":\"value\"");
+    String json =
+        redactor.json(java.util.Map.of("token", "secret", "prompt", "private", "ok", "value"));
+    assertThat(json)
+        .contains("\"token\":\"hidden\"")
+        .contains("\"prompt\":\"hidden\"")
+        .contains("\"ok\":\"value\"");
   }
 }

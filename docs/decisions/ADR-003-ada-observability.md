@@ -8,8 +8,9 @@ el resultado (`success`/`failure`) sin persistir prompts ni respuestas del
 modelo en el log automático.
 
 La librería se desarrolla en el repo hermano `ada-observability` y se integra en
-ADA como el módulo Maven `libs/ada-observability`. El código se mantiene como
-subtree para que un clone limpio y la imagen Docker de Git sean autosuficientes.
+ADA como una dependencia Maven vendorizada en `libs/ada-observability`. El
+código se mantiene como subtree para que un clone limpio y la imagen Docker de
+Git sean autosuficientes.
 Si luego se publica en un registry interno, podrá reemplazarse el módulo por la
 dependencia remota.
 
@@ -18,6 +19,7 @@ dependencia remota.
 Desde el checkout de ADA:
 
 ```bash
+mvn -DskipTests -f libs/ada-observability/pom.xml install
 mvn verify
 ```
 
