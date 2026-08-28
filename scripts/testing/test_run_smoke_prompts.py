@@ -13,6 +13,12 @@ SPEC.loader.exec_module(MODULE)
 
 
 class SmokeRunnerTest(unittest.TestCase):
+    def test_rejects_non_positive_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "ada.sqlite"
+            MODULE.seed_prompts(database, Path(__file__).with_name("smoke-prompts.json"))
+            self.assertEqual(MODULE.load_prompts(database, 0), [])
+
     def test_seed_and_load_prompts_from_sqlite(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "db" / "ada.sqlite"
