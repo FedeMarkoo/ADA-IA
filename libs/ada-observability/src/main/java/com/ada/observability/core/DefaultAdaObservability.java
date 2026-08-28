@@ -27,7 +27,10 @@ public final class DefaultAdaObservability implements AdaObservability {
   public OperationScope start(String operation, String kind, TraceContext context) {
     OperationLog log = new OperationLog(operation, kind, context);
     boolean root = activeOperation.get() == null;
-    if (root) activeOperation.set(log);
+    if (root) {
+      activeOperation.set(log);
+      trace.set(context);
+    }
     return new OperationScope() {
       private boolean closed;
 
