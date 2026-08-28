@@ -1,4 +1,4 @@
-package com.ada.model.adapters.out
+package com.ada.model.infrastructure.out
 
 import com.ada.dto.ChatRequest
 import com.ada.dto.ModelSelection

@@ -1,4 +1,4 @@
-package com.ada.conversation.adapters.`in`
+package com.ada.conversation.infrastructure.in.rest
 
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired

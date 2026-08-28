@@ -1,4 +1,4 @@
-package com.ada.conversation.adapters.`in`
+package com.ada.conversation.infrastructure.out.prompt
 
 import com.ada.conversation.application.SystemPromptProvider
 import org.springframework.stereotype.Component

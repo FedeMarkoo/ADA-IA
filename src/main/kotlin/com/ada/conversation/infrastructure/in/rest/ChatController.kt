@@ -1,7 +1,7 @@
-package com.ada.conversation.adapters.`in`
+package com.ada.conversation.infrastructure.in.rest
 
 import com.ada.conversation.application.ChatUseCase
-import com.ada.dto.ChatHttpRequest
+import com.ada.conversation.infrastructure.in.rest.dto.ChatHttpRequest
 import com.ada.dto.ChatRequest
 import com.ada.dto.ChatResult
 import jakarta.validation.Valid

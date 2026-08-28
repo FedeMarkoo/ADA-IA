@@ -8,8 +8,8 @@ paquetes por contexto evitan que el proyecto se convierta en un único paquete
 `service` o `util`.
 
 ```text
-adapters/in  ->  application  ->  domain
-adapters/out ->  application  ->  domain
+infrastructure/in  ->  application  ->  domain
+infrastructure/out ->  application  ->  domain
                     ^
                     |
           puertos definidos por application
@@ -28,11 +28,12 @@ src/main/kotlin/com/ada/
 ├── conversation/
 │   ├── domain/
 │   ├── application/
+│   │   ├── dto/         contratos internos de casos de uso
 │   │   ├── port/in/     casos de uso públicos
 │   │   └── port/out/    dependencias requeridas
-│   └── adapters/
-│       ├── input/       REST, CLI, eventos
-│       └── output/      LiteLLM, SQLite, auditoría
+│   └── infrastructure/
+│       ├── in/rest/     controllers, mappers y DTOs HTTP
+│       └── out/         LiteLLM, SQLite, auditoría
 ├── memory/
 ├── capability/
 ├── model/
@@ -41,6 +42,24 @@ src/main/kotlin/com/ada/
 
 Los nombres concretos pueden variar por contexto, pero no se mezclan entradas,
 casos de uso, dominio y salidas en la misma clase.
+
+## Separación de modelos
+
+```text
+infrastructure.in.rest.dto  -> JSON HTTP; no sale del adapter REST
+application.dto              -> entrada/salida de casos de uso
+domain.entity                -> identidad, persistencia y ciclo de vida
+domain.bo                    -> reglas de negocio e invariantes
+infrastructure.out.*.dto     -> formato específico de un proveedor externo
+```
+
+Un controller transforma explícitamente su DTO REST a un DTO de application.
+Un adapter externo transforma entre el contrato de application y su DTO de
+infraestructura. Entidades y BO nunca se exponen directamente por HTTP.
+
+`DefaultSystemPromptProvider` es un adapter de salida: implementa un puerto de
+application y vive en `conversation.infrastructure.out.prompt`. No es una
+entrada REST ni debe ubicarse junto a controllers o DTOs HTTP.
 
 ## Strategy y Filter
 

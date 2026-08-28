@@ -1,4 +1,4 @@
-package com.ada.dto
+package com.ada.conversation.infrastructure.in.rest.dto
 
 import jakarta.validation.constraints.NotBlank
 

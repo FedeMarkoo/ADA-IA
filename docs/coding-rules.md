@@ -6,9 +6,13 @@
 - Un único tipo top-level por archivo: una clase, interfaz, enum o `object` por
   archivo, con el mismo nombre que el archivo. Esto facilita navegación,
   ownership, revisión y cambios atómicos.
-- Todos los DTOs viven en el package `com.ada.dto`; no se declaran DTOs junto a
-  controllers, casos de uso, puertos o adaptadores. Los DTOs solo transportan
+- Los DTOs viven en el package de su frontera: REST en
+  `infrastructure.in.rest.dto`, application en `application.dto` y proveedores
+  externos en `infrastructure.out.<provider>.dto`. Nunca se declaran DTOs junto
+  a controllers, casos de uso, puertos o entidades. Los DTOs solo transportan
   datos y no contienen reglas de negocio.
+- Las entidades viven en `domain.entity` y los objetos de negocio (BO) en
+  `domain.bo`; ninguno se expone directamente por HTTP.
 - Inmutabilidad por defecto: `val`, colecciones de solo lectura y `data class`
   para datos; mutabilidad encapsulada cuando sea necesaria.
 - `Result` o errores de dominio tipados para flujos esperables; excepciones para
@@ -31,6 +35,9 @@
   variantes reemplazables o una cadena de reglas real.
 - Los nombres de archivo, package e imports deben reflejar la responsabilidad
   real; no usar archivos comodín como `Models.kt`, `Dtos.kt` o `Common.kt`.
+- Un provider de prompt, LLM, persistencia o servicio externo es un adapter de
+  salida y vive bajo `infrastructure.out`; un controller, mapper o DTO HTTP es
+  un adapter de entrada bajo `infrastructure.in`.
 
 ## Spring
 

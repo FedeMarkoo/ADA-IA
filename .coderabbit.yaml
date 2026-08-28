@@ -14,10 +14,14 @@ reviews:
       instructions: |
         Verificar puertos explícitos, casos de uso pequeños y que Strategy/Filter
         se consuman mediante listas de interfaces sin if/when centralizado.
-    - path: "src/main/kotlin/**/adapters/**"
+    - path: "src/main/kotlin/**/infrastructure/**"
       instructions: |
         Revisar timeouts, reintentos, redacción de secretos, métricas, logs y
         mapeo correcto de errores externos.
+    - path: "src/main/kotlin/**/infrastructure/in/rest/dto/**"
+      instructions: |
+        Estos son DTOs HTTP de entrada. No deben contener reglas de negocio ni
+        exponerse fuera del adapter REST; verificar package y mapeo a application.
     - path: "src/test/**"
       instructions: |
         Exigir pruebas de regresión, unitarias para reglas y tests de integración
@@ -25,11 +29,12 @@ reviews:
     - path: "docs/coding-rules.md"
       instructions: |
         Tratar este documento como guía normativa del repositorio. Verificar en
-        cada review que exista un único tipo top-level por archivo y que todos
-        los DTOs Kotlin estén bajo el package com.ada.dto.
+        cada review que exista un único tipo top-level por archivo, que los DTOs
+        estén en el package de su frontera y que entities/BOs estén separados.
     - path: "src/**/*.kt"
       instructions: |
         Aplicar las reglas de docs/coding-rules.md: un único tipo top-level por
-        archivo y DTOs exclusivamente en com.ada.dto.
+        archivo; DTOs por frontera; entities en domain.entity; BOs en domain.bo;
+        controllers únicamente en infrastructure.in.
 chat:
   auto_reply: true

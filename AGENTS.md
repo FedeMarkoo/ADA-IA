@@ -16,8 +16,8 @@
 
 - `domain` contiene reglas de negocio puras.
 - `application` coordina casos de uso y define puertos.
-- `adapters/in` traduce entradas externas a casos de uso.
-- `adapters/out` implementa puertos contra tecnología concreta.
+- `infrastructure/in` traduce entradas externas a casos de uso.
+- `infrastructure/out` implementa puertos contra tecnología concreta.
 - Spring se permite en wiring y adaptadores; no en entidades ni servicios de
   dominio.
 
@@ -25,8 +25,10 @@
 
 - Preferir métodos pequeños, nombres explícitos, tipos de dominio y guard
   clauses.
-- Mantener un único tipo top-level por archivo y ubicar todos los DTOs Kotlin
-  en `com.ada.dto`, un archivo por DTO.
+- Mantener un único tipo top-level por archivo. Ubicar DTOs en el package de su
+  frontera (`infrastructure.in.rest.dto`, `application.dto` o
+  `infrastructure.out.<provider>.dto`), entities en `domain.entity` y BOs en
+  `domain.bo`.
 - No introducir abstracciones especulativas: cada interfaz debe representar un
   puerto, una estrategia, un filtro o una política real.
 - No ocultar errores con `catch (Exception)` sin clasificación, contexto y una
