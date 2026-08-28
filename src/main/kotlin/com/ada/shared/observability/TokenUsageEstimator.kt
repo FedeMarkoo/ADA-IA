@@ -1,12 +1,16 @@
 package com.ada.shared.observability
 
 import com.ada.conversation.application.dto.LlmRequest
+import com.ada.conversation.application.dto.ContextState
 import com.ada.conversation.application.dto.TokenUsageComponent
 import com.ada.conversation.application.dto.TokenUsageSource
 import org.springframework.stereotype.Component
 
 @Component
 class TokenUsageEstimator {
+    fun estimate(context: ContextState): Long = context.messages.sumOf { estimateTokens(it.content) } +
+        context.tools.sumOf { estimateTokens("${it.name} ${it.description} ${it.inputSchema}") }
+
     fun components(request: LlmRequest): List<TokenUsageComponent> {
         val messageComponents = request.messages.groupingBy { it.component }
             .fold(0L) { total, message -> total + estimateTokens(message.content) }
