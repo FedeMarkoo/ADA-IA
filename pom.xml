@@ -17,10 +17,6 @@
     <name>ada</name>
     <description>ADA local-first assistant</description>
 
-    <modules>
-        <module>libs/ada-observability</module>
-    </modules>
-
     <properties>
         <java.version>21</java.version>
         <ada-observability.version>0.1.0-SNAPSHOT</ada-observability.version>
