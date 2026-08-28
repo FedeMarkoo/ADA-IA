@@ -1,3 +1,6 @@
 package com.ada.conversation.application.dto;
 
-public enum TokenUsageSource { ESTIMATED,PROVIDER }
+public enum TokenUsageSource {
+  ESTIMATED,
+  PROVIDER
+}

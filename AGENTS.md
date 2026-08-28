@@ -37,4 +37,4 @@
 - No registrar prompts, tokens, credenciales ni datos personales sin una razón
   documentada y redacción apropiada.
 - Todo cambio debe pasar `mvn verify`; el CI publica cobertura JaCoCo y ejecuta
-  Ktlint, Detekt y CodeQL según los workflows del repositorio.
+  Spotless/Google Java Format y CodeQL según los workflows del repositorio.

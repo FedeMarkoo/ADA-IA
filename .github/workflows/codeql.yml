@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze Kotlin
+    name: Analyze Java
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

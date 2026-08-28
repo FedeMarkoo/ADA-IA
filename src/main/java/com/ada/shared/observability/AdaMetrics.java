@@ -1,4 +1,68 @@
 package com.ada.shared.observability;
 
-import com.ada.conversation.application.dto.*; import io.micrometer.core.instrument.*; import org.springframework.stereotype.Component;
-@Component public class AdaMetrics { private final MeterRegistry registry;private final TokenUsageEstimator estimator;public AdaMetrics(MeterRegistry r,TokenUsageEstimator e){registry=r;estimator=e;} public void recordRequest(String c,String u,String o){registry.counter("ada_requests_total","context",c,"use_case",u,"outcome",o).increment();} public void recordTokenBreakdown(LlmRequest r,LlmCompletion c){estimator.components(r).forEach(x->registry.counter("ada_llm_tokens_total","model",r.model(),"component",x.component(),"source",x.source().name().toLowerCase()).increment(x.tokens()));if(c.outputTokens()!=null)registry.counter("ada_llm_tokens_total","model",r.model(),"component","response","source","provider").increment(c.outputTokens());} public void recordProviderTokens(String m,Long i,Long o){if(i!=null)registry.counter("ada_llm_provider_tokens_total","model",m,"direction","input").increment(i);if(o!=null)registry.counter("ada_llm_provider_tokens_total","model",m,"direction","output").increment(o);} public <T>T measureLlm(String m,java.util.function.Supplier<T> op){var s=Timer.start(registry);try{return op.get();}finally{s.stop(registry.timer("ada_llm_duration_seconds","model",m));}} }
+import com.ada.conversation.application.dto.*;
+import io.micrometer.core.instrument.*;
+import org.springframework.stereotype.Component;
+
+@Component
+public class AdaMetrics {
+  private final MeterRegistry registry;
+  private final TokenUsageEstimator estimator;
+
+  public AdaMetrics(MeterRegistry r, TokenUsageEstimator e) {
+    registry = r;
+    estimator = e;
+  }
+
+  public void recordRequest(String c, String u, String o) {
+    registry.counter("ada_requests_total", "context", c, "use_case", u, "outcome", o).increment();
+  }
+
+  public void recordTokenBreakdown(LlmRequest r, LlmCompletion c) {
+    estimator
+        .components(r)
+        .forEach(
+            x ->
+                registry
+                    .counter(
+                        "ada_llm_tokens_total",
+                        "model",
+                        r.model(),
+                        "component",
+                        x.component(),
+                        "source",
+                        x.source().name().toLowerCase())
+                    .increment(x.tokens()));
+    if (c.outputTokens() != null)
+      registry
+          .counter(
+              "ada_llm_tokens_total",
+              "model",
+              r.model(),
+              "component",
+              "response",
+              "source",
+              "provider")
+          .increment(c.outputTokens());
+  }
+
+  public void recordProviderTokens(String m, Long i, Long o) {
+    if (i != null)
+      registry
+          .counter("ada_llm_provider_tokens_total", "model", m, "direction", "input")
+          .increment(i);
+    if (o != null)
+      registry
+          .counter("ada_llm_provider_tokens_total", "model", m, "direction", "output")
+          .increment(o);
+  }
+
+  public <T> T measureLlm(String m, java.util.function.Supplier<T> op) {
+    var s = Timer.start(registry);
+    try {
+      return op.get();
+    } finally {
+      s.stop(registry.timer("ada_llm_duration_seconds", "model", m));
+    }
+  }
+}

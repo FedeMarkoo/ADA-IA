@@ -1,8 +1,9 @@
 # Reglas de código
 
-## Kotlin
+## Java
 
-- Kotlin oficial con formato ktlint y compilación estricta de nullability.
+- Java 21 como lenguaje principal, compilado con Maven.
+- Spotless ejecuta Google Java Format; el formato se valida con `mvn verify`.
 - Un único tipo top-level por archivo: una clase, interfaz, enum o `object` por
   archivo, con el mismo nombre que el archivo. Esto facilita navegación,
   ownership, revisión y cambios atómicos.
@@ -76,10 +77,8 @@
 
 - `mvn verify` es el check funcional principal y genera cobertura JaCoCo en
   `target/site/jacoco`.
-- Ktlint valida formato y Detekt reporta code smells y complejidad. Durante la
-  reorganización inicial sus jobs son informativos (`continue-on-error`); cuando
-  la base quede estable se deben convertir en checks bloqueantes.
-- CodeQL analiza seguridad de Java/Kotlin y publica los resultados en GitHub
+- Spotless valida formato y el compilador de Maven bloquea errores de código.
+- CodeQL analiza seguridad de Java y publica los resultados en GitHub
   Code Scanning.
 - CodeRabbit complementa estas herramientas con revisión contextual del diff;
   no reemplaza los checks deterministas del CI.
