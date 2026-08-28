@@ -83,5 +83,9 @@
 - Spotless valida formato y el compilador de Maven bloquea errores de código.
 - CodeQL analiza seguridad de Java y publica los resultados en GitHub
   Code Scanning.
+- El workflow `Security` bloquea secretos con Gitleaks, archivos privados y
+  rutas locales con una política versionada, y vulnerabilidades altas nuevas
+  con Dependency Review. Un secreto detectado debe revocarse, no solamente
+  borrarse del commit.
 - CodeRabbit complementa estas herramientas con revisión contextual del diff;
   no reemplaza los checks deterministas del CI.

@@ -38,3 +38,5 @@
   documentada y redacción apropiada.
 - Todo cambio debe pasar `mvn verify`; el CI publica cobertura JaCoCo y ejecuta
   Spotless/Google Java Format y CodeQL según los workflows del repositorio.
+- Todo cambio debe pasar el workflow `Security`: no se versionan secretos,
+  credenciales, bases SQLite, archivos privados ni rutas absolutas locales.
