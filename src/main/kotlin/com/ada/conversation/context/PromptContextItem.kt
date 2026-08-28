@@ -1,7 +1,7 @@
 package com.ada.conversation.context
 
 import com.ada.conversation.application.dto.ChatRequest
-import com.ada.conversation.application.dto.ContextContribution
+import com.ada.conversation.application.dto.ContextState
 import com.ada.conversation.application.dto.LlmContentComponent
 import com.ada.conversation.application.dto.LlmMessage
 import com.ada.conversation.application.dto.LlmMessageRole
@@ -15,7 +15,7 @@ import com.ada.shared.observability.MeasuredContextItem
 class PromptContextItem : ContextItem {
     override val component = LlmContentComponent.PROMPT
 
-    override fun build(request: ChatRequest): ContextContribution = ContextContribution(
-        messages = listOf(LlmMessage(LlmMessageRole.USER, request.message, component)),
+    override fun apply(request: ChatRequest, current: ContextState): ContextState = current.copy(
+        messages = current.messages + LlmMessage(LlmMessageRole.USER, request.message, component),
     )
 }

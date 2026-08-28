@@ -44,8 +44,9 @@ El contexto que se envía al modelo se compone en `conversation.context`. Cada
 fragmento tiene un `ContextItem` independiente (`system`, `prompt`, `tools`,
 `memories`, `tool_response`, `compacted_prompt` y `response`).
 `ContextAssembler` recibe `List<ContextItem>` y respeta el orden declarado con
-`@Order`, por lo que agregar una fuente nueva no requiere modificar un
-`if/when` central.
+`@Order`. Cada item recibe el estado acumulado y devuelve el siguiente estado;
+por eso `CompactedPromptContextItem` puede eliminar mensajes anteriores y
+reemplazarlos por `compacted_prompt` antes de continuar.
 
 Los nombres concretos pueden variar por contexto, pero no se mezclan entradas,
 casos de uso, dominio y salidas en la misma clase.

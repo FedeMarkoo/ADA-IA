@@ -1,7 +1,7 @@
 package com.ada.conversation.context
 
 import com.ada.conversation.application.dto.ChatRequest
-import com.ada.conversation.application.dto.ContextContribution
+import com.ada.conversation.application.dto.ContextState
 import com.ada.conversation.application.dto.LlmContentComponent
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -13,5 +13,5 @@ import com.ada.shared.observability.MeasuredContextItem
 class ResponseContextItem : ContextItem {
     override val component = LlmContentComponent.RESPONSE
 
-    override fun build(request: ChatRequest): ContextContribution = ContextContribution()
+    override fun apply(request: ChatRequest, current: ContextState): ContextState = current
 }

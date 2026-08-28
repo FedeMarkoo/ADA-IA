@@ -2,7 +2,7 @@ package com.ada.conversation.context
 
 import com.ada.conversation.application.ToolProvider
 import com.ada.conversation.application.dto.ChatRequest
-import com.ada.conversation.application.dto.ContextContribution
+import com.ada.conversation.application.dto.ContextState
 import com.ada.conversation.application.dto.LlmContentComponent
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -16,7 +16,7 @@ class ToolsContextItem(
 ) : ContextItem {
     override val component = LlmContentComponent.TOOLS
 
-    override fun build(request: ChatRequest): ContextContribution = ContextContribution(
-        tools = toolProviders.flatMap { it.tools() },
+    override fun apply(request: ChatRequest, current: ContextState): ContextState = current.copy(
+        tools = current.tools + toolProviders.flatMap { it.tools() },
     )
 }

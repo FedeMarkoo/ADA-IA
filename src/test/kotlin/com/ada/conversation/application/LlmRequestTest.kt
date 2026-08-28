@@ -1,8 +1,13 @@
 package com.ada.conversation.application
 
 import com.ada.conversation.application.dto.ChatRequest
+import com.ada.conversation.application.dto.ContextState
+import com.ada.conversation.application.dto.LlmContentComponent
+import com.ada.conversation.application.dto.LlmMessage
+import com.ada.conversation.application.dto.LlmMessageRole
 import com.ada.conversation.application.dto.LlmTool
 import com.ada.conversation.context.ContextAssembler
+import com.ada.conversation.context.CompactedPromptContextItem
 import com.ada.conversation.context.PromptContextItem
 import com.ada.conversation.context.SystemContextItem
 import com.ada.conversation.context.ToolsContextItem
@@ -39,5 +44,21 @@ class LlmRequestTest {
             components.map { it.component },
         )
         assertEquals(listOf(3L, 3L, 6L, 12L), components.map { it.tokens })
+    }
+
+    @Test
+    fun `compactor replaces accumulated non-system context with a summary`() {
+        val current = ContextState(
+            messages = listOf(
+                LlmMessage(LlmMessageRole.SYSTEM, "rules", LlmContentComponent.SYSTEM),
+                LlmMessage(LlmMessageRole.USER, "old conversation", LlmContentComponent.PROMPT),
+            ),
+        )
+
+        val compacted = CompactedPromptContextItem(TokenUsageEstimator(), maxTokens = 1)
+            .apply(ChatRequest("new prompt"), current)
+
+        assertEquals(listOf(LlmContentComponent.SYSTEM, LlmContentComponent.COMPACTED_PROMPT), compacted.messages.map { it.component })
+        assertEquals("Previous context summary:\nuser: old conversation", compacted.messages.last().content)
     }
 }
