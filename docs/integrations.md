@@ -62,7 +62,7 @@ apuntar a una carpeta hermana del repositorio, por ejemplo:
 ```text
 ../ada-data/
 ├── db/         ada.sqlite, WAL y archivos temporales
-├── logs/       logs locales rotados
+├── logs/       ada.log y archivos rotados de hasta 10 MB
 ├── backups/    copias verificadas
 ├── exports/    salidas generadas
 ├── models/     artefactos locales grandes

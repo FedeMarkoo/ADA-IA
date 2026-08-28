@@ -9,6 +9,17 @@ spring:
     init:
       mode: always
 
+# Persist logs alongside the SQLite database, under ADA_DATA_DIR.
+logging:
+  file:
+    name: ${ADA_DATA_DIR:../ada-data}/logs/ada.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 30
+      total-size-cap: 1GB
+      clean-history-on-start: false
+
 ada:
   data-dir: ${ADA_DATA_DIR:../ada-data}
   llm:

@@ -12,7 +12,9 @@ con el código ni perderse al recrear el checkout.
 
 El layout persistente vive bajo `ADA_DATA_DIR`, con subcarpetas segregadas para
 DB, logs, backups, exports, models y runtime. La aplicación crea el layout y
-valida permisos al iniciar.
+valida permisos al iniciar. Los logs de Spring y de la librería de
+observabilidad se escriben en `logs/ada.log` y rotan cada 10 MB, conservando
+hasta 30 archivos y 1 GB en total.
 
 ## Consecuencias
 
