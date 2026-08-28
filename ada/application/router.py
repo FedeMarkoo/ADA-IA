@@ -637,10 +637,21 @@ class IntentRouter:
                 tool = tool.split()[0].strip()
             if not tool or not self.mcp_manager:
                 return fallback
+            parameters = dict(candidate.get("parameters") or {})
+            # Intelligent redirection for placeholder IDs in listing requests
+            if tool in {"google_calendar.get_event", "google_calendar.read_event"}:
+                event_id = str(parameters.get("id") or parameters.get("event_id") or "").lower()
+                if not event_id or event_id in {"event_id", "id", "<id>", "event", "next", "none", "proximo"}:
+                    tool = "google_calendar.list_events"
+                    parameters = {}
+            elif tool in {"gmail.read_email", "gmail.get_email", "gmail.get_message"}:
+                msg_id = str(parameters.get("id") or parameters.get("message_id") or "").lower()
+                if not msg_id or msg_id in {"msg_id", "message_id", "id", "<id>", "none", "recent", "latest"}:
+                    tool = "gmail.read_inbox"
+                    parameters = {}
             definition = self.tool_registry.get(tool)
             if not definition or not definition.get("enabled") or definition.get("requires_confirmation"):
                 return fallback
-            parameters = dict(candidate.get("parameters") or {})
             schema = definition.get("parameters") or definition.get("inputSchema") or {}
             required = schema.get("required") or []
             if "query" in required and not parameters.get("query"):

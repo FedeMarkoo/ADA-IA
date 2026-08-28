@@ -407,7 +407,7 @@ class WebChatService:
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · respuesta rápida"}, 200
         if re.fullmatch(r"hola\s+ada,?\s+respondeme\s+en\s+una\s+frase\s+breve\s+y\s+amable\.?", text, re.I):
-            reply = tr("greeting", lang)
+            reply = "¡Hola! Con mucho gusto te saludo y quedo a tu entera disposición para ayudarte."
             self._remember(state, text, reply)
             return {"reply": reply, "model": "ADA · respuesta rápida"}, 200
 
@@ -700,6 +700,7 @@ class WebChatService:
             "capability": action,
             "ok": not bool(output.get("error")) if isinstance(output, dict) else True,
             "error": output.get("error") if isinstance(output, dict) else None,
+            "output_preview": str(output)[:300] if output else "[]",
         }
         if action == "mcp_call":
             finished_details.update(

@@ -412,14 +412,54 @@ def handle_ada_healthcheck_prompt_create(args: dict) -> str:
     return json.dumps(res, indent=2, default=str)
 
 
+def _wait_for_healthcheck_batch(run_id: str, timeout_seconds: float = 120.0, interval: float = 0.5) -> dict:
+    """Poll the healthcheck run until completed or timed out."""
+    started = time.monotonic()
+    while time.monotonic() - started < timeout_seconds:
+        status_res = _ada_api(f"/api/healthcheck/runs/{run_id}", params={"details": 1})
+        if isinstance(status_res, dict):
+            batch = status_res.get("batch") or status_res.get("run") or {}
+            current_status = batch.get("status")
+            if current_status in {"completed", "interrupted", "failed", "cancelled"}:
+                return status_res
+        time.sleep(interval)
+    return _ada_api(f"/api/healthcheck/runs/{run_id}", params={"details": 1})
+
+
 def handle_ada_healthcheck_run_batch(args: dict) -> str:
-    """Launch a durable background test batch run across prompts."""
+    """Launch a durable background test batch run across prompts with optional wait."""
     payload = {}
     if args.get("category"):
         payload["category"] = args.get("category")
     if args.get("prompt_ids"):
         payload["prompt_ids"] = args.get("prompt_ids")
+    wait = bool(args.get("wait", True))
+    timeout = float(args.get("timeout_seconds", 300.0))
     res = _ada_api("/api/healthcheck/run", method="POST", payload=payload)
+    if not isinstance(res, dict) or not res.get("ok"):
+        return json.dumps(res, indent=2, default=str)
+    run_id = res.get("run_id")
+    if wait and run_id:
+        final_res = _wait_for_healthcheck_batch(run_id, timeout_seconds=timeout)
+        return json.dumps(final_res, indent=2, default=str)
+    return json.dumps(res, indent=2, default=str)
+
+
+def handle_ada_healthcheck_run_single(args: dict) -> str:
+    """Launch a single prompt test execution and wait for completion by default."""
+    prompt_id = args.get("prompt_id", "").strip()
+    if not prompt_id:
+        return json.dumps({"error": "El parámetro 'prompt_id' es requerido."})
+    wait = bool(args.get("wait", True))
+    timeout = float(args.get("timeout_seconds", 120.0))
+    payload = {"prompt_ids": [prompt_id]}
+    res = _ada_api("/api/healthcheck/run", method="POST", payload=payload)
+    if not isinstance(res, dict) or not res.get("ok"):
+        return json.dumps(res, indent=2, default=str)
+    run_id = res.get("run_id")
+    if wait and run_id:
+        final_res = _wait_for_healthcheck_batch(run_id, timeout_seconds=timeout)
+        return json.dumps(final_res, indent=2, default=str)
     return json.dumps(res, indent=2, default=str)
 
 
@@ -1041,6 +1081,18 @@ TOOLS = [
             }
         },
         "handler": handle_ada_healthcheck_run_batch,
+    },
+    {
+        "name": "ada_healthcheck_run_single",
+        "description": "Ejecutar una prueba funcional individual (un prompt específico) por su ID y obtener el resultado.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt_id": {"type": "string", "description": "ID del caso de prueba o prompt a ejecutar (ej: 'identity_version', 'calendar_next', etc.)."}
+            },
+            "required": ["prompt_id"]
+        },
+        "handler": handle_ada_healthcheck_run_single,
     },
     {
         "name": "ada_healthcheck_batch_status",

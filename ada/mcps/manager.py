@@ -804,6 +804,8 @@ class MCPManager:
                         "https://gmailmcp.googleapis.com/mcp/v1", "search_threads", parameters
                     )
                     if not listed.get("ok"):
+                        listed = self._execute_google_rest("gmail", parameters, operation="search_threads")
+                    if not listed.get("ok"):
                         return listed
                     messages = []
                     listed_payload = listed.get("result") or {}
@@ -814,6 +816,8 @@ class MCPManager:
                         detail = self._execute_remote(
                             "https://gmailmcp.googleapis.com/mcp/v1", "get_message", {"messageId": message_id}
                         )
+                        if not detail.get("ok"):
+                            detail = self._execute_google_rest("gmail", {"messageId": message_id}, operation="get_message")
                         if detail.get("ok"):
                             messages.append(detail.get("result") or {})
                     result = listed.get("result") or {}
@@ -859,7 +863,7 @@ class MCPManager:
         except urllib.error.HTTPError as exc:
             if exc.code == 401:
                 return {"ok": False, "error": "Google OAuth access token vencido", "status": 401}
-            return {"ok": False, "error": f"Google Calendar MCP HTTP {exc.code}", "status": exc.code}
+            return {"ok": False, "error": f"Google MCP HTTP {exc.code}", "status": exc.code}
         if body.get("error"):
             return {"ok": False, "error": body["error"]}
         result = body.get("result", {})

@@ -162,11 +162,16 @@ def _execute_healthcheck_batch(runtime: Dict[str, Any], prompts: List[Dict[str, 
         def progress(phase, details):
             event = {"phase": phase, **(details or {}), "at_seconds": round(time.monotonic() - started, 3)}
             trace.append(event)
-            if phase in {"capability_started", "capability_finished"}:
+            if phase in {"mcp_finished", "capability_finished"}:
                 server_name = details.get("server") or details.get("capability")
                 tool_name = details.get("tool") or details.get("capability")
                 if server_name or tool_name:
-                    executed_mcps.append({"server": server_name, "tool": tool_name, "ok": details.get("ok")})
+                    executed_mcps.append({
+                        "server": server_name,
+                        "tool": tool_name,
+                        "ok": details.get("ok"),
+                        "output": details.get("output_preview"),
+                    })
 
         outcome: Dict[str, Any] = {}
 

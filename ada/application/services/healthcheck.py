@@ -300,85 +300,93 @@ class HealthcheckStore:
                     memory._healthcheck_lock = threading.RLock()
             self.conn = memory._healthcheck_conn
             self._lock = memory._healthcheck_lock
-        # Serialize catalog migrations/seeding on the dedicated healthcheck connection.
-        self._lock.acquire()
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS healthcheck_prompts (
-                id TEXT PRIMARY KEY, category TEXT NOT NULL DEFAULT 'general', name TEXT NOT NULL,
-                capability TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', prompt TEXT NOT NULL,
-                criteria TEXT NOT NULL, required_mcp TEXT NOT NULL DEFAULT 'none', expected TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS healthcheck_runs (
-                id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, prompt_id TEXT NOT NULL,
-                response TEXT, evaluation TEXT NOT NULL, elapsed_seconds REAL NOT NULL,
-                request TEXT, status TEXT NOT NULL DEFAULT 'failed', status_code INTEGER,
-                model TEXT, mcps TEXT NOT NULL DEFAULT '[]', trace TEXT NOT NULL DEFAULT '[]',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS healthcheck_batches (
-                run_id TEXT PRIMARY KEY, total INTEGER NOT NULL, completed INTEGER NOT NULL DEFAULT 0,
-                passed INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0,
-                status TEXT NOT NULL DEFAULT 'pending', current_prompt_id TEXT,
-                started_at TEXT DEFAULT CURRENT_TIMESTAMP, finished_at TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        run_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(healthcheck_runs)")}
-        additions = {
-            "request": "TEXT",
-            "status": "TEXT NOT NULL DEFAULT 'failed'",
-            "status_code": "INTEGER",
-            "model": "TEXT",
-            "mcps": "TEXT NOT NULL DEFAULT '[]'",
-            "trace": "TEXT NOT NULL DEFAULT '[]'",
-        }
-        for name, definition in additions.items():
-            if name not in run_columns:
-                self.conn.execute(f"ALTER TABLE healthcheck_runs ADD COLUMN {name} {definition}")
-        columns = {row[1] for row in self.conn.execute("PRAGMA table_info(healthcheck_prompts)")}
-        for name, definition in (
-            ("category", "TEXT NOT NULL DEFAULT 'general'"),
-            ("tags", "TEXT NOT NULL DEFAULT '[]'"),
-            ("required_mcp", "TEXT NOT NULL DEFAULT 'none'"),
-            ("expected", "TEXT NOT NULL DEFAULT ''"),
-        ):
-            if name not in columns:
-                self.conn.execute(f"ALTER TABLE healthcheck_prompts ADD COLUMN {name} {definition}")
-        for item in HEALTHCHECK_PROMPTS:
-            self.conn.execute(
-                "INSERT OR IGNORE INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp,expected) VALUES (?,?,?,?,?,?,?,?,?)",
-                (
-                    item["id"],
-                    item["category"],
-                    item["name"],
-                    item["capability"],
-                    json.dumps(item["tags"]),
-                    item["prompt"],
-                    json.dumps(item["must_match"]),
-                    item["required_mcp"],
-                    item["expected"],
-                ),
-            )
-            self.conn.execute(
-                "UPDATE healthcheck_prompts SET category=?, capability=?, tags=?, prompt=?, criteria=?, name=?, required_mcp=?, expected=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (
-                    item["category"],
-                    item["capability"],
-                    json.dumps(item["tags"]),
-                    item["prompt"],
-                    json.dumps(item["must_match"]),
-                    item["name"],
-                    item["required_mcp"],
-                    item["expected"],
-                    item["id"],
-                ),
-            )
-        self.conn.execute(
-            "UPDATE healthcheck_prompts SET expected=? WHERE expected IS NULL OR expected=''",
-            ("Debe responder al pedido con información correcta y completa; si requiere un MCP, debe usar evidencia real y no inventar datos.",),
-        )
-        self.conn.commit()
-        self._lock.release()
+        with self._lock:
+            if not getattr(memory, "_healthcheck_initialized", False):
+                self.conn.execute("""
+                    CREATE TABLE IF NOT EXISTS healthcheck_prompts (
+                        id TEXT PRIMARY KEY, category TEXT NOT NULL DEFAULT 'general', name TEXT NOT NULL,
+                        capability TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', prompt TEXT NOT NULL,
+                        criteria TEXT NOT NULL, required_mcp TEXT NOT NULL DEFAULT 'none', expected TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1,
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                self.conn.execute("""
+                    CREATE TABLE IF NOT EXISTS healthcheck_runs (
+                        id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, prompt_id TEXT NOT NULL,
+                        response TEXT, evaluation TEXT NOT NULL, elapsed_seconds REAL NOT NULL,
+                        request TEXT, status TEXT NOT NULL DEFAULT 'failed', status_code INTEGER,
+                        model TEXT, mcps TEXT NOT NULL DEFAULT '[]', trace TEXT NOT NULL DEFAULT '[]',
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                self.conn.execute("""
+                    CREATE TABLE IF NOT EXISTS healthcheck_batches (
+                        run_id TEXT PRIMARY KEY, total INTEGER NOT NULL, completed INTEGER NOT NULL DEFAULT 0,
+                        passed INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0,
+                        status TEXT NOT NULL DEFAULT 'pending', current_prompt_id TEXT,
+                        started_at TEXT DEFAULT CURRENT_TIMESTAMP, finished_at TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                run_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(healthcheck_runs)")}
+                additions = {
+                    "request": "TEXT",
+                    "status": "TEXT NOT NULL DEFAULT 'failed'",
+                    "status_code": "INTEGER",
+                    "model": "TEXT",
+                    "mcps": "TEXT NOT NULL DEFAULT '[]'",
+                    "trace": "TEXT NOT NULL DEFAULT '[]'",
+                }
+                for name, definition in additions.items():
+                    if name not in run_columns:
+                        self.conn.execute(f"ALTER TABLE healthcheck_runs ADD COLUMN {name} {definition}")
+                columns = {row[1] for row in self.conn.execute("PRAGMA table_info(healthcheck_prompts)")}
+                for name, definition in (
+                    ("category", "TEXT NOT NULL DEFAULT 'general'"),
+                    ("tags", "TEXT NOT NULL DEFAULT '[]'"),
+                    ("required_mcp", "TEXT NOT NULL DEFAULT 'none'"),
+                    ("expected", "TEXT NOT NULL DEFAULT ''"),
+                ):
+                    if name not in columns:
+                        self.conn.execute(f"ALTER TABLE healthcheck_prompts ADD COLUMN {name} {definition}")
+                for item in HEALTHCHECK_PROMPTS:
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO healthcheck_prompts(id,category,name,capability,tags,prompt,criteria,required_mcp,expected) VALUES (?,?,?,?,?,?,?,?,?)",
+                        (
+                            item["id"],
+                            item["category"],
+                            item["name"],
+                            item["capability"],
+                            json.dumps(item["tags"]),
+                            item["prompt"],
+                            json.dumps(item["must_match"]),
+                            item["required_mcp"],
+                            item["expected"],
+                        ),
+                    )
+                    self.conn.execute(
+                        "UPDATE healthcheck_prompts SET category=?, capability=?, tags=?, prompt=?, criteria=?, name=?, required_mcp=?, expected=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (
+                            item["category"],
+                            item["capability"],
+                            json.dumps(item["tags"]),
+                            item["prompt"],
+                            json.dumps(item["must_match"]),
+                            item["name"],
+                            item["required_mcp"],
+                            item["expected"],
+                            item["id"],
+                        ),
+                    )
+                self.conn.execute(
+                    "UPDATE healthcheck_prompts SET expected=? WHERE expected IS NULL OR expected=''",
+                    ("Debe responder al pedido con información correcta y completa; si requiere un MCP, debe usar evidencia real y no inventar datos.",),
+                )
+                try:
+                    self.conn.commit()
+                except Exception:
+                    pass
+                if memory:
+                    memory._healthcheck_initialized = True
 
     def prompts(self):
         with self._lock:
@@ -453,99 +461,103 @@ class HealthcheckStore:
         trace=None,
     ):
         final_status = status or ("passed" if evaluation.get("passed") else "failed")
-        self.conn.execute(
-            "INSERT INTO healthcheck_runs(run_id,prompt_id,response,evaluation,elapsed_seconds,request,status,status_code,model,mcps,trace) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                run_id,
-                prompt_id,
-                response,
-                json.dumps(evaluation, ensure_ascii=False),
-                elapsed,
-                request,
-                final_status,
-                status_code,
-                model,
-                json.dumps(mcps or [], ensure_ascii=False),
-                json.dumps(trace or [], ensure_ascii=False),
-            ),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                "INSERT INTO healthcheck_runs(run_id,prompt_id,response,evaluation,elapsed_seconds,request,status,status_code,model,mcps,trace) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    run_id,
+                    prompt_id,
+                    response,
+                    json.dumps(evaluation, ensure_ascii=False),
+                    elapsed,
+                    request,
+                    final_status,
+                    status_code,
+                    model,
+                    json.dumps(mcps or [], ensure_ascii=False),
+                    json.dumps(trace or [], ensure_ascii=False),
+                ),
+            )
+            self.conn.commit()
 
     def begin_batch(self, run_id, prompt_ids):
-        self.conn.execute(
-            "INSERT OR REPLACE INTO healthcheck_batches(run_id,total,status,current_prompt_id,updated_at) VALUES (?,?, 'pending', NULL, CURRENT_TIMESTAMP)",
-            (run_id, len(prompt_ids)),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO healthcheck_batches(run_id,total,status,current_prompt_id,updated_at) VALUES (?,?, 'pending', NULL, CURRENT_TIMESTAMP)",
+                (run_id, len(prompt_ids)),
+            )
+            self.conn.commit()
 
     def mark_batch_running(self, run_id, prompt_id):
-        self.conn.execute(
-            "UPDATE healthcheck_batches SET status='running', current_prompt_id=?, updated_at=CURRENT_TIMESTAMP WHERE run_id=?",
-            (prompt_id, run_id),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                "UPDATE healthcheck_batches SET status='running', current_prompt_id=?, updated_at=CURRENT_TIMESTAMP WHERE run_id=?",
+                (prompt_id, run_id),
+            )
+            self.conn.commit()
 
     def mark_batch_item(self, run_id, passed):
-        self.conn.execute(
-            "UPDATE healthcheck_batches SET completed=completed+1, passed=passed+?, failed=failed+?, current_prompt_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status='running'",
-            (1 if passed else 0, 0 if passed else 1, run_id),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                "UPDATE healthcheck_batches SET completed=completed+1, passed=passed+?, failed=failed+?, current_prompt_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status='running'",
+                (1 if passed else 0, 0 if passed else 1, run_id),
+            )
+            self.conn.commit()
 
     def finish_batch(self, run_id):
-        self.conn.execute(
-            "UPDATE healthcheck_batches SET status='completed', finished_at=CURRENT_TIMESTAMP, current_prompt_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status='running'",
-            (run_id,),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                "UPDATE healthcheck_batches SET status='completed', finished_at=CURRENT_TIMESTAMP, current_prompt_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status='running'",
+                (run_id,),
+            )
+            self.conn.commit()
 
     def interrupt_batch(self, run_id):
         """Stop presenting a stalled or user-cancelled batch as active."""
-        self.conn.execute(
-            "UPDATE healthcheck_batches SET status='interrupted', finished_at=CURRENT_TIMESTAMP, current_prompt_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status IN ('pending','running')",
-            (run_id,),
-        )
-        self.conn.commit()
-        return self.conn.total_changes
+        with self._lock:
+            self.conn.execute(
+                "UPDATE healthcheck_batches SET status='interrupted', finished_at=CURRENT_TIMESTAMP, current_prompt_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status IN ('pending','running')",
+                (run_id,),
+            )
+            self.conn.commit()
+            return self.conn.total_changes
 
     def recover_orphaned_batches(self, active_run_ids=()):
-        """Mark runs from a previous/dead worker as interrupted.
-
-        The worker registry is process-local. Therefore a pending/running row
-        that is not present in it cannot still be executing after a server
-        restart, and must not remain indefinitely in the active queue.
-        """
         active_run_ids = tuple(active_run_ids)
         params = list(active_run_ids)
         where = "status IN ('pending','running')"
         if active_run_ids:
             placeholders = ",".join("?" for _ in active_run_ids)
             where += f" AND run_id NOT IN ({placeholders})"
-        self.conn.execute(
-            f"UPDATE healthcheck_batches SET status='interrupted', finished_at=CURRENT_TIMESTAMP, current_prompt_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE {where}",
-            params,
-        )
-        self.conn.commit()
-        return self.conn.total_changes
+        with self._lock:
+            self.conn.execute(
+                f"UPDATE healthcheck_batches SET status='interrupted', finished_at=CURRENT_TIMESTAMP, current_prompt_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE {where}",
+                params,
+            )
+            self.conn.commit()
+            return self.conn.total_changes
 
     def active_batches(self):
-        rows = self.conn.execute(
-            "SELECT run_id,total,completed,passed,failed,status,current_prompt_id,started_at,finished_at,updated_at FROM healthcheck_batches WHERE status IN ('pending','running') ORDER BY started_at DESC"
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT run_id,total,completed,passed,failed,status,current_prompt_id,started_at,finished_at,updated_at FROM healthcheck_batches WHERE status IN ('pending','running') ORDER BY started_at DESC"
+            ).fetchall()
         return [self._batch_row(row) for row in rows]
 
     def recent_batches(self, limit=10):
-        rows = self.conn.execute(
-            "SELECT run_id,total,completed,passed,failed,status,current_prompt_id,started_at,finished_at,updated_at FROM healthcheck_batches ORDER BY started_at DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT run_id,total,completed,passed,failed,status,current_prompt_id,started_at,finished_at,updated_at FROM healthcheck_batches ORDER BY started_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [self._batch_row(row) for row in rows]
 
     def batch(self, run_id):
-        row = self.conn.execute(
-            "SELECT run_id,total,completed,passed,failed,status,current_prompt_id,started_at,finished_at,updated_at FROM healthcheck_batches WHERE run_id=?",
-            (run_id,),
-        ).fetchone()
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT run_id,total,completed,passed,failed,status,current_prompt_id,started_at,finished_at,updated_at FROM healthcheck_batches WHERE run_id=?",
+                (run_id,),
+            ).fetchone()
         return self._batch_row(row) if row else None
 
     @staticmethod
@@ -630,30 +642,29 @@ def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b
     """Use an independent model to judge task completion, not keyword presence."""
     category = str(item.get("category") or "").lower()
     conceptual = category in {"chat", "reasoning", "architecture", "metrics", "safety", "diagnostics", "agent"}
-    evidence_rule = (
-        "Como este caso es conceptual y no solicita ejecutar acciones, evaluá la calidad y completitud de la explicación; "
-        "no exijas evidencia de MCP."
+    executed_tools = [mcp.get("tool") for mcp in (mcp_evidence or []) if mcp.get("ok")]
+    tools_summary = ", ".join(executed_tools) if executed_tools else "ninguna"
+    conceptual_rule = (
+        "Como este caso es conceptual y no solicita ejecutar acciones, no exijas evidencia de MCP."
         if conceptual
-        else "Debe aportar el resultado solicitado o evidencia concreta de haber consultado la herramienta. "
-        "Si explica cómo hacerlo, pide datos, dice que no tiene acceso o responde con una limitación, es FAIL."
+        else "Si el caso requería herramientas MCP, verifica si se ejecutaron exitosamente (revisa 'HERRAMIENTAS MCP EJECUTADAS CON ÉXITO')."
     )
-    trace_evidence = ""
-    if mcp_evidence:
-        trace_evidence = (
-            " La traza de ejecución confirma que la herramienta MCP indicada fue ejecutada con éxito; "
-            "no exijas que la respuesta textual vuelva a describir esa ejecución. Evidencia: "
-            + json.dumps(mcp_evidence, ensure_ascii=False)
-        )
     judge_prompt = (
-        "Sos un evaluador estricto de pruebas funcionales de un agente. Evaluá si la respuesta realmente cumplió el pedido. "
-        "No alcanza con que repita palabras del pedido: " + evidence_rule + trace_evidence + " "
-        f"El MCP requerido para este caso es: {item.get('required_mcp') or 'none'}. "
-        "Verificá explícitamente si se invocó ese MCP y rechazá el caso si era requerido y no hay evidencia exitosa. "
-        "Devolvé SOLO JSON válido con estas claves: passed (boolean), score (número 0 a 1), issues (lista de strings) y rationale (string).\n\n"
-        f"CASO: {item.get('name')}\nPEDIDO: {item.get('prompt')}\nRESPUESTA DE ADA: {reply or '(sin respuesta)'}"
-        f"\nMCPS EJECUTADOS: {json.dumps(mcp_evidence or [], ensure_ascii=False)}"
-        f"\nESPERADO: {item.get('expected') or _default_expected(category)}"
-        f"\nERROR DE EJECUCIÓN: {execution_error or 'ninguno'}"
+        "Sos un evaluador estricto de pruebas funcionales de un agente IA. Tu objetivo es evaluar si la respuesta cumplió el pedido.\n\n"
+        f"CASO DE PRUEBA: {item.get('name')}\n"
+        f"CATEGORÍA: {category}\n"
+        f"HERRAMIENTAS MCP REQUERIDAS: {item.get('required_mcp') or 'ninguna'}\n"
+        f"HERRAMIENTAS MCP EJECUTADAS CON ÉXITO: {tools_summary}\n"
+        f"DETALLE DE EJECUCIÓN: {json.dumps(mcp_evidence or [], ensure_ascii=False)}\n"
+        f"ERROR DE EJECUCIÓN: {execution_error or 'ninguno'}\n"
+        f"PEDIDO DEL USUARIO: {item.get('prompt')}\n"
+        f"RESPUESTA DE ADA: {reply or '(sin respuesta)'}\n"
+        f"COMPORTAMIENTO ESPERADO: {item.get('expected') or _default_expected(category)}\n\n"
+        f"CRITERIOS DE EVALUACIÓN:\n"
+        f"1. {conceptual_rule}\n"
+        "2. Si la herramienta se ejecutó exitosamente pero devolvió 0 elementos (ej: sin eventos en calendario, sin correos en bandeja, 0 resultados) y ADA informa honestamente que no encontró elementos según lo pedido, esto es 100% CORRECTO -> califica con passed: true y score: 1.0.\n"
+        "3. Si el caso es conversacional o conceptual, evalúa la precisión, brevedad y amabilidad de la respuesta sin requerir herramientas.\n\n"
+        "Devuelve ÚNICAMENTE un JSON con: passed (boolean), score (número 0 a 1), issues (lista de strings), rationale (string explicativo)."
     )
     payload = json.dumps(
         {"model": model, "prompt": judge_prompt, "stream": False, "format": "json", "options": {"temperature": 0}}
