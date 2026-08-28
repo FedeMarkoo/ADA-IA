@@ -25,6 +25,8 @@
 
 - Preferir métodos pequeños, nombres explícitos, tipos de dominio y guard
   clauses.
+- Mantener un único tipo top-level por archivo y ubicar todos los DTOs Kotlin
+  en `com.ada.dto`, un archivo por DTO.
 - No introducir abstracciones especulativas: cada interfaz debe representar un
   puerto, una estrategia, un filtro o una política real.
 - No ocultar errores con `catch (Exception)` sin clasificación, contexto y una

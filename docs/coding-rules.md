@@ -3,6 +3,12 @@
 ## Kotlin
 
 - Kotlin oficial con formato ktlint y compilación estricta de nullability.
+- Un único tipo top-level por archivo: una clase, interfaz, enum o `object` por
+  archivo, con el mismo nombre que el archivo. Esto facilita navegación,
+  ownership, revisión y cambios atómicos.
+- Todos los DTOs viven en el package `com.ada.dto`; no se declaran DTOs junto a
+  controllers, casos de uso, puertos o adaptadores. Los DTOs solo transportan
+  datos y no contienen reglas de negocio.
 - Inmutabilidad por defecto: `val`, colecciones de solo lectura y `data class`
   para datos; mutabilidad encapsulada cuando sea necesaria.
 - `Result` o errores de dominio tipados para flujos esperables; excepciones para
@@ -23,6 +29,8 @@
 - Comentarios para decisiones, invariantes o riesgos; no para repetir el código.
 - No introducir patrones por obligación: Strategy y Filter se usan cuando hay
   variantes reemplazables o una cadena de reglas real.
+- Los nombres de archivo, package e imports deben reflejar la responsabilidad
+  real; no usar archivos comodín como `Models.kt`, `Dtos.kt` o `Common.kt`.
 
 ## Spring
 

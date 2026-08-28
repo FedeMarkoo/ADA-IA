@@ -22,5 +22,14 @@ reviews:
       instructions: |
         Exigir pruebas de regresión, unitarias para reglas y tests de integración
         para adaptadores y contratos externos.
+    - path: "docs/coding-rules.md"
+      instructions: |
+        Tratar este documento como guía normativa del repositorio. Verificar en
+        cada review que exista un único tipo top-level por archivo y que todos
+        los DTOs Kotlin estén bajo el package com.ada.dto.
+    - path: "src/**/*.kt"
+      instructions: |
+        Aplicar las reglas de docs/coding-rules.md: un único tipo top-level por
+        archivo y DTOs exclusivamente en com.ada.dto.
 chat:
   auto_reply: true

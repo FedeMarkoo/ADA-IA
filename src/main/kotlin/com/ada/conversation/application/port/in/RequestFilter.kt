@@ -1,5 +1,7 @@
 package com.ada.conversation.application.port.`in`
 
+import com.ada.dto.ChatRequest
+
 interface RequestFilter {
     /**
  * Determines whether this filter applies to the request.

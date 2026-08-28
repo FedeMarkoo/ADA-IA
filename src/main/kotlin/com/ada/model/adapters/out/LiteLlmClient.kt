@@ -2,11 +2,15 @@ package com.ada.model.adapters.out
 
 import com.ada.conversation.application.port.out.LlmClient
 import com.ada.conversation.application.port.out.LlmCompletion
-import com.ada.conversation.application.port.out.LlmMessageRole
-import com.ada.conversation.application.port.out.LlmRequest
+import com.ada.dto.LlmRequest
+import com.ada.dto.LiteLlmChoice
+import com.ada.dto.LiteLlmMessage
+import com.ada.dto.LiteLlmRequest
+import com.ada.dto.LiteLlmResponse
+import com.ada.dto.LiteLlmTool
+import com.ada.dto.LiteLlmUsage
 import com.ada.shared.infrastructure.AdaProperties
 import com.ada.shared.observability.AdaMetrics
-import com.fasterxml.jackson.annotation.JsonProperty
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
@@ -30,7 +34,7 @@ class LiteLlmClient(
             }
             .body(LiteLlmRequest(
                 model = request.model,
-                messages = request.messages.map { LiteLlmMessage(it.role.wireName(), it.content) },
+                messages = request.messages.map { LiteLlmMessage(it.role.name.lowercase(), it.content) },
                 tools = request.tools.map { LiteLlmTool(it.name, it.description, it.inputSchema) },
                 temperature = request.temperature,
                 maxTokens = request.maxTokens,
@@ -49,36 +53,3 @@ class LiteLlmClient(
         )
     }
 }
-
-private fun LlmMessageRole.wireName(): String = name.lowercase()
-
-private data class LiteLlmRequest(
-    val model: String,
-    val messages: List<LiteLlmMessage>,
-    val tools: List<LiteLlmTool> = emptyList(),
-    val temperature: Double? = null,
-    @JsonProperty("max_tokens") val maxTokens: Int? = null,
-)
-
-private data class LiteLlmMessage(val role: String, val content: String)
-
-private data class LiteLlmTool(
-    val name: String,
-    val description: String,
-    @JsonProperty("input_schema") val inputSchema: String,
-)
-
-private data class LiteLlmResponse(
-    val model: String? = null,
-    val choices: List<LiteLlmChoice> = emptyList(),
-    val usage: LiteLlmUsage? = null,
-)
-
-private data class LiteLlmChoice(val message: LiteLlmMessage)
-
-private data class LiteLlmUsage(
-    @JsonProperty("prompt_tokens")
-    val promptTokens: Long? = null,
-    @JsonProperty("completion_tokens")
-    val completionTokens: Long? = null,
-)

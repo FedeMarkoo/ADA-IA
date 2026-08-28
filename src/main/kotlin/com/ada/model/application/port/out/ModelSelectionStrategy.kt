@@ -1,8 +1,6 @@
 package com.ada.model.application.port.out
 
-import com.ada.conversation.application.port.`in`.ChatRequest
-
-data class ModelSelection(val model: String)
+import com.ada.dto.ChatRequest
 
 interface ModelSelectionStrategy {
     /**
