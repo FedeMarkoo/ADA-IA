@@ -1,4 +1,4 @@
-package com.ada.dto
+package com.ada.model.infrastructure.out.litellm.dto
 
 import com.fasterxml.jackson.annotation.JsonProperty
 

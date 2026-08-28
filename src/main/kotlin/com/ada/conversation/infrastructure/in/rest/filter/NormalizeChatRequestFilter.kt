@@ -1,6 +1,6 @@
 package com.ada.conversation.infrastructure.`in`.rest.filter
 
-import com.ada.dto.ChatRequest
+import com.ada.conversation.application.dto.ChatRequest
 import com.ada.conversation.application.port.`in`.RequestFilter
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component

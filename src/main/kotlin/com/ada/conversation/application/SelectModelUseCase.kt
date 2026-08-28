@@ -1,9 +1,9 @@
 package com.ada.conversation.application
 
 import com.ada.conversation.application.port.`in`.RequestFilter
-import com.ada.dto.ChatRequest
+import com.ada.conversation.application.dto.ChatRequest
 import com.ada.model.application.port.out.ModelSelectionStrategy
-import com.ada.dto.ModelSelection
+import com.ada.conversation.application.dto.ModelSelection
 import org.springframework.stereotype.Service
 
 @Service

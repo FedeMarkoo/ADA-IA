@@ -1,7 +1,7 @@
 package com.ada.model.application.port.out
 
-import com.ada.dto.ChatRequest
-import com.ada.dto.ModelSelection
+import com.ada.conversation.application.dto.ChatRequest
+import com.ada.conversation.application.dto.ModelSelection
 
 interface ModelSelectionStrategy {
     /**

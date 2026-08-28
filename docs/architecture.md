@@ -32,7 +32,7 @@ src/main/kotlin/com/ada/
 │   │   ├── port/in/     casos de uso públicos
 │   │   └── port/out/    dependencias requeridas
 │   └── infrastructure/
-│       ├── in/rest/     controllers, mappers y DTOs HTTP
+│       ├── in/rest/     controllers, dto/ y mapper/
 │       └── out/         LiteLLM, SQLite, auditoría
 ├── memory/
 ├── capability/
@@ -47,10 +47,14 @@ casos de uso, dominio y salidas en la misma clase.
 
 ```text
 infrastructure.in.rest.dto  -> JSON HTTP; no sale del adapter REST
+infrastructure.in.rest.mapper -> mapeos HTTP <-> application
 application.dto              -> entrada/salida de casos de uso
+application.mapper           -> mapeos internos de application, si fueran necesarios
+shared.infrastructure.dto    -> configuración transversal transportada como DTO
 domain.entity                -> identidad, persistencia y ciclo de vida
 domain.bo                    -> reglas de negocio e invariantes
 infrastructure.out.*.dto     -> formato específico de un proveedor externo
+infrastructure.out.*.mapper  -> mapeos application <-> proveedor externo
 ```
 
 Un controller transforma explícitamente su DTO REST a un DTO de application.

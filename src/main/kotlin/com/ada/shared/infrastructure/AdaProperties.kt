@@ -1,6 +1,6 @@
 package com.ada.shared.infrastructure
 
-import com.ada.dto.LlmProperties
+import com.ada.shared.infrastructure.dto.LlmProperties
 import jakarta.validation.constraints.NotBlank
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.validation.annotation.Validated

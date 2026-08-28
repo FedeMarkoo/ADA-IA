@@ -1,4 +1,4 @@
-package com.ada.dto
+package com.ada.conversation.application.dto
 
 data class LlmCompletion(
     val content: String,

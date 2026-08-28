@@ -1,3 +1,3 @@
-package com.ada.dto
+package com.ada.conversation.application.dto
 
 enum class LlmMessageRole { SYSTEM, USER, ASSISTANT, TOOL }

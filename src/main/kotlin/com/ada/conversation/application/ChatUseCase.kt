@@ -1,8 +1,8 @@
 package com.ada.conversation.application
 
 import com.ada.conversation.application.port.out.LlmClient
-import com.ada.dto.ChatRequest
-import com.ada.dto.ChatResult
+import com.ada.conversation.application.dto.ChatRequest
+import com.ada.conversation.application.dto.ChatResult
 import com.ada.shared.observability.AdaMetrics
 import org.springframework.stereotype.Service
 

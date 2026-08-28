@@ -1,6 +1,6 @@
 package com.ada.conversation.application.port.`in`
 
-import com.ada.dto.ChatRequest
+import com.ada.conversation.application.dto.ChatRequest
 
 interface RequestFilter {
     /**

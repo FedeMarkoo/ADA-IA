@@ -1,7 +1,7 @@
 package com.ada.model.infrastructure.out
 
-import com.ada.dto.ChatRequest
-import com.ada.dto.ModelSelection
+import com.ada.conversation.application.dto.ChatRequest
+import com.ada.conversation.application.dto.ModelSelection
 import com.ada.model.application.port.out.ModelSelectionStrategy
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.annotation.Order

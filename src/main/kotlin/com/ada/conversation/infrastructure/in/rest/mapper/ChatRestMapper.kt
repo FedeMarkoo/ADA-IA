@@ -1,9 +1,9 @@
-package com.ada.conversation.infrastructure.`in`.rest
+package com.ada.conversation.infrastructure.`in`.rest.mapper
 
 import com.ada.conversation.infrastructure.`in`.rest.dto.ChatHttpRequest
 import com.ada.conversation.infrastructure.`in`.rest.dto.ChatHttpResponse
-import com.ada.dto.ChatRequest
-import com.ada.dto.ChatResult
+import com.ada.conversation.application.dto.ChatRequest
+import com.ada.conversation.application.dto.ChatResult
 import org.mapstruct.Mapper
 
 @Mapper(componentModel = "spring")

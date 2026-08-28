@@ -1,11 +1,11 @@
 package com.ada.conversation.application
 
-import com.ada.dto.ChatRequest
-import com.ada.dto.LlmContentComponent
-import com.ada.dto.LlmMessage
-import com.ada.dto.LlmMessageRole
-import com.ada.dto.LlmRequest
-import com.ada.dto.LlmRequestMetadata
+import com.ada.conversation.application.dto.ChatRequest
+import com.ada.conversation.application.dto.LlmContentComponent
+import com.ada.conversation.application.dto.LlmMessage
+import com.ada.conversation.application.dto.LlmMessageRole
+import com.ada.conversation.application.dto.LlmRequest
+import com.ada.conversation.application.dto.LlmRequestMetadata
 import org.springframework.stereotype.Service
 import java.util.UUID
 

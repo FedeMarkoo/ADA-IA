@@ -1,3 +1,3 @@
-package com.ada.dto
+package com.ada.model.infrastructure.out.litellm.dto
 
 data class LiteLlmChoice(val message: LiteLlmMessage)

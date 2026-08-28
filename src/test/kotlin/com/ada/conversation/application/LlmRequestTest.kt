@@ -1,7 +1,7 @@
 package com.ada.conversation.application
 
-import com.ada.dto.ChatRequest
-import com.ada.dto.LlmTool
+import com.ada.conversation.application.dto.ChatRequest
+import com.ada.conversation.application.dto.LlmTool
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 

@@ -1,6 +1,6 @@
 package com.ada.shared.infrastructure
 
-import com.ada.dto.LlmProperties
+import com.ada.shared.infrastructure.dto.LlmProperties
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue

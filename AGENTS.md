@@ -25,9 +25,10 @@
 
 - Preferir métodos pequeños, nombres explícitos, tipos de dominio y guard
   clauses.
-- Mantener un único tipo top-level por archivo. Ubicar DTOs en el package de su
-  frontera (`infrastructure.in.rest.dto`, `application.dto` o
-  `infrastructure.out.<provider>.dto`), entities en `domain.entity` y BOs en
+- Mantener un único tipo top-level por archivo. Ubicar todos los DTOs en el
+  package `dto` de su frontera (`infrastructure.in.rest.dto`, `application.dto`,
+  `shared.infrastructure.dto` o `infrastructure.out.<provider>.dto`), y cada mapper en
+  el package `mapper` correspondiente. Entities van en `domain.entity` y BOs en
   `domain.bo`.
 - No introducir abstracciones especulativas: cada interfaz debe representar un
   puerto, una estrategia, un filtro o una política real.

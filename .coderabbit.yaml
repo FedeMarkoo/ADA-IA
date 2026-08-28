@@ -22,10 +22,10 @@ reviews:
       instructions: |
         Estos son DTOs HTTP de entrada. No deben contener reglas de negocio ni
         exponerse fuera del adapter REST; verificar package y mapeo a application.
-    - path: "src/main/kotlin/**/infrastructure/in/rest/*Mapper.kt"
+    - path: "src/main/kotlin/**/infrastructure/in/rest/mapper/**"
       instructions: |
-        Verificar que el mapper use MapStruct, tenga componentModel spring y que
-        el controller lo reciba por inyección en lugar de construirlo manualmente.
+        Verificar que el mapper esté en package mapper, use MapStruct, tenga
+        componentModel spring y que el controller lo reciba por inyección.
     - path: "src/test/**"
       instructions: |
         Exigir pruebas de regresión, unitarias para reglas y tests de integración
@@ -33,12 +33,14 @@ reviews:
     - path: "docs/coding-rules.md"
       instructions: |
         Tratar este documento como guía normativa del repositorio. Verificar en
-        cada review que exista un único tipo top-level por archivo, que los DTOs
-        estén en el package de su frontera y que entities/BOs estén separados.
+        cada review que exista un único tipo top-level por archivo, que todos los
+        DTOs estén en el package dto de su frontera, que los mappers estén en
+        package mapper y que entities/BOs estén separados.
     - path: "src/**/*.kt"
       instructions: |
         Aplicar las reglas de docs/coding-rules.md: un único tipo top-level por
-        archivo; DTOs por frontera; entities en domain.entity; BOs en domain.bo;
+        archivo; todos los DTOs por frontera; mappers en package mapper;
+        entities en domain.entity; BOs en domain.bo;
         controllers únicamente en infrastructure.in.
 chat:
   auto_reply: true

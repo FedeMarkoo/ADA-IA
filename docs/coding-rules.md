@@ -6,11 +6,12 @@
 - Un único tipo top-level por archivo: una clase, interfaz, enum o `object` por
   archivo, con el mismo nombre que el archivo. Esto facilita navegación,
   ownership, revisión y cambios atómicos.
-- Los DTOs viven en el package de su frontera: REST en
-  `infrastructure.in.rest.dto`, application en `application.dto` y proveedores
-  externos en `infrastructure.out.<provider>.dto`. Nunca se declaran DTOs junto
-  a controllers, casos de uso, puertos o entidades. Los DTOs solo transportan
-  datos y no contienen reglas de negocio.
+- Todos los DTOs viven en el package `dto` de su frontera: REST en
+  `infrastructure.in.rest.dto`, application en `application.dto`, configuración
+  transversal en `shared.infrastructure.dto` y proveedores externos en
+  `infrastructure.out.<provider>.dto`. Nunca se declaran DTOs junto a
+  controllers, casos de uso, puertos, mappers o entidades. Los DTOs solo
+  transportan datos y no contienen reglas de negocio.
 - Las entidades viven en `domain.entity` y los objetos de negocio (BO) en
   `domain.bo`; ninguno se expone directamente por HTTP.
 - Inmutabilidad por defecto: `val`, colecciones de solo lectura y `data class`
@@ -39,6 +40,8 @@
   salida y vive bajo `infrastructure.out`; un controller, mapper o DTO HTTP es
   un adapter de entrada bajo `infrastructure.in`.
 - Los mapeos entre DTOs de frontera se hacen con MapStruct en un mapper dedicado.
+  Los mappers viven en el package `mapper` de la frontera correspondiente:
+  `infrastructure.in.rest.mapper` o `infrastructure.out.<provider>.mapper`.
   No construir DTOs externos con `copy`, constructores manuales dentro del
   controller ni reflexión. El dominio y los casos de uso no dependen de
   MapStruct.

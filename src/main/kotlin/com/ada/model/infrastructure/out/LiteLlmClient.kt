@@ -1,14 +1,14 @@
 package com.ada.model.infrastructure.out
 
 import com.ada.conversation.application.port.out.LlmClient
-import com.ada.dto.LlmRequest
-import com.ada.dto.LlmCompletion
-import com.ada.dto.LiteLlmChoice
-import com.ada.dto.LiteLlmMessage
-import com.ada.dto.LiteLlmRequest
-import com.ada.dto.LiteLlmResponse
-import com.ada.dto.LiteLlmTool
-import com.ada.dto.LiteLlmUsage
+import com.ada.conversation.application.dto.LlmRequest
+import com.ada.conversation.application.dto.LlmCompletion
+import com.ada.model.infrastructure.out.litellm.dto.LiteLlmChoice
+import com.ada.model.infrastructure.out.litellm.dto.LiteLlmMessage
+import com.ada.model.infrastructure.out.litellm.dto.LiteLlmRequest
+import com.ada.model.infrastructure.out.litellm.dto.LiteLlmResponse
+import com.ada.model.infrastructure.out.litellm.dto.LiteLlmTool
+import com.ada.model.infrastructure.out.litellm.dto.LiteLlmUsage
 import com.ada.shared.infrastructure.AdaProperties
 import com.ada.shared.observability.AdaMetrics
 import org.springframework.http.MediaType
