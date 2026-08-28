@@ -17,6 +17,10 @@ ADA_LLM_DEFAULT_MODEL=openai/gpt-4o-mini
 No se guardan claves en `application.yml`, SQLite ni logs. Timeouts, reintentos,
 backoff y circuit breaker deben ser explícitos y medidos.
 
+El endpoint de gestión queda atado a `127.0.0.1:8081`; así Prometheus y los
+endpoints de Actuator no quedan expuestos por la interfaz HTTP de la aplicación.
+En un despliegue remoto debe agregarse autenticación o una ACL de red.
+
 ## SQLite fuera del repositorio
 
 `ADA_DATA_DIR` es obligatorio en entornos no efímeros y por defecto debe

@@ -55,7 +55,9 @@ class DataDirectoryInitializerTest {
     }
 
     private fun runInitializer(dataDirectory: Path) {
-        DataDirectoryInitializer(dataDirectory.toString())
+        DataDirectoryInitializer(
+            AdaProperties(dataDirectory.toString(), LlmProperties("http://localhost", "", "test/model")),
+        )
             .initializeDataDirectory()
             .run(DefaultApplicationArguments())
     }

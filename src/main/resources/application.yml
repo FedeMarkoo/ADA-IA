@@ -3,9 +3,6 @@ spring:
     name: ada
   config:
     import: optional:file:./application-local.yml
-  datasource:
-    url: jdbc:sqlite:${ada.data-dir:../ada-data}/db/ada.sqlite
-    driver-class-name: org.sqlite.JDBC
   jackson:
     default-property-inclusion: non_null
 
@@ -17,5 +14,8 @@ ada:
     default-model: ${ADA_LLM_DEFAULT_MODEL:openai/gpt-4o-mini}
 
 management:
+  server:
+    address: 127.0.0.1
+    port: 8081
   endpoints.web.exposure.include: health,info,prometheus,metrics
   endpoint.health.probes.enabled: true

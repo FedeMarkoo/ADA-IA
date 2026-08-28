@@ -5,15 +5,10 @@ ada:
     api-key: ${ADA_LLM_API_KEY:}
     default-model: ${ADA_LLM_DEFAULT_MODEL:openai/gpt-4o-mini}
 
-spring:
-  datasource:
-    url: jdbc:sqlite:${ada.data-dir}/db/ada.sqlite
-  jpa:
-    open-in-view: false
-  lifecycle:
-    timeout-per-shutdown-phase: 20s
-
 management:
+  server:
+    address: 127.0.0.1
+    port: 8081
   endpoints:
     web:
       exposure:
