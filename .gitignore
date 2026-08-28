@@ -20,6 +20,8 @@ out/
 .env.*
 !.env.example
 application-local.yml
+deploy/.env
+deploy/.deploy.lock
 *.pem
 *.key
 

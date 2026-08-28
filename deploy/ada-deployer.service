@@ -1,0 +1,15 @@
+[Unit]
+Description=ADA local image deployer
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ada
+ExecStart=/usr/bin/env python3 /opt/ada/scripts/deployment/local-deployer.py --interval 300
+Restart=always
+RestartSec=15
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

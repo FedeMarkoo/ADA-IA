@@ -1,0 +1,52 @@
+services:
+  ada:
+    image: ${ADA_IMAGE:-ghcr.io/fedemarkoo/ada-ia}:${ADA_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      ADA_DATA_DIR: /data
+      ADA_LLM_BASE_URL: ${ADA_LLM_BASE_URL:-http://litellm:4000}
+      ADA_LLM_API_KEY: ${ADA_LLM_API_KEY:-}
+      ADA_LLM_DEFAULT_MODEL: ${ADA_LLM_DEFAULT_MODEL:-openai/gpt-4o-mini}
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ${ADA_DATA_DIR:-../ada-data}:/data
+    depends_on:
+      litellm:
+        condition: service_started
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    restart: unless-stopped
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ${LITELLM_CONFIG:-./deploy/litellm/config.yaml}:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./monitoring/prometheus:/etc/prometheus:ro
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:
