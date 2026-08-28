@@ -7,10 +7,12 @@ import com.ada.shared.observability.AdaMetrics;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import lombok.RequiredArgsConstructor;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class ChatUseCase {
   private final SelectModelUseCase selector;
   private final LlmRequestFactory factory;
@@ -20,25 +22,6 @@ public class ChatUseCase {
   private final List<ToolExecutor> tools;
   private final MessageStateTracker tracker;
   private final Executor executor;
-
-  public ChatUseCase(
-      SelectModelUseCase s,
-      LlmRequestFactory f,
-      LlmClient c,
-      AdaMetrics m,
-      List<RequestFilter> filters,
-      List<ToolExecutor> tools,
-      MessageStateTracker t,
-      Executor executor) {
-    selector = s;
-    factory = f;
-    client = c;
-    metrics = m;
-    this.filters = filters;
-    this.tools = tools;
-    tracker = t;
-    this.executor = executor;
-  }
 
   public ChatResult execute(ChatRequest input) {
     String id = UUID.randomUUID().toString();

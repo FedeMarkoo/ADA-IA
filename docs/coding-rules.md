@@ -57,7 +57,12 @@
 ## Spring
 
 - `@Component` solo para adaptadores, estrategias, filtros y casos de uso que
-  necesiten wiring; preferir constructores explícitos.
+  necesiten wiring.
+- Lombok es obligatorio para evitar boilerplate: usar `@RequiredArgsConstructor`
+  para inyección de dependencias, `@NoArgsConstructor` cuando Spring requiera
+  construcción JavaBean y `@Getter`/`@Setter` en configuración mutable.
+- No escribir constructores manuales en componentes Spring salvo que exista una
+  validación o inicialización que no pueda expresarse con anotaciones.
 - Configurar beans y clientes en clases `@Configuration`.
 - Controllers delgados: protocolo HTTP hacia un puerto de entrada.
 - El flujo conversacional debe expresar sus transiciones mediante estados de

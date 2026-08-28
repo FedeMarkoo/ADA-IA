@@ -9,6 +9,8 @@ debe documentarse primero en un ADR.
 - Java 21.
 - Spring Boot y Maven.
 - MapStruct para mapeos entre fronteras.
+- Lombok para generar constructores, getters y setters de infraestructura sin
+  boilerplate.
 - SQLite en una carpeta externa configurada por `ADA_DATA_DIR`.
 - LiteLLM como gateway HTTP para poder cambiar de proveedor o modelo sin
   acoplar el dominio.
@@ -199,6 +201,9 @@ redactados o auditoría controlada.
 - No crear servicios gigantes que deleguen todo.
 - No abstraer por anticipado ni aplicar patrones por obligación.
 - Comentarios solo para decisiones, invariantes y riesgos.
+- En componentes Spring se prefieren `@RequiredArgsConstructor`, `@NoArgsConstructor`,
+  `@Getter` y `@Setter`; no se escriben constructores manuales salvo necesidad
+  técnica justificada.
 - Errores esperables deben tener contratos tipados; no usar `catch` genérico
   para ocultar fallos.
 - No mezclar lógica de infraestructura dentro del dominio.

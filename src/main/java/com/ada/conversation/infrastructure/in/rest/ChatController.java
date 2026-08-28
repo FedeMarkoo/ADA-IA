@@ -5,6 +5,7 @@ import com.ada.conversation.application.port.out.MessageStateTracker;
 import com.ada.conversation.infrastructure.in.rest.dto.*;
 import com.ada.conversation.infrastructure.in.rest.mapper.ChatRestMapper;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,16 +13,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/chat")
+@RequiredArgsConstructor
 public class ChatController {
   private final ChatUseCase useCase;
   private final ChatRestMapper mapper;
   private final MessageStateTracker tracker;
-
-  public ChatController(ChatUseCase u, ChatRestMapper m, MessageStateTracker t) {
-    useCase = u;
-    mapper = m;
-    tracker = t;
-  }
 
   @PostMapping
   public ResponseEntity<ChatAcceptedHttpResponse> chat(@Valid @RequestBody ChatHttpRequest r) {

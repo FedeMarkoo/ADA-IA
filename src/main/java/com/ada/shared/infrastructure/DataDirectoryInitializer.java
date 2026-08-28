@@ -2,16 +2,14 @@ package com.ada.shared.infrastructure;
 
 import java.nio.file.*;
 import java.util.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.*;
 
 @Configuration
+@RequiredArgsConstructor
 public class DataDirectoryInitializer {
   private final AdaProperties properties;
-
-  public DataDirectoryInitializer(AdaProperties p) {
-    properties = p;
-  }
 
   @Bean
   ApplicationRunner initializeDataDirectory() {

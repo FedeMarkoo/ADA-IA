@@ -15,8 +15,9 @@ class DataSourceConfigurationTest {
   @Test
   void createsDatabaseDirectoryWhenParentDoesNotExist() throws Exception {
     var dataDir = tempDir.resolve("missing-parent");
-    var properties =
-        new AdaProperties(dataDir.toString(), new LlmProperties("http://localhost", "", "model"));
+    var properties = new AdaProperties();
+    properties.setDataDir(dataDir.toString());
+    properties.setLlm(new LlmProperties("http://localhost", "", "model"));
 
     var dataSource = new DataSourceConfiguration().dataSource(properties);
     try (var connection = dataSource.getConnection()) {

@@ -5,23 +5,22 @@ import com.ada.conversation.application.port.out.MessageStateTracker;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
+@NoArgsConstructor
 public class InMemoryMessageStateTracker implements MessageStateTracker {
   private record Entry(MessageExecutionState state, Instant expiresAt) {}
 
   private final ConcurrentHashMap<String, Entry> states = new ConcurrentHashMap<>();
-  private final int maxEntries;
-  private final Duration ttl;
 
-  public InMemoryMessageStateTracker(
-      @Value("${ada.message-state.max-entries:10000}") int maxEntries,
-      @Value("${ada.message-state.ttl:PT1H}") Duration ttl) {
-    this.maxEntries = maxEntries;
-    this.ttl = ttl;
-  }
+  @Value("${ada.message-state.max-entries:10000}")
+  private int maxEntries;
+
+  @Value("${ada.message-state.ttl:PT1H}")
+  private Duration ttl;
 
   public void update(String id, MessageExecutionState s) {
     if (states.size() >= maxEntries) {

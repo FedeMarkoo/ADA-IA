@@ -1,16 +1,14 @@
 package com.ada.conversation.infrastructure.out.prompt;
 
 import com.ada.conversation.application.SystemPromptProvider;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class SqliteSystemPromptProvider implements SystemPromptProvider {
   private final JdbcTemplate jdbc;
-
-  public SqliteSystemPromptProvider(JdbcTemplate j) {
-    jdbc = j;
-  }
 
   public String content() {
     var r =

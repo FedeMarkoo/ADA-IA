@@ -6,22 +6,28 @@ import com.ada.model.infrastructure.out.litellm.dto.*;
 import com.ada.model.infrastructure.out.litellm.mapper.LiteLlmMapper;
 import com.ada.shared.infrastructure.AdaProperties;
 import com.ada.shared.observability.AdaMetrics;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Component
+@RequiredArgsConstructor
 public class LiteLlmClient implements LlmClient {
-  private final RestClient client;
+  private final RestClient.Builder builder;
+  private final AdaProperties properties;
   private final LiteLlmMapper mapper;
   private final AdaMetrics metrics;
-  private final String apiKey;
+  private RestClient client;
 
-  public LiteLlmClient(RestClient.Builder b, AdaProperties p, LiteLlmMapper m, AdaMetrics a) {
-    client = b.baseUrl(p.getLlm().baseUrl()).build();
-    mapper = m;
-    metrics = a;
-    apiKey = p.getLlm().apiKey();
+  @Value("${ada.llm.api-key:}")
+  private String apiKey;
+
+  @PostConstruct
+  void initialize() {
+    client = builder.baseUrl(properties.getLlm().baseUrl()).build();
   }
 
   public LlmCompletion complete(LlmRequest r) {

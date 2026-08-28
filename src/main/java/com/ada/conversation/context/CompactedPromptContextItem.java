@@ -2,6 +2,7 @@ package com.ada.conversation.context;
 
 import com.ada.conversation.application.dto.*;
 import com.ada.shared.observability.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -9,15 +10,12 @@ import org.springframework.stereotype.Component;
 @Component
 @Order(60)
 @MeasuredContextItem("compacted_prompt")
+@RequiredArgsConstructor
 public class CompactedPromptContextItem implements ContextItem {
   private final TokenUsageEstimator estimator;
-  private final long max;
 
-  public CompactedPromptContextItem(
-      TokenUsageEstimator e, @Value("${ada.context.max-tokens:12000}") long m) {
-    estimator = e;
-    max = m;
-  }
+  @Value("${ada.context.max-tokens:12000}")
+  private long max;
 
   public LlmContentComponent component() {
     return LlmContentComponent.COMPACTED_PROMPT;
