@@ -59,6 +59,8 @@
   necesiten wiring; preferir constructores explícitos.
 - Configurar beans y clientes en clases `@Configuration`.
 - Controllers delgados: protocolo HTTP hacia un puerto de entrada.
+- El flujo conversacional debe expresar sus transiciones mediante estados de
+  mensaje; no ocultar el loop modelo-tool en el adapter HTTP.
 - Transacciones en el borde de aplicación/persistencia, nunca en entidades de
   dominio.
 

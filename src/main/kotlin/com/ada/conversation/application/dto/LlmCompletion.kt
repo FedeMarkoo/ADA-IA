@@ -5,4 +5,5 @@ data class LlmCompletion(
     val model: String,
     val inputTokens: Long? = null,
     val outputTokens: Long? = null,
+    val toolCalls: List<LlmToolCall> = emptyList(),
 )

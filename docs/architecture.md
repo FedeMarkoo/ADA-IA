@@ -76,6 +76,15 @@ Las invocaciones de los `ContextItem` se miden transversalmente con
 `ContextMetricsAspect`: se registra un contador de invocaciones y un `Timer` de
 duración por componente.
 
+Cada ejecución genera un `messageId` y actualiza `MessageExecutionState` en
+cada etapa del flujo. El estado se puede consultar en
+`GET /api/v1/chat/{messageId}/status`; los estados con modelo o tool incluyen
+el nombre en `detail`.
+
+El loop de tools agrega la respuesta del modelo como `response` y cada resultado
+como `tool_response` antes de volver a invocar el modelo. Tiene un máximo de
+ocho rondas para evitar loops infinitos.
+
 ## Strategy y Filter
 
 Las variantes dinámicas se registran como componentes y se inyectan como

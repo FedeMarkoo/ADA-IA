@@ -4,6 +4,7 @@ import com.ada.conversation.application.port.out.LlmClient
 import com.ada.conversation.application.dto.LlmRequest
 import com.ada.conversation.application.dto.LlmCompletion
 import com.ada.model.infrastructure.out.litellm.dto.LiteLlmResponse
+import com.ada.conversation.application.dto.LlmToolCall
 import com.ada.model.infrastructure.out.litellm.mapper.LiteLlmMapper
 import com.ada.shared.infrastructure.AdaProperties
 import com.ada.shared.observability.AdaMetrics
@@ -37,10 +38,13 @@ class LiteLlmClient(
         val choice = response.choices.firstOrNull() ?: error("LiteLLM returned no choices")
         metrics.recordProviderTokens(request.model, response.usage?.promptTokens, response.usage?.completionTokens)
         return LlmCompletion(
-            content = choice.message.content,
+            content = choice.message.content.orEmpty(),
             model = response.model ?: request.model,
             inputTokens = response.usage?.promptTokens,
             outputTokens = response.usage?.completionTokens,
+            toolCalls = choice.message.toolCalls.map {
+                LlmToolCall(it.id, it.function.name, it.function.arguments)
+            },
         )
     }
 }
