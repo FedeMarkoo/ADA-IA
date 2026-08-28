@@ -5,6 +5,14 @@ import sqlite3
 import threading
 import urllib.request
 
+from ada.infrastructure.prometheus_metrics import (
+    record_healthcheck_run,
+    record_healthcheck_judge,
+    record_healthcheck_batch,
+    set_active_healthcheck_batches,
+    update_category_pass_rate,
+)
+
 FUNCTIONAL_CATEGORY_LABELS = {
     "commands": "Sistema",
     "chat": "Conversación",
@@ -662,6 +670,20 @@ def llm_judge(item, reply, endpoint="http://127.0.0.1:11434", model="llama3.2:3b
         result = json.loads(raw) if isinstance(raw, str) else raw
         score = max(0.0, min(1.0, float(result.get("score", 0))))
         passed = bool(result.get("passed")) and score >= 0.75
+        if requires_mcp(item) and not mcp_evidence:
+            passed = False
+            score = 0.0
+            issues = list(result.get("issues") or [])
+            if not issues:
+                issues.append("El caso requería MCP pero no hubo evidencia de ejecución exitosa.")
+            return {
+                "passed": False,
+                "score": 0.0,
+                "issues": issues,
+                "rationale": str(result.get("rationale") or "Rechazado por falta de evidencia de MCP requerido."),
+                "source": "llm",
+                "model": model,
+            }
         return {
             "passed": passed,
             "score": round(score, 3),

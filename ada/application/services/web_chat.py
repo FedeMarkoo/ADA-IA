@@ -130,6 +130,18 @@ class WebChatService:
         # not a request to inspect the local filesystem.
         if is_capability_discussion(text):
             return None
+        # Explicit queries for external MCP domains (e.g. gmail, calendar events, web searches)
+        # should not be hijacked as local filesystem unless the user explicitly asks for folders/directories.
+        has_folder_keyword = bool(re.search(r"\b(carpetas?|directorios?|archivos?|ficheros?)\b", lowered))
+        if re.search(r"\b(gmail|correo|correos|mails?|bandeja|remitente|telegram|alacena)\b", lowered) and not has_folder_keyword:
+            return None
+        if re.search(r"\b(calendar|calendario)\b", lowered) and not has_folder_keyword:
+            return None
+        if re.search(r"\b(internet|noticias?|d[oó]lar|cripto)\b", lowered) and not has_folder_keyword:
+            return None
+        # General conversational requests for help with photos (without specific path operations)
+        if re.search(r"\b(ayud(?:a|ame|á|ame)|asesor(?:a|ame)|aconsej(?:a|ame))\b", lowered) and not has_folder_keyword and not re.search(r"\b(ruta|path)\b", lowered):
+            return None
         # Requests for a general explanation of permissions are not directory
         # listings.  The explicit no-access wording is a strong signal that
         # the user wants concepts, not a filesystem operation.

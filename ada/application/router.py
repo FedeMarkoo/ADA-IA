@@ -11,7 +11,13 @@ import re
 from datetime import date
 from ada.application.tool_registry import ToolRegistry
 from ada.application.services.prompts import PromptWithUsage
-from ada.infrastructure.prometheus_metrics import estimate_token_count, measure_stage
+from ada.infrastructure.prometheus_metrics import (
+    estimate_token_count,
+    measure_stage,
+    record_router_decision,
+    record_router_error,
+    record_router_fallback,
+)
 
 logger = logging.getLogger("ada.router")
 
@@ -143,14 +149,92 @@ class IntentRouter:
             "additionalProperties": False,
         }
 
+    def _deterministic_mcp_fallback(self, text: str) -> dict:
+        """Deterministic grounding fallback for obvious MCP tool requests when router LLM is unavailable or fails."""
+        lowered = text.lower()
+        if not self.mcp_manager:
+            return {}
+        if re.search(r"\b(calendar|calendario|evento|eventos|agenda|reuni[oó]n|reuniones)\b", lowered):
+            candidates = ["google_calendar.list_events", "google_calendar.search_events"]
+            for name in candidates:
+                tool = self.tool_registry.get(name)
+                if tool and tool.get("enabled"):
+                    record_router_fallback("deterministic_calendar")
+                    return {
+                        "action": "mcp_call",
+                        "tool": name,
+                        "parameters": {},
+                        "confidence": 0.9,
+                        "task_type": "tools",
+                        "complexity": 4,
+                        "model_hint": "tools",
+                        "required_capabilities": ["tool_calling"],
+                        "privacy": self.config.get("privacy_default", "normal"),
+                        "latency": "balanced",
+                        "requires_tool_calling": True,
+                    }
+        if re.search(r"\b(gmail|correo|correos|mails?|bandeja|remitente|asuntos?)\b", lowered):
+            candidates = ["gmail.read_inbox", "gmail.search_threads"]
+            for name in candidates:
+                tool = self.tool_registry.get(name)
+                if tool and tool.get("enabled"):
+                    record_router_fallback("deterministic_gmail")
+                    return {
+                        "action": "mcp_call",
+                        "tool": name,
+                        "parameters": {},
+                        "confidence": 0.9,
+                        "task_type": "tools",
+                        "complexity": 4,
+                        "model_hint": "tools",
+                        "required_capabilities": ["tool_calling"],
+                        "privacy": self.config.get("privacy_default", "normal"),
+                        "latency": "balanced",
+                        "requires_tool_calling": True,
+                    }
+        if re.search(r"\b(internet|web|noticia|noticias|fuente|fuentes|precio|d[oó]lar|cripto|acci[oó]n|acciones)\b", lowered):
+            tool = self.tool_registry.get("web_search.search")
+            if tool and tool.get("enabled"):
+                record_router_fallback("deterministic_web_search")
+                return {
+                    "action": "mcp_call",
+                    "tool": "web_search.search",
+                    "parameters": {"query": text},
+                    "confidence": 0.9,
+                    "task_type": "tools",
+                    "complexity": 4,
+                    "model_hint": "tools",
+                    "required_capabilities": ["tool_calling"],
+                    "privacy": self.config.get("privacy_default", "normal"),
+                    "latency": "balanced",
+                    "requires_tool_calling": True,
+                }
+        if re.search(r"\b(drive|google drive)\b", lowered):
+            tool = self.tool_registry.get("google_drive.search")
+            if tool and tool.get("enabled"):
+                record_router_fallback("deterministic_google_drive")
+                return {
+                    "action": "mcp_call",
+                    "tool": "google_drive.search",
+                    "parameters": {"query": text},
+                    "confidence": 0.85,
+                    "task_type": "tools",
+                    "complexity": 4,
+                    "model_hint": "tools",
+                    "required_capabilities": ["tool_calling"],
+                    "privacy": self.config.get("privacy_default", "normal"),
+                    "latency": "balanced",
+                    "requires_tool_calling": True,
+                }
+        return {}
+
     def route(self, text, history=""):
         with measure_stage("intent_routing"):
             if is_capability_discussion(text):
-                return {"action": "ask", "complexity": 4, "confidence": 0.98}
+                res = {"action": "ask", "complexity": 4, "confidence": 0.98}
+                record_router_decision("ask", intent_type="capability_discussion", status="ok", confidence=0.98)
+                return res
             fallback = self._fallback(text)
-            # A plain conversational question with no capability keyword does not
-            # need a model call just to be classified as chat. This removes an
-            # entire cold start from the most common path.
             contextual_reference = bool(
                 history
                 and re.search(
@@ -173,6 +257,7 @@ class IntentRouter:
                 and not contextual_reference
                 and not external_hint
             ):
+                record_router_decision("ask", intent_type="direct", status="ok", confidence=0.0)
                 return fallback
             provider = self.model_manager.choose(
                 {
@@ -182,15 +267,21 @@ class IntentRouter:
             )
             if not provider:
                 if external_hint and self.mcp_manager:
-                    return {
+                    det_mcp = self._deterministic_mcp_fallback(text)
+                    if det_mcp:
+                        record_router_decision(det_mcp.get("action", "mcp_call"), intent_type="mcp_fallback", status="ok", confidence=det_mcp.get("confidence", 0.9))
+                        return det_mcp
+                    res = {
                         "action": "ask",
                         "routing_error": "mcp_router_unavailable",
                         "complexity": 4,
                         "confidence": 0.0,
                     }
+                    record_router_error("mcp_router_unavailable")
+                    record_router_decision("ask", intent_type="error", status="error", confidence=0.0)
+                    return res
+                record_router_decision(fallback.get("action", "ask"), intent_type="fallback", status="ok", confidence=fallback.get("confidence", 0.0))
                 return fallback
-            # The router is a classifier, not the conversational model. Keep it
-            # context-free unless the current wording explicitly refers back.
             router_history = ""
             if contextual_reference and history:
                 router_history = "\n".join(str(history).splitlines()[-2:])
@@ -218,12 +309,19 @@ class IntentRouter:
                 logger.info("router raw=%s", str(raw)[:1000])
                 normalized = self._normalize(self._decode(raw), fallback, memory_candidates, text=text)
                 if external_hint and normalized.get("action") != "mcp_call":
-                    return {
+                    det_mcp = self._deterministic_mcp_fallback(text)
+                    if det_mcp:
+                        record_router_decision(det_mcp.get("action", "mcp_call"), intent_type="mcp_grounding_fallback", status="ok", confidence=det_mcp.get("confidence", 0.9))
+                        return det_mcp
+                    res = {
                         "action": "ask",
                         "routing_error": "external_request_not_grounded",
                         "complexity": 4,
                         "confidence": 0.0,
                     }
+                    record_router_error("external_request_not_grounded")
+                    record_router_decision("ask", intent_type="error", status="error", confidence=0.0)
+                    return res
                 if normalized.get("action") == "food" and normalized.get("food_action") in FOOD_MUTATIONS:
                     verified = self._verify_food_mutation(provider, text, normalized)
                     if not verified:
@@ -261,6 +359,7 @@ class IntentRouter:
                     if any(clue in text.lower() for clue in food_clues):
                         food = self._route_food(provider, text, router_history)
                         if food:
+                            record_router_decision("food", intent_type="food_clue", status="ok", confidence=food.get("confidence", 0.8))
                             return food
                 logger.info(
                     "router normalized action=%s food_action=%s confidence=%s",
@@ -268,16 +367,21 @@ class IntentRouter:
                     normalized.get("food_action"),
                     normalized.get("confidence"),
                 )
+                record_router_decision(normalized.get("action", "ask"), intent_type=normalized.get("task_type", "direct"), status="ok", confidence=normalized.get("confidence", 1.0))
                 return normalized
             except Exception as exc:
                 logger.warning("router failed: %s", exc)
                 if external_hint and self.mcp_manager:
-                    return {
+                    res = {
                         "action": "ask",
                         "routing_error": "mcp_router_failed",
                         "complexity": 4,
                         "confidence": 0.0,
                     }
+                    record_router_error("mcp_router_failed")
+                    record_router_decision("ask", intent_type="error", status="error", confidence=0.0)
+                    return res
+                record_router_decision(fallback.get("action", "ask"), intent_type="fallback", status="ok", confidence=fallback.get("confidence", 0.0))
                 return fallback
 
     def _verify_food_mutation(self, provider, text, intent):
