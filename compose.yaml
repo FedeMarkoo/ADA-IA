@@ -1,4 +1,13 @@
 services:
+  ada-data-init:
+    image: alpine:3.21
+    restart: "no"
+    user: "0:0"
+    command: ["/bin/sh", "-c", "mkdir -p /ada-data/db /ada-data/logs /ada-data/backups /ada-data/exports /ada-data/models /ada-data/runtime /test-manager-data && chown -R 10001:10001 /ada-data /test-manager-data"]
+    volumes:
+      - ${ADA_DATA_DIR:-../ada-data}:/ada-data
+      - ${ADA_TEST_MANAGER_DATA_DIR:-../ada-test-manager-data}:/test-manager-data
+
   ada:
     image: ${ADA_IMAGE:-ghcr.io/fedemarkoo/ada-ia}:${ADA_VERSION:-latest}
     user: "${ADA_CONTAINER_UID:-10001}:${ADA_CONTAINER_GID:-10001}"
@@ -23,6 +32,8 @@ services:
     volumes:
       - ${ADA_DATA_DIR:-../ada-data}:/data
     depends_on:
+      ada-data-init:
+        condition: service_completed_successfully
       litellm:
         condition: service_healthy
       ada-mcps:
@@ -39,6 +50,8 @@ services:
     volumes:
       - ${ADA_TEST_MANAGER_DATA_DIR:-../ada-test-manager-data}:/data
     depends_on:
+      ada-data-init:
+        condition: service_completed_successfully
       ada:
         condition: service_started
 
@@ -101,6 +114,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    depends_on:
+      ada-data-init:
+        condition: service_completed_successfully
 
   prometheus:
     image: prom/prometheus:v2.55.1
