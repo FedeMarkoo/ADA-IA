@@ -50,7 +50,8 @@ public class McpFilesystemListFilesToolExecutor implements ToolExecutor {
       var arguments = objectMapper.readTree(call.arguments());
       initializeSession();
       var result = post("tools/call", Map.of("name", call.name(), "arguments", arguments));
-      return new ToolExecutionResult(call.id(), call.name(), result.path("content").path(0).path("text").asText("{}"));
+      return new ToolExecutionResult(
+          call.id(), call.name(), result.path("content").path(0).path("text").asText("{}"));
     } catch (JsonProcessingException | RestClientException error) {
       throw new IllegalStateException("MCP filesystem list_files failed", error);
     }
@@ -68,10 +69,14 @@ public class McpFilesystemListFilesToolExecutor implements ToolExecutor {
   private JsonNode post(String method, Object params) {
     var body =
         Map.of(
-            "jsonrpc", "2.0",
-            "id", UUID.randomUUID().toString(),
-            "method", method,
-            "params", params);
+            "jsonrpc",
+            "2.0",
+            "id",
+            UUID.randomUUID().toString(),
+            "method",
+            method,
+            "params",
+            params);
     var response =
         client
             .post()

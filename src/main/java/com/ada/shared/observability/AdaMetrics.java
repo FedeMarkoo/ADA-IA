@@ -113,6 +113,35 @@ public class AdaMetrics {
           .increment(o);
   }
 
+  public void recordPromptOptimization(LlmRequest original, LlmRequest optimized) {
+    long originalTokens = estimatedContextTokens(original);
+    long optimizedTokens = estimatedContextTokens(optimized);
+    registry.counter("ada_llm_prompt_optimization_total", "model", original.model()).increment();
+    registry
+        .counter(
+            "ada_llm_prompt_optimization_tokens_total",
+            "model",
+            original.model(),
+            "version",
+            "original")
+        .increment(originalTokens);
+    registry
+        .counter(
+            "ada_llm_prompt_optimization_tokens_total",
+            "model",
+            original.model(),
+            "version",
+            "optimized")
+        .increment(optimizedTokens);
+  }
+
+  private long estimatedContextTokens(LlmRequest request) {
+    return estimator.components(request).stream()
+        .filter(item -> !item.component().equals("total"))
+        .mapToLong(TokenUsageComponent::tokens)
+        .sum();
+  }
+
   public <T> T measureLlm(String m, java.util.function.Supplier<T> op) {
     var s = Timer.start(registry);
     try {

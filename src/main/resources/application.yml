@@ -29,6 +29,9 @@ ada:
     api-key: ${ADA_LLM_API_KEY:}
     default-model: ${ADA_LLM_DEFAULT_MODEL:ollama/qwen2.5:7b}
     routing-model: ${ADA_LLM_ROUTING_MODEL:ollama/llama3.2:1b}
+    prompt-optimization:
+      enabled: ${ADA_LLM_PROMPT_OPTIMIZATION_ENABLED:true}
+      min-chars: ${ADA_LLM_PROMPT_OPTIMIZATION_MIN_CHARS:120}
   mcp:
     web-search-url: ${ADA_MCP_WEB_SEARCH_URL:http://127.0.0.1:8000/web-search}
     filesystem-url: ${ADA_MCP_FILESYSTEM_URL:http://127.0.0.1:8000/filesystem}
@@ -38,6 +41,10 @@ ada:
     bootstrap-chat-id: ${ADA_TELEGRAM_BOOTSTRAP_CHAT_ID:}
   secrets:
     master-key: ${ADA_SECRET_MASTER_KEY:}
+  rag:
+    enabled: ${ADA_RAG_ENABLED:true}
+    top-k: ${ADA_RAG_TOP_K:5}
+    max-context-characters: ${ADA_RAG_MAX_CONTEXT_CHARACTERS:6000}
 
 management:
   server:

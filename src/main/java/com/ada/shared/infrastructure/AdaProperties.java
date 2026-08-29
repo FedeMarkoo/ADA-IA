@@ -1,8 +1,10 @@
 package com.ada.shared.infrastructure;
 
 import com.ada.shared.infrastructure.dto.LlmProperties;
+import com.ada.shared.infrastructure.dto.RagProperties;
 import com.ada.shared.infrastructure.dto.SecretsProperties;
 import com.ada.shared.infrastructure.dto.TelegramProperties;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.nio.file.*;
 import lombok.Getter;
@@ -22,6 +24,7 @@ public class AdaProperties {
   @NestedConfigurationProperty private LlmProperties llm;
   @NestedConfigurationProperty private TelegramProperties telegram;
   @NestedConfigurationProperty private SecretsProperties secrets;
+  @Valid @NestedConfigurationProperty private RagProperties rag;
 
   public Path getNormalizedDataDirectory() {
     return Path.of(dataDir).toAbsolutePath().normalize();
