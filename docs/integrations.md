@@ -38,17 +38,22 @@ local; LiteLLM lo consume por la red interna de Compose.
 
 ## MCP de búsqueda web
 
-Los servidores MCP externos a ADA viven en `mcp/<nombre>`. El primer servidor
-es `mcp/web-search`, un proceso Python independiente que implementa el
-transporte JSON-RPC de MCP y expone la tool `web_search`. ADA la publica al
-modelo mediante `McpWebSearchToolProvider` y ejecuta las llamadas mediante
-`McpWebSearchToolExecutor`; el servidor MCP hace la búsqueda pública y devuelve
-enlaces y snippets.
+Los servidores MCP externos a ADA viven en `mcp/<nombre>` y se distribuyen en
+una única imagen `ghcr.io/fedemarkoo/ada-mcps`. El gateway implementa el
+transporte JSON-RPC y mantiene endpoints internos por servidor: `/web-search`
+expone `web_search` y `/filesystem` expone las tools de filesystem. ADA publica
+esas tools mediante sus providers y las ejecuta mediante sus adapters Java.
 
-Compose levanta el MCP en la red interna como `mcp-web-search:8000`. No se
-publica el puerto al host. Para reemplazar el proveedor o agregar otra tool,
-se crea otro subdirectorio bajo `mcp/` y su adapter correspondiente en
+Compose levanta ambos MCPs en la red interna mediante el servicio `ada-mcps`.
+No se publica el puerto al host. Para agregar otra tool, se incorpora al
+gateway y al mismo contexto `mcp/`, junto con su adapter correspondiente en
 `infrastructure.out`.
+
+El MCP `filesystem` monta el Google Drive local como solo lectura en `/gdrive`.
+La ruta del host se configura mediante `ADA_GDRIVE_PATH`, por ejemplo
+`ADA_GDRIVE_PATH=<ruta-del-host>/GoogleDrive`. El servidor solo autoriza `/data`
+y `/gdrive`, y resuelve las rutas antes de validarlas para impedir escapes con
+`..` o enlaces simbólicos.
 
 El endpoint de gestión queda atado a `127.0.0.1:8081`; así Prometheus y los
 endpoints de Actuator no quedan expuestos por la interfaz HTTP de la aplicación.
@@ -56,10 +61,11 @@ En un despliegue remoto debe agregarse autenticación o una ACL de red.
 
 ## Telegram
 
-ADA puede enviar una notificación al iniciar y otra al comenzar el apagado a un
-chat de Telegram mediante un bot. La función está desactivada por defecto. El
-token y el chat ID se guardan cifrados con AES-GCM en `ada_secrets`; la clave
-maestra nunca se guarda en SQLite:
+ADA puede recibir mensajes y enviar respuestas, además de enviar notificaciones
+de ciclo de vida, a un chat de Telegram mediante un bot. La función está
+desactivada por defecto y usa long polling, por lo que no requiere exponer un
+webhook público. El token y el chat ID se guardan cifrados con AES-GCM en
+`ada_secrets`; la clave maestra nunca se guarda en SQLite:
 
 ```text
 ADA_TELEGRAM_ENABLED=true
@@ -72,6 +78,14 @@ Las variables `ADA_TELEGRAM_BOOTSTRAP_*` solo se usan para insertar el secreto
 si todavía no existe; luego pueden retirarse del entorno. Generá la clave, por
 ejemplo, con `openssl rand -base64 32`. Los errores de Telegram no impiden
 iniciar ni apagar ADA y no se registran tokens ni credenciales.
+
+Una vez iniciada ADA con `ADA_TELEGRAM_ENABLED=true`, el bot consulta mensajes
+nuevos y solo procesa mensajes del chat cuyo ID coincide con el chat ID
+configurado. Cada mensaje se ejecuta como una conversación con ID
+`telegram:<chat-id>` y la respuesta se envía al mismo chat. Para obtener el
+chat ID, enviá primero un mensaje al bot y consultá `getUpdates` de Telegram;
+el valor debe quedar en `ADA_TELEGRAM_BOOTSTRAP_CHAT_ID` durante el primer
+inicio.
 
 ## SQLite fuera del repositorio
 

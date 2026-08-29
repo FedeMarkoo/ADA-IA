@@ -3,6 +3,9 @@ name: Publish Docker image
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "mcp/**"
+      - ".github/workflows/mcp-publish.yml"
   workflow_dispatch:
 
 permissions:

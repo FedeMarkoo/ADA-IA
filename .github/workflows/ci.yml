@@ -42,8 +42,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Test web search MCP
-        run: python3 -m unittest discover -s mcp/web-search -p 'test_*.py'
+      - name: Test MCP image sources
+        run: |
+          python3 -m unittest discover -s mcp -p 'test_gateway.py'
+          python3 -m unittest discover -s mcp/filesystem -p 'test_*.py'
+          python3 -m unittest discover -s mcp/web-search -p 'test_*.py'
       - name: Test SQLite smoke runner
         run: python3 -m unittest discover -s scripts/testing -p 'test_*.py'
 

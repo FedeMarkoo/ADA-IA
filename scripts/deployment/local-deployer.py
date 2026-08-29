@@ -34,8 +34,14 @@ def compose(args, env, *parts):
     return run(["docker", "compose", "--env-file", str(args.env_file), "-f", str(args.compose), *parts], env)
 
 
-def image_id(args, env):
-    image = f"{env.get('ADA_IMAGE', 'ghcr.io/fedemarkoo/ada-ia')}:{env.get('ADA_VERSION', 'latest')}"
+def image_ref(env, service):
+    if service == "ada-mcps":
+        return f"{env.get('ADA_MCP_IMAGE', 'ghcr.io/fedemarkoo/ada-mcps')}:{env.get('ADA_MCP_VERSION', 'latest')}"
+    return f"{env.get('ADA_IMAGE', 'ghcr.io/fedemarkoo/ada-ia')}:{env.get('ADA_VERSION', 'latest')}"
+
+
+def image_id(args, env, service="ada"):
+    image = image_ref(env, service)
     result = subprocess.run(
         ["docker", "image", "inspect", "--platform", "linux/amd64", "--format", "{{.Id}}", image],
         check=False,
@@ -46,8 +52,8 @@ def image_id(args, env):
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def running_image_id(args, env):
-    result = compose(args, env, "ps", "-q", "ada")
+def running_image_id(args, env, service="ada"):
+    result = compose(args, env, "ps", "-q", service)
     container_id = result.stdout.strip()
     if not container_id:
         return ""
@@ -88,12 +94,28 @@ def healthcheck(url, timeout):
     return False
 
 
-def rollback(args, env, old_id):
-    if not old_id:
-        return
-    image = f"{env.get('ADA_IMAGE', 'ghcr.io/fedemarkoo/ada-ia')}:{env.get('ADA_VERSION', 'latest')}"
-    run(["docker", "tag", old_id, image], env)
-    compose(args, env, "up", "-d", "--no-deps", "ada")
+def rollback(args, env, old_ids):
+    for service, old_id in old_ids.items():
+        if old_id:
+            run(["docker", "tag", old_id, image_ref(env, service)], env)
+    compose(args, env, "up", "-d", "--no-deps", "ada", "ada-mcps")
+
+
+def mcp_healthcheck(args, env):
+    try:
+        compose(
+            args,
+            env,
+            "exec",
+            "-T",
+            "ada-mcps",
+            "python",
+            "-c",
+            "import urllib.request; urllib.request.urlopen('http://localhost:8000/filesystem', timeout=3)",
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 
 def deploy(args):
@@ -102,23 +124,25 @@ def deploy(args):
     for key, value in file_env.items():
         env.setdefault(key, value)
     env.update({"ADA_IMAGE": env.get("ADA_IMAGE", "ghcr.io/fedemarkoo/ada-ia"), "ADA_VERSION": env.get("ADA_VERSION", "latest")})
-    old_id = image_id(args, env)
-    running_id = running_image_id(args, env)
+    old_ids = {service: image_id(args, env, service) for service in ("ada", "ada-mcps")}
+    running_ids = {service: running_image_id(args, env, service) for service in ("ada", "ada-mcps")}
     backup = backup_database(Path(env.get("ADA_DATA_DIR", "../ada-data")).expanduser().resolve())
-    compose(args, env, "pull", "ada")
-    new_id = image_id(args, env)
-    if old_id and old_id == new_id and running_id == new_id and healthcheck(args.health_url, 5):
+    compose(args, env, "pull", "ada", "ada-mcps")
+    new_ids = {service: image_id(args, env, service) for service in ("ada", "ada-mcps")}
+    if all(old_ids[s] and old_ids[s] == new_ids[s] and running_ids[s] == new_ids[s] for s in old_ids) and healthcheck(args.health_url, 5) and mcp_healthcheck(args, env):
         print("No image change and service healthy; deployment skipped.")
         return 0
     try:
         compose(args, env, "up", "-d")
         if not healthcheck(args.health_url, args.health_timeout):
             raise RuntimeError(f"healthcheck failed: {args.health_url}")
+        if not mcp_healthcheck(args, env):
+            raise RuntimeError("MCP healthcheck failed: ada-mcps/filesystem")
     except (subprocess.CalledProcessError, RuntimeError) as error:
         print(f"Deployment failed; rolling back: {error}", file=sys.stderr)
-        rollback(args, env, old_id)
+        rollback(args, env, old_ids)
         return 1
-    print(json.dumps({"deployed": True, "image": new_id, "backup": str(backup) if backup else None}))
+    print(json.dumps({"deployed": True, "images": new_ids, "backup": str(backup) if backup else None}))
     return 0
 
 
