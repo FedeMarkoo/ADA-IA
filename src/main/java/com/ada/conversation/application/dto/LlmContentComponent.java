@@ -5,6 +5,7 @@ public enum LlmContentComponent {
   PROMPT,
   TOOLS,
   MEMORIES,
+  RAG,
   TOOL_RESPONSE,
   COMPACTED_PROMPT,
   RESPONSE
