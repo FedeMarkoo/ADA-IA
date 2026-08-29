@@ -23,7 +23,7 @@ class AutodeployerServiceTest(unittest.TestCase):
 
         self.assertIn("After=docker.service network-online.target", content)
         self.assertIn("ExecStartPre=/usr/bin/docker info", content)
-        self.assertIn("SupplementaryGroups=docker", content)
+        self.assertIn("SupplementaryGroups=docker 10001", content)
         self.assertIn("Restart=always", content)
         self.assertIn("WantedBy=multi-user.target", content)
 
