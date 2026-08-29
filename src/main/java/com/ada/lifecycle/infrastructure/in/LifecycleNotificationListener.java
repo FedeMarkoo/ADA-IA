@@ -1,27 +1,35 @@
 package com.ada.lifecycle.infrastructure.in;
 
 import com.ada.lifecycle.application.port.out.LifecycleMessageSender;
-import lombok.RequiredArgsConstructor;
+import java.util.List;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class LifecycleNotificationListener {
   private static final String STARTED_MESSAGE = "ADA inició correctamente 🚀";
   private static final String STOPPING_MESSAGE = "ADA se está apagando 📴";
 
-  private final LifecycleMessageSender messageSender;
+  private final List<LifecycleMessageSender> messageSenders;
+
+  public LifecycleNotificationListener(LifecycleMessageSender messageSender) {
+    this(List.of(messageSender));
+  }
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public LifecycleNotificationListener(List<LifecycleMessageSender> messageSenders) {
+    this.messageSenders = messageSenders;
+  }
 
   @EventListener
   public void onApplicationReady(ApplicationReadyEvent event) {
-    messageSender.send(STARTED_MESSAGE);
+    messageSenders.forEach(sender -> sender.send(STARTED_MESSAGE));
   }
 
   @EventListener
   public void onContextClosed(ContextClosedEvent event) {
-    messageSender.send(STOPPING_MESSAGE);
+    messageSenders.forEach(sender -> sender.send(STOPPING_MESSAGE));
   }
 }
