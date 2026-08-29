@@ -38,9 +38,9 @@ def db():
     prompt_columns = {row[1] for row in connection.execute("PRAGMA table_info(prompts)")}
     if "expected_terms" not in prompt_columns:
         connection.execute("ALTER TABLE prompts ADD COLUMN expected_terms TEXT NOT NULL DEFAULT '[]'")
-        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ?", ('["dominio", "aplicación", "infraestructura"]', "Arquitectura hexagonal"))
-        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ?", ('["jpg", "png", "raw"]', "Formatos de imagen"))
-        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ?", ('["arroz", "huevo", "tomate"]', "Comida simple"))
+    connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["dominio", "aplicación", "infraestructura"]', "Arquitectura hexagonal"))
+    connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["jpg", "png", "raw"]', "Formatos de imagen"))
+    connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["arroz", "huevo", "tomate"]', "Comida simple"))
     if connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
         category = connection.execute("INSERT INTO categories(name) VALUES (?) RETURNING id", ("Smoke tests",)).fetchone()[0]
         connection.executemany(
