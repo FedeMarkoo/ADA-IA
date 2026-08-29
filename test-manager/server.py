@@ -15,6 +15,7 @@ STATIC = Path(__file__).parent / "static"
 def db():
     connection = sqlite3.connect(DB)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA journal_mode=WAL")
     connection.executescript("""
       CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL);
@@ -126,9 +127,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         connection = db(); path = self.path; payload = self.read_json()
         if path == "/api/categories":
-            cur = connection.execute("INSERT INTO categories(name) VALUES (?)", (payload["name"],)); connection.commit(); return self.send_json({"id": cur.lastrowid, "name": payload["name"]}, 201)
+            try:
+                cur = connection.execute("INSERT INTO categories(name) VALUES (?)", (payload["name"],)); connection.commit(); return self.send_json({"id": cur.lastrowid, "name": payload["name"]}, 201)
+            except sqlite3.IntegrityError as error:
+                connection.rollback(); return self.send_json({"error": str(error)}, 409)
         if path == "/api/prompts":
-            cur = connection.execute("INSERT INTO prompts(category_id,name,prompt,expected_tools,expected_memories,expected_context,expected_rag) VALUES (?,?,?,?,?,?,?)", (payload["category_id"], payload["name"], payload["prompt"], dumps(payload.get("expected_tools")), dumps(payload.get("expected_memories")), dumps(payload.get("expected_context")), int(payload.get("expected_rag", False)))); connection.commit(); return self.send_json({"id": cur.lastrowid}, 201)
+            try:
+                cur = connection.execute("INSERT INTO prompts(category_id,name,prompt,expected_tools,expected_memories,expected_context,expected_rag) VALUES (?,?,?,?,?,?,?)", (payload["category_id"], payload["name"], payload["prompt"], dumps(payload.get("expected_tools")), dumps(payload.get("expected_memories")), dumps(payload.get("expected_context")), int(payload.get("expected_rag", False)))); connection.commit(); return self.send_json({"id": cur.lastrowid}, 201)
+            except sqlite3.IntegrityError as error:
+                connection.rollback(); return self.send_json({"error": str(error)}, 400)
         if path.startswith("/api/prompts/") and path.endswith("/run"):
             prompt_id = path.split("/")[3]; test = row_prompt(connection.execute("SELECT * FROM prompts WHERE id=?", (prompt_id,)).fetchone())
             try:

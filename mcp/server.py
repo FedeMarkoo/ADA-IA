@@ -27,12 +27,24 @@ SERVERS = {
 def read_chunked_body(stream):
     chunks = []
     while True:
-        size = int(stream.readline().split(b";", 1)[0], 16)
+        line = stream.readline()
+        if not line:
+            raise ValueError("unexpected EOF in chunk size")
+        size = int(line.split(b";", 1)[0], 16)
         if size == 0:
-            stream.readline()
-            return b"".join(chunks)
-        chunks.append(stream.read(size))
-        stream.readline()
+            while True:
+                trailer = stream.readline()
+                if not trailer:
+                    raise ValueError("unexpected EOF in chunk trailers")
+                if trailer in (b"\r\n", b"\n"):
+                    return b"".join(chunks)
+        chunk = stream.read(size)
+        if len(chunk) != size:
+            raise ValueError("unexpected EOF in chunk data")
+        chunks.append(chunk)
+        terminator = stream.readline()
+        if terminator not in (b"\r\n", b"\n"):
+            raise ValueError("invalid chunk terminator")
 
 
 def call_tool(path, tool_name, arguments):
