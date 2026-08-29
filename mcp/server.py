@@ -24,6 +24,17 @@ SERVERS = {
 }
 
 
+def read_chunked_body(stream):
+    chunks = []
+    while True:
+        size = int(stream.readline().split(b";", 1)[0], 16)
+        if size == 0:
+            stream.readline()
+            return b"".join(chunks)
+        chunks.append(stream.read(size))
+        stream.readline()
+
+
 def call_tool(path, tool_name, arguments):
     if path == "/filesystem":
         known = {tool["name"] for tool in filesystem.TOOLS}
@@ -58,7 +69,11 @@ class McpGatewayHandler(BaseHTTPRequestHandler):
         if config is None:
             self.send_error(404)
             return
-        request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            body = read_chunked_body(self.rfile)
+        else:
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        request = json.loads(body)
         request_id = request.get("id")
         if request_id is None:
             self.send_response(202)

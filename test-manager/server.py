@@ -66,8 +66,9 @@ def run_ada(prompt):
     message_id = accepted["messageId"]
     for _ in range(180):
         status = request_json(ADA_URL + "/api/v1/chat/" + message_id + "/status")
-        if status["status"] in ("completed", "failed"):
-            if status["status"] == "failed":
+        state = status.get("state", status.get("status"))
+        if state in ("completed", "failed"):
+            if state == "failed":
                 raise RuntimeError(status.get("detail") or "ADA execution failed")
             return request_json(ADA_URL + "/api/v1/chat/" + message_id)
         time.sleep(1)
