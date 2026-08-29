@@ -62,6 +62,17 @@ class CavemanPromptOptimizerTest {
         IllegalArgumentException.class, () -> new CavemanPromptOptimizer(true, -1));
   }
 
+  @Test
+  void preservesUndelimitedPythonAndEscapedJson() {
+    var python = new LlmMessage(LlmMessageRole.SYSTEM, "if value == 1:\n  result = value", LlmContentComponent.MEMORIES);
+    var json = new LlmMessage(LlmMessageRole.SYSTEM, "\\\"line\\\\nvalue\\\"", LlmContentComponent.MEMORIES);
+
+    var optimized = new CavemanPromptOptimizer(true, 0).optimize(request(python, json));
+
+    assertEquals(python.content(), optimized.messages().get(0).content());
+    assertEquals(json.content(), optimized.messages().get(1).content());
+  }
+
   private LlmRequest request(LlmMessage... messages) {
     return new LlmRequest("model", List.of(messages), List.of(), new LlmRequestMetadata("test"));
   }

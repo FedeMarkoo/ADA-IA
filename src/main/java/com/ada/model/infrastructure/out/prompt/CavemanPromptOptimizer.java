@@ -19,7 +19,7 @@ public class CavemanPromptOptimizer implements PromptOptimizer {
           "(?iu)(?<!\\p{L})(?:por favor,? ten en cuenta que|ten en cuenta que|es importante que|a continuación|a continuacion|simplemente|básicamente|basicamente|en general|please|simply|basically|in general|note that)(?!\\p{L})[,:]?\\s*");
   private static final Pattern CODE_OR_DATA =
       Pattern.compile(
-          "(?ims)(?:^|\\n)\\s*(?:select|insert|update|delete|create|alter|drop|with|def|class|import|from|return|#!/|bash\\b|sh\\b|python\\b|npm\\b|mvn\\b|curl\\b)|(?:=>|\\b(public|private|static|void|function)\\b)|^\\s*\\\"[^\\\"]+\\\"\\s*$|;\\s*$|<\\/?[A-Za-z][^>]*>");
+          "(?ims)(?:^|\\n)\\s*(?:select|insert|update|delete|create|alter|drop|with|def|class|import|from|return|if|for|while|#!/|bash\\b|sh\\b|python\\b|npm\\b|mvn\\b|curl\\b)|(?:=>|\\b(public|private|static|void|function)\\b)|^\\s*\\\"[^\\\"]+\\\"\\s*$|;\\s*$|<\\/?[A-Za-z][^>]*>|\\\\\"|\\b[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*[^=]");
 
   private final boolean enabled;
   private final int minimumCharacters;
