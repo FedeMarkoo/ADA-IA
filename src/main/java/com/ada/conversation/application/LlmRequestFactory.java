@@ -20,6 +20,10 @@ public class LlmRequestFactory {
         0.2,
         1024,
         new LlmRequestMetadata(
-            UUID.randomUUID().toString(), null, java.util.List.of(), java.util.List.of(), c.selection()));
+            UUID.randomUUID().toString(),
+            null,
+            java.util.List.of(),
+            java.util.List.of(),
+            c.selection()));
   }
 }

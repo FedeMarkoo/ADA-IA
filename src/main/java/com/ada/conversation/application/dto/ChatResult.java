@@ -21,12 +21,7 @@ public record ChatResult(
   }
 
   public ChatResult(
-      String id,
-      String c,
-      String m,
-      Long i,
-      Long o,
-      List<TokenUsageComponent> usage) {
+      String id, String c, String m, Long i, Long o, List<TokenUsageComponent> usage) {
     this(id, c, m, i, o, usage, null, List.of());
   }
 }
