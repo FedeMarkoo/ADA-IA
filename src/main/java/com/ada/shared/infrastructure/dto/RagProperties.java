@@ -12,11 +12,7 @@ import lombok.Setter;
 public class RagProperties {
   private boolean enabled = true;
 
-  @Min(1)
-  @Max(20)
-  private int topK = 5;
+  @Min(1) @Max(20) private int topK = 5;
 
-  @Min(256)
-  @Max(12000)
-  private int maxContextCharacters = 6000;
+  @Min(256) @Max(12000) private int maxContextCharacters = 6000;
 }
