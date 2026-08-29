@@ -8,4 +8,5 @@ La documentación se organiza por decisiones y contratos, no por clases.
 - [Reglas de código](coding-rules.md): Clean Code con criterios prácticos.
 - [Observabilidad](observability.md): métricas, logs, trazas y auditoría.
 - [Integraciones](integrations.md): LiteLLM, SQLite y configuración externa.
+- [ADA Test Manager](test-manager.md): casos, ejecuciones, tokens y evaluación IA.
 - [ADRs](decisions/README.md): decisiones que cambian la forma del sistema.
