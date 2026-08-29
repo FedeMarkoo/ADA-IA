@@ -50,7 +50,8 @@ class CavemanPromptOptimizerTest {
 
   @Test
   void disabledOptimizerReturnsOriginalRequest() {
-    var request = request(new LlmMessage(LlmMessageRole.SYSTEM, MEMORY, LlmContentComponent.MEMORIES));
+    var request =
+        request(new LlmMessage(LlmMessageRole.SYSTEM, MEMORY, LlmContentComponent.MEMORIES));
 
     assertEquals(request, new CavemanPromptOptimizer(false, 0).optimize(request));
   }
