@@ -30,7 +30,8 @@ ada:
     default-model: ${ADA_LLM_DEFAULT_MODEL:ollama/qwen2.5:7b}
     routing-model: ${ADA_LLM_ROUTING_MODEL:ollama/llama3.2:1b}
   mcp:
-    web-search-url: ${ADA_MCP_WEB_SEARCH_URL:http://127.0.0.1:8000/mcp}
+    web-search-url: ${ADA_MCP_WEB_SEARCH_URL:http://127.0.0.1:8000/web-search}
+    filesystem-url: ${ADA_MCP_FILESYSTEM_URL:http://127.0.0.1:8000/filesystem}
   telegram:
     enabled: ${ADA_TELEGRAM_ENABLED:false}
     bootstrap-bot-token: ${ADA_TELEGRAM_BOOTSTRAP_BOT_TOKEN:}
