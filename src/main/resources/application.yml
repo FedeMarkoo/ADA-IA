@@ -39,12 +39,13 @@ ada:
     enabled: ${ADA_TELEGRAM_ENABLED:false}
     bootstrap-bot-token: ${ADA_TELEGRAM_BOOTSTRAP_BOT_TOKEN:}
     bootstrap-chat-id: ${ADA_TELEGRAM_BOOTSTRAP_CHAT_ID:}
+  discord:
+    enabled: ${ADA_DISCORD_ENABLED:false}
+    bootstrap-bot-token: ${ADA_DISCORD_BOOTSTRAP_BOT_TOKEN:}
+    bootstrap-channel-id: ${ADA_DISCORD_BOOTSTRAP_CHANNEL_ID:}
+    send-lifecycle-notifications: ${ADA_DISCORD_SEND_LIFECYCLE_NOTIFICATIONS:true}
   secrets:
     master-key: ${ADA_SECRET_MASTER_KEY:}
-  rag:
-    enabled: ${ADA_RAG_ENABLED:true}
-    top-k: ${ADA_RAG_TOP_K:5}
-    max-context-characters: ${ADA_RAG_MAX_CONTEXT_CHARACTERS:6000}
 
 management:
   server:

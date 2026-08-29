@@ -87,6 +87,31 @@ chat ID, enviá primero un mensaje al bot y consultá `getUpdates` de Telegram;
 el valor debe quedar en `ADA_TELEGRAM_BOOTSTRAP_CHAT_ID` durante el primer
 inicio.
 
+## Discord
+
+ADA puede recibir mensajes de un canal de Discord y enviar respuestas y
+notificaciones de ciclo de vida mediante un bot. La integración está
+desactivada por defecto y usa el Gateway WebSocket de Discord para recibir
+eventos, por lo que no requiere exponer un webhook público. El bot solo
+procesa mensajes del canal configurado y omite mensajes enviados por bots.
+
+En el Developer Portal de Discord creá una aplicación, agregá un bot,
+habilitá el intent privilegiado `Message Content Intent` y otorgale permisos
+`View Channel`, `Send Messages` y `Read Message History` en el canal elegido.
+Luego iniciá ADA con:
+
+```text
+ADA_DISCORD_ENABLED=true
+ADA_SECRET_MASTER_KEY=<base64 de 32 bytes>
+ADA_DISCORD_BOOTSTRAP_BOT_TOKEN=...
+ADA_DISCORD_BOOTSTRAP_CHANNEL_ID=...
+```
+
+Las variables `ADA_DISCORD_BOOTSTRAP_*` solo se usan para guardar los secretos
+la primera vez y luego pueden retirarse. El canal se identifica por su ID; en
+Discord se obtiene activando Developer Mode y usando “Copy Channel ID”. El
+token nunca se registra ni se guarda en texto plano.
+
 ## SQLite fuera del repositorio
 
 `ADA_DATA_DIR` es obligatorio en entornos no efímeros y por defecto debe
