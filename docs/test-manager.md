@@ -13,6 +13,11 @@ determinísticos. El resultado puede ser `pass`, `review` o `fail`. RAG se marca
 como no disponible mientras ADA no tenga un proveedor RAG registrado; no se
 considera exitoso por inferencia.
 
+Los smoke tests incluyen términos esperados para comprobar que la respuesta
+resuelve la consigna y no sólo devuelve una herramienta o un enlace. Si falta
+cualquier término, la ejecución queda en `fail` aunque el evaluador IA sugiera
+`pass`. El tiempo de espera se puede ajustar con `ADA_TIMEOUT_SECONDS`.
+
 ```bash
 docker compose up -d --build ada-test-manager
 open http://127.0.0.1:8088
