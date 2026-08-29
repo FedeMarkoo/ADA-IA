@@ -73,18 +73,35 @@ def request_json(url, payload=None, timeout=180):
 
 def run_ada(prompt, conversation_id=None):
     conversation_id = conversation_id or "test-manager-" + uuid.uuid4().hex
-    accepted = request_json(ADA_URL + "/api/v1/chat", {"message": prompt, "conversationId": conversation_id})
-    message_id = accepted["messageId"]
     deadline = time.monotonic() + ADA_TIMEOUT_SECONDS
+    accepted = request_json(
+        ADA_URL + "/api/v1/chat",
+        {"message": prompt, "conversationId": conversation_id},
+        timeout=remaining_timeout(deadline),
+    )
+    message_id = accepted["messageId"]
     while time.monotonic() < deadline:
-        status = request_json(ADA_URL + "/api/v1/chat/" + message_id + "/status")
+        status = request_json(
+            ADA_URL + "/api/v1/chat/" + message_id + "/status",
+            timeout=remaining_timeout(deadline),
+        )
         state = status.get("state", status.get("status"))
         if state in ("completed", "failed"):
             if state == "failed":
                 raise RuntimeError(status.get("detail") or "ADA execution failed")
-            return request_json(ADA_URL + "/api/v1/chat/" + message_id)
-        time.sleep(ADA_POLL_SECONDS)
+            return request_json(
+                ADA_URL + "/api/v1/chat/" + message_id,
+                timeout=remaining_timeout(deadline),
+            )
+        time.sleep(min(ADA_POLL_SECONDS, max(0, deadline - time.monotonic())))
     raise TimeoutError(f"ADA execution timed out after {ADA_TIMEOUT_SECONDS} seconds")
+
+
+def remaining_timeout(deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError(f"ADA execution timed out after {ADA_TIMEOUT_SECONDS} seconds")
+    return remaining
 
 
 def evaluate(test, result):
