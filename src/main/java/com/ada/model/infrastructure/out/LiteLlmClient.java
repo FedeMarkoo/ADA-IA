@@ -2,6 +2,7 @@ package com.ada.model.infrastructure.out;
 
 import com.ada.conversation.application.dto.*;
 import com.ada.conversation.application.port.out.LlmClient;
+import com.ada.conversation.application.port.out.PromptOptimizer;
 import com.ada.model.infrastructure.out.litellm.dto.*;
 import com.ada.model.infrastructure.out.litellm.mapper.LiteLlmMapper;
 import com.ada.shared.infrastructure.AdaProperties;
@@ -20,6 +21,7 @@ public class LiteLlmClient implements LlmClient {
   private final AdaProperties properties;
   private final LiteLlmMapper mapper;
   private final AdaMetrics metrics;
+  private final PromptOptimizer promptOptimizer;
   private RestClient client;
 
   @Value("${ada.llm.api-key:}")
@@ -31,10 +33,13 @@ public class LiteLlmClient implements LlmClient {
   }
 
   public LlmCompletion complete(LlmRequest r) {
+    var optimizedRequest = promptOptimizer.optimize(r);
+    metrics.recordPromptOptimization(r, optimizedRequest);
     var request = client.post().uri("/v1/chat/completions").contentType(MediaType.APPLICATION_JSON);
     if (apiKey != null && !apiKey.isBlank())
       request.headers(headers -> headers.setBearerAuth(apiKey));
-    var response = request.body(mapper.toRequest(r)).retrieve().body(LiteLlmResponse.class);
+    var response =
+        request.body(mapper.toRequest(optimizedRequest)).retrieve().body(LiteLlmResponse.class);
     if (response == null || response.choices().isEmpty())
       throw new IllegalStateException("LiteLLM returned no choices");
     var c = response.choices().getFirst();
@@ -43,10 +48,12 @@ public class LiteLlmClient implements LlmClient {
             .map(x -> new LlmToolCall(x.id(), x.function().name(), x.function().arguments()))
             .toList();
     var u = response.usage();
-    if (u != null) metrics.recordProviderTokens(r.model(), u.promptTokens(), u.completionTokens());
+    if (u != null)
+      metrics.recordProviderTokens(
+          optimizedRequest.model(), u.promptTokens(), u.completionTokens());
     return new LlmCompletion(
         c.message().content() == null ? "" : c.message().content(),
-        response.model() == null ? r.model() : response.model(),
+        response.model() == null ? optimizedRequest.model() : response.model(),
         u == null ? null : u.promptTokens(),
         u == null ? null : u.completionTokens(),
         calls);
