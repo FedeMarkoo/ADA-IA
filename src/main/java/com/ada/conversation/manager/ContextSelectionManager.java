@@ -50,7 +50,7 @@ public class ContextSelectionManager {
 
   private LlmRequest requestFor(ChatRequest request, List<LlmTool> tools, List<String> memories) {
     var catalog =
-        "MCPs: web_search\nTools: "
+        "MCPs: web_search\nRAG: enabled\nTools: "
             + tools.stream().map(LlmTool::name).toList()
             + "\nMemories: "
             + memories
