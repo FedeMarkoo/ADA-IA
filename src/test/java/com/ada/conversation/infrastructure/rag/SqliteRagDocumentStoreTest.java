@@ -25,13 +25,15 @@ class SqliteRagDocumentStoreTest {
       var store = new SqliteRagDocumentStore(jdbc);
 
       var firstId = store.save("conversation-1", "guide.md", "ADA is local-first");
+      store.save("conversation-1", "notes.md", "ADA is local-first too");
       var secondId = store.save("conversation-2", "other.md", "ADA is local-first");
 
       assertThat(firstId).isPositive();
       assertThat(store.search("conversation-1", "local-first", 5))
           .extracting(RagDocument::source)
-          .containsExactly("guide.md");
-      assertThat(store.search("conversation-1", "local-first OR \"*\"", 5)).hasSize(1);
+          .containsExactlyInAnyOrder("guide.md", "notes.md");
+      assertThat(store.search("conversation-1", "local-first OR \"*\"", 5)).hasSize(2);
+      assertThat(store.search("conversation-1", "local-first", 1)).hasSize(1);
       assertThat(store.search("conversation-1", "local-first", 0)).isEmpty();
 
       jdbc.update("UPDATE rag_documents SET content = ? WHERE id = ?", "ADA is private", firstId);
