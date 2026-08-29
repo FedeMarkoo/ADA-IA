@@ -47,10 +47,11 @@ El smoke runner HTTP y el dashboard local de Grafana están documentados en
 
 ## Instaladores multiplataforma
 
-Los instaladores de `instaladores/` validan Docker, crean `deploy/.env` desde el
-ejemplo cuando hace falta y levantan el stack completo con Docker Compose.
-Primero edita `deploy/.env` con tus valores locales; no se deben versionar
-secretos.
+Los instaladores de `instaladores/` validan Docker, crean `../ada-data/.env`
+desde el ejemplo cuando hace falta y levantan el stack completo con Docker
+Compose. La configuración queda junto con las bases, backups y demás datos
+persistentes, fuera del repositorio. Primero edita `../ada-data/.env` con tus
+valores locales; no se deben versionar secretos.
 
 ### Linux
 
@@ -86,7 +87,7 @@ Las URLs locales son ADA `http://localhost:8080`, Test Manager
 `http://localhost:9090`. Para detener el stack:
 
 ```bash
-docker compose --env-file deploy/.env down
+docker compose --env-file ../ada-data/.env down
 ```
 
 En Windows, ejecutar el mismo comando desde PowerShell.
@@ -95,12 +96,11 @@ En Windows, ejecutar el mismo comando desde PowerShell.
 
 El autodeployer mantiene levantado el stack de ADA, comprueba nuevas imágenes
 cada cinco minutos y se reinicia si el proceso falla. Para instalarlo como
-servicio `systemd`, configura primero
-`deploy/.env` y asegúrate de que ese usuario pueda ejecutar Docker:
+servicio `systemd`, configura primero `../ada-data/.env`:
+`../ada-data/.env` y asegúrate de que el servicio pueda ejecutar Docker:
 
 ```bash
-cp deploy/.env.example deploy/.env
-# Edita deploy/.env y completa los secretos y rutas locales
+# Edita ../ada-data/.env y completa los secretos y rutas locales
 sudo usermod -aG docker "$USER"
 newgrp docker
 ./scripts/deployment/install-autodeployer.sh

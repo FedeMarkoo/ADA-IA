@@ -4,9 +4,9 @@ Estos scripts levantan ADA, LiteLLM, Ollama, MCPs, Test Manager, Grafana y
 Prometheus mediante Docker Compose. Requieren Docker Desktop en macOS/Windows
 o Docker Engine con Compose en Linux.
 
-Antes de ejecutar uno, configura `deploy/.env`. Si todavía no existe, el script
-crea una copia de `deploy/.env.example` y termina para que puedas completar la
-configuración sin arrancar con valores de ejemplo.
+Antes de ejecutar uno, configura `../ada-data/.env`. Si todavía no existe, el
+script crea una copia de `deploy/.env.example` y termina para que puedas
+completar la configuración sin arrancar con valores de ejemplo.
 
 ## Linux
 
@@ -48,4 +48,4 @@ Después de levantar el stack:
 - Grafana: <http://localhost:3000>
 - Prometheus: <http://localhost:9090>
 
-Para detenerlo, ejecuta `docker compose --env-file deploy/.env down`.
+Para detenerlo, ejecuta `docker compose --env-file ../ada-data/.env down`.

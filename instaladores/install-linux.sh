@@ -4,16 +4,21 @@ set -Eeuo pipefail
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${project_dir}"
 
+data_dir="${ADA_DATA_DIR:-${project_dir}/../ada-data}"
+data_dir="$(realpath -m -- "${data_dir}")"
+env_file="${data_dir}/.env"
+mkdir -p "${data_dir}"
+
 command -v docker >/dev/null || { echo "Docker no está instalado." >&2; exit 1; }
 docker compose version >/dev/null || { echo "Docker Compose no está disponible." >&2; exit 1; }
 
-if [[ ! -f deploy/.env ]]; then
-    cp deploy/.env.example deploy/.env
-    echo "Se creó deploy/.env. Configúralo y vuelve a ejecutar el instalador."
+if [[ ! -f "${env_file}" ]]; then
+    cp deploy/.env.example "${env_file}"
+    echo "Se creó ${env_file}. Configúralo y vuelve a ejecutar el instalador."
     exit 1
 fi
 
-docker compose --env-file deploy/.env up -d --build
+docker compose --env-file "${env_file}" up -d --build
 echo "ADA está disponible en http://localhost:8080 y el Test Manager en http://localhost:8088."
 echo "Grafana: http://localhost:3000 | Prometheus: http://localhost:9090"
 

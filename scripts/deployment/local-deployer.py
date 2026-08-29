@@ -161,7 +161,7 @@ def deploy(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compose", type=Path, default=Path("compose.yaml"))
-    parser.add_argument("--env-file", type=Path, default=Path("deploy/.env"))
+    parser.add_argument("--env-file", type=Path, default=Path("../ada-data/.env"))
     parser.add_argument("--health-url", default="http://127.0.0.1:8081/actuator/health")
     parser.add_argument("--health-timeout", type=int, default=90)
     parser.add_argument("--once", action="store_true", help="Run one check and exit")

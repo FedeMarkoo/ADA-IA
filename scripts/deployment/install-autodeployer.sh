@@ -4,7 +4,12 @@ set -Eeuo pipefail
 service_name="ada-deployer.service"
 service_source="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../deploy" && pwd)/${service_name}"
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-env_file="${project_dir}/deploy/.env"
+data_dir="${ADA_DATA_DIR:-${project_dir}/../ada-data}"
+if [[ "${data_dir}" != /* ]]; then
+    data_dir="${project_dir}/${data_dir}"
+fi
+data_dir="$(realpath -m -- "${data_dir}")"
+env_file="${data_dir}/.env"
 service_target="/etc/systemd/system/${service_name}"
 ada_user="$(id -un)"
 ada_group="$(id -gn)"
@@ -21,7 +26,7 @@ ada_group="$(id -gn "${ada_user}")"
 ada_home="$(getent passwd "${ada_user}" | cut -d: -f6)"
 
 if [[ ! -f "${env_file}" ]]; then
-    echo "Falta ${env_file}. Copia deploy/.env.example a deploy/.env y configúralo antes de instalar." >&2
+    echo "Falta ${env_file}. Ejecuta un instalador o copia deploy/.env.example y configúralo antes de instalar." >&2
     exit 1
 fi
 

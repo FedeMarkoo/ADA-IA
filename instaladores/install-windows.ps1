@@ -2,16 +2,18 @@ $ErrorActionPreference = "Stop"
 
 $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $ProjectDir
+$DataDir = Join-Path $ProjectDir "..\ada-data"
+$EnvFile = Join-Path $DataDir ".env"
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Instala Docker Desktop para Windows y vuelve a ejecutar este instalador."
 }
 docker compose version | Out-Null
 
-$EnvFile = Join-Path $ProjectDir "deploy\.env"
 if (-not (Test-Path $EnvFile)) {
+    New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
     Copy-Item (Join-Path $ProjectDir "deploy\.env.example") $EnvFile
-    Write-Host "Se creó deploy\.env. Configúralo y vuelve a ejecutar el instalador."
+    Write-Host "Se creó $EnvFile. Configúralo y vuelve a ejecutar el instalador."
     exit 1
 }
 
