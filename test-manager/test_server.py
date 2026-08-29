@@ -27,6 +27,7 @@ class TestManagerPersistenceTest(unittest.TestCase):
             "expected_tools": ["web_search"],
             "expected_memories": [],
             "expected_context": [],
+            "expected_terms": ["respuesta"],
             "expected_rag": True,
         }
         result = {
@@ -44,6 +45,64 @@ class TestManagerPersistenceTest(unittest.TestCase):
         self.assertFalse(evaluation["checks"]["expected_tools_executed"])
         self.assertFalse(evaluation["checks"]["rag_available"])
         self.assertEqual(result["tokenUsage"], evaluation["token_usage"])
+
+    def test_evaluation_rejects_answer_missing_expected_terms(self):
+        test = {"expected_tools": [], "expected_memories": [], "expected_context": [], "expected_terms": ["dominio", "aplicación"], "expected_rag": False}
+        result = {"content": "Sólo habla de infraestructura.", "contextSelection": {}, "executedTools": [], "tokenUsage": []}
+        original = server.run_ada
+        server.run_ada = lambda _: {"content": json.dumps({"score": 8, "verdict": "pass", "findings": []})}
+        try:
+            evaluation = server.evaluate(test, result)
+        finally:
+            server.run_ada = original
+        self.assertFalse(evaluation["checks"]["expected_terms_present"])
+
+    def test_run_ada_polls_until_completed_state(self):
+        original_request_json = server.request_json
+        original_timeout = server.ADA_TIMEOUT_SECONDS
+        original_poll = server.ADA_POLL_SECONDS
+        calls = []
+        server.ADA_TIMEOUT_SECONDS = 1
+        server.ADA_POLL_SECONDS = 0
+
+        def request_json(url, payload=None, timeout=180):
+            calls.append((url, payload, timeout))
+            if url.endswith("/chat"):
+                return {"messageId": "message-1"}
+            if url.endswith("/status"):
+                return {"state": "completed"}
+            return {"messageId": "message-1", "content": "respuesta correcta"}
+
+        server.request_json = request_json
+        try:
+            result = server.run_ada("hola", "conversation-test")
+        finally:
+            server.request_json = original_request_json
+            server.ADA_TIMEOUT_SECONDS = original_timeout
+            server.ADA_POLL_SECONDS = original_poll
+
+        self.assertEqual("respuesta correcta", result["content"])
+        self.assertEqual("conversation-test", calls[0][1]["conversationId"])
+
+    def test_run_ada_uses_isolated_conversation_when_not_provided(self):
+        original_request_json = server.request_json
+        calls = []
+
+        def request_json(url, payload=None, timeout=180):
+            calls.append(payload)
+            if url.endswith("/chat"):
+                return {"messageId": "message-2"}
+            if url.endswith("/status"):
+                return {"state": "completed"}
+            return {"content": "ok"}
+
+        server.request_json = request_json
+        try:
+            server.run_ada("hola")
+        finally:
+            server.request_json = original_request_json
+
+        self.assertTrue(calls[0]["conversationId"].startswith("test-manager-"))
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ public class ContextSelectionManager {
   public ContextSelection select(ChatRequest request) {
     var tools = toolManager.availableTools();
     var memories = memoryManager.memorySubjects(request);
-    var fallback = ContextSelection.all(tools, memories);
+    var fallback = ContextSelection.none();
     var selectionRequest = requestFor(request, tools, memories);
     try {
       var completion =
@@ -50,7 +50,7 @@ public class ContextSelectionManager {
 
   private LlmRequest requestFor(ChatRequest request, List<LlmTool> tools, List<String> memories) {
     var catalog =
-        "MCPs: web_search\nRAG: enabled\nTools: "
+        "MCPs: web_search (usalo solo para información actual o externa)\nRAG: enabled\nTools: "
             + tools.stream().map(LlmTool::name).toList()
             + "\nMemories: "
             + memories
@@ -78,11 +78,10 @@ public class ContextSelectionManager {
               .toList();
       var validMemories =
           memories.stream().filter(name -> contains(json.path("memories"), name)).toList();
+      var selectedMcps =
+          contains(json.path("mcps"), "web_search") ? List.of("web_search") : List.<String>of();
       return new ContextSelection(
-          List.of("web_search"),
-          validTools,
-          validMemories,
-          json.path("compactContext").asBoolean(false));
+          selectedMcps, validTools, validMemories, json.path("compactContext").asBoolean(false));
     } catch (Exception error) {
       return fallback;
     }

@@ -4,11 +4,14 @@ import os
 import sqlite3
 import time
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 DB = os.environ.get("DB_PATH", "/data/test-manager.sqlite")
 ADA_URL = os.environ.get("ADA_URL", "http://ada:8080").rstrip("/")
+ADA_TIMEOUT_SECONDS = int(os.environ.get("ADA_TIMEOUT_SECONDS", "900"))
+ADA_POLL_SECONDS = float(os.environ.get("ADA_POLL_SECONDS", "2"))
 STATIC = Path(__file__).parent / "static"
 
 
@@ -23,7 +26,7 @@ def db():
         id INTEGER PRIMARY KEY, category_id INTEGER NOT NULL REFERENCES categories(id),
         name TEXT NOT NULL, prompt TEXT NOT NULL, expected_tools TEXT NOT NULL DEFAULT '[]',
         expected_memories TEXT NOT NULL DEFAULT '[]', expected_context TEXT NOT NULL DEFAULT '[]',
-        expected_rag INTEGER NOT NULL DEFAULT 0
+        expected_rag INTEGER NOT NULL DEFAULT 0, expected_terms TEXT NOT NULL DEFAULT '[]'
       );
       CREATE TABLE IF NOT EXISTS executions(
         id INTEGER PRIMARY KEY, prompt_id INTEGER NOT NULL REFERENCES prompts(id), created_at TEXT NOT NULL,
@@ -32,13 +35,19 @@ def db():
         executed_tools TEXT NOT NULL DEFAULT '[]', evaluation TEXT
       );
     """)
+    prompt_columns = {row[1] for row in connection.execute("PRAGMA table_info(prompts)")}
+    if "expected_terms" not in prompt_columns:
+        connection.execute("ALTER TABLE prompts ADD COLUMN expected_terms TEXT NOT NULL DEFAULT '[]'")
+        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ?", ('["dominio", "aplicación", "infraestructura"]', "Arquitectura hexagonal"))
+        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ?", ('["jpg", "png", "raw"]', "Formatos de imagen"))
+        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ?", ('["arroz", "huevo", "tomate"]', "Comida simple"))
     if connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
         category = connection.execute("INSERT INTO categories(name) VALUES (?) RETURNING id", ("Smoke tests",)).fetchone()[0]
         connection.executemany(
-            "INSERT INTO prompts(category_id,name,prompt,expected_tools) VALUES (?,?,?,?)",
-            [(category, "Arquitectura hexagonal", "Explicá en tres puntos qué es una arquitectura hexagonal y cómo se separan dominio, aplicación e infraestructura.", "[]"),
-             (category, "Formatos de imagen", "Compará JPG, PNG y RAW para conservar fotografías. Indicá una ventaja y una desventaja de cada formato.", "[]"),
-             (category, "Comida simple", "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora.", "[]")])
+            "INSERT INTO prompts(category_id,name,prompt,expected_tools,expected_terms) VALUES (?,?,?,?,?)",
+            [(category, "Arquitectura hexagonal", "Explicá en tres puntos qué es una arquitectura hexagonal y cómo se separan dominio, aplicación e infraestructura.", "[]", '["dominio", "aplicación", "infraestructura"]'),
+             (category, "Formatos de imagen", "Compará JPG, PNG y RAW para conservar fotografías. Indicá una ventaja y una desventaja de cada formato.", "[]", '["jpg", "png", "raw"]'),
+             (category, "Comida simple", "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora.", "[]", '["arroz", "huevo", "tomate"]')])
         connection.commit()
     return connection
 
@@ -49,31 +58,33 @@ def dumps(value):
 
 def row_prompt(row):
     item = dict(row)
-    for key in ("expected_tools", "expected_memories", "expected_context"):
+    for key in ("expected_tools", "expected_memories", "expected_context", "expected_terms"):
         item[key] = json.loads(item[key])
     item["expected_rag"] = bool(item["expected_rag"])
     return item
 
 
-def request_json(url, payload=None):
+def request_json(url, payload=None, timeout=180):
     data = None if payload is None else json.dumps(payload).encode()
     request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=180) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read())
 
 
-def run_ada(prompt):
-    accepted = request_json(ADA_URL + "/api/v1/chat", {"message": prompt, "conversationId": "test-manager"})
+def run_ada(prompt, conversation_id=None):
+    conversation_id = conversation_id or "test-manager-" + uuid.uuid4().hex
+    accepted = request_json(ADA_URL + "/api/v1/chat", {"message": prompt, "conversationId": conversation_id})
     message_id = accepted["messageId"]
-    for _ in range(180):
+    deadline = time.monotonic() + ADA_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
         status = request_json(ADA_URL + "/api/v1/chat/" + message_id + "/status")
         state = status.get("state", status.get("status"))
         if state in ("completed", "failed"):
             if state == "failed":
                 raise RuntimeError(status.get("detail") or "ADA execution failed")
             return request_json(ADA_URL + "/api/v1/chat/" + message_id)
-        time.sleep(1)
-    raise TimeoutError("ADA execution timed out")
+        time.sleep(ADA_POLL_SECONDS)
+    raise TimeoutError(f"ADA execution timed out after {ADA_TIMEOUT_SECONDS} seconds")
 
 
 def evaluate(test, result):
@@ -81,6 +92,7 @@ def evaluate(test, result):
     actual_tools = result.get("executedTools", [])
     checks = {
         "response_present": bool(result.get("content", "").strip()),
+        "expected_terms_present": all(term.casefold() in result.get("content", "").casefold() for term in test["expected_terms"]),
         "expected_tools_executed": set(test["expected_tools"]).issubset(set(actual_tools)),
         "expected_memories_selected": set(test["expected_memories"]).issubset(set(selected.get("memories", []))),
         "expected_context_selected": set(test["expected_context"]).issubset(set(selected.get("mcps", []) + selected.get("tools", []))),
@@ -91,11 +103,16 @@ def evaluate(test, result):
               "Considerá si responde exactamente lo pedido, si inventa datos y si respeta criterios.\n"
               + json.dumps({"test": test, "result": result, "checks": checks}, ensure_ascii=False))
     try:
-        ai = run_ada(prompt)
+        ai = run_ada(prompt, "test-manager-evaluator-" + uuid.uuid4().hex)
         parsed = json.loads(ai.get("content", "{}"))
     except Exception as error:
         parsed = {"score": None, "verdict": "review", "answer_quality": "unavailable", "findings": [str(error)], "rationale": "No se pudo ejecutar el evaluador IA."}
     parsed["checks"] = checks
+    failed_checks = [name for name, passed in checks.items() if not passed]
+    if failed_checks:
+        parsed["verdict"] = "fail"
+        parsed["score"] = 0
+        parsed["findings"] = list(parsed.get("findings", [])) + ["Checks fallidos: " + ", ".join(failed_checks)]
     parsed["token_usage"] = result.get("tokenUsage", [])
     return parsed
 
@@ -133,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
                 connection.rollback(); return self.send_json({"error": str(error)}, 409)
         if path == "/api/prompts":
             try:
-                cur = connection.execute("INSERT INTO prompts(category_id,name,prompt,expected_tools,expected_memories,expected_context,expected_rag) VALUES (?,?,?,?,?,?,?)", (payload["category_id"], payload["name"], payload["prompt"], dumps(payload.get("expected_tools")), dumps(payload.get("expected_memories")), dumps(payload.get("expected_context")), int(payload.get("expected_rag", False)))); connection.commit(); return self.send_json({"id": cur.lastrowid}, 201)
+                cur = connection.execute("INSERT INTO prompts(category_id,name,prompt,expected_tools,expected_memories,expected_context,expected_rag,expected_terms) VALUES (?,?,?,?,?,?,?,?)", (payload["category_id"], payload["name"], payload["prompt"], dumps(payload.get("expected_tools")), dumps(payload.get("expected_memories")), dumps(payload.get("expected_context")), int(payload.get("expected_rag", False)), dumps(payload.get("expected_terms")))); connection.commit(); return self.send_json({"id": cur.lastrowid}, 201)
             except sqlite3.IntegrityError as error:
                 connection.rollback(); return self.send_json({"error": str(error)}, 400)
         if path.startswith("/api/prompts/") and path.endswith("/run"):
