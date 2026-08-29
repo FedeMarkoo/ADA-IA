@@ -2,6 +2,7 @@
 import json
 import os
 import sqlite3
+import threading
 import time
 import urllib.request
 import uuid
@@ -13,43 +14,60 @@ ADA_URL = os.environ.get("ADA_URL", "http://ada:8080").rstrip("/")
 ADA_TIMEOUT_SECONDS = int(os.environ.get("ADA_TIMEOUT_SECONDS", "900"))
 ADA_POLL_SECONDS = float(os.environ.get("ADA_POLL_SECONDS", "2"))
 STATIC = Path(__file__).parent / "static"
+_DB_INITIALIZATION_LOCK = threading.Lock()
+_INITIALIZED_DB = None
 
 
 def db():
-    connection = sqlite3.connect(DB)
+    """Open a configured SQLite connection and initialize its schema once."""
+    global _INITIALIZED_DB
+    connection = sqlite3.connect(DB, timeout=30)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 30000")
     connection.execute("PRAGMA journal_mode=WAL")
-    connection.executescript("""
-      CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL);
-      CREATE TABLE IF NOT EXISTS prompts(
-        id INTEGER PRIMARY KEY, category_id INTEGER NOT NULL REFERENCES categories(id),
-        name TEXT NOT NULL, prompt TEXT NOT NULL, expected_tools TEXT NOT NULL DEFAULT '[]',
-        expected_memories TEXT NOT NULL DEFAULT '[]', expected_context TEXT NOT NULL DEFAULT '[]',
-        expected_rag INTEGER NOT NULL DEFAULT 0, expected_terms TEXT NOT NULL DEFAULT '[]'
-      );
-      CREATE TABLE IF NOT EXISTS executions(
-        id INTEGER PRIMARY KEY, prompt_id INTEGER NOT NULL REFERENCES prompts(id), created_at TEXT NOT NULL,
-        ada_message_id TEXT, status TEXT NOT NULL, response TEXT, model TEXT, input_tokens INTEGER,
-        output_tokens INTEGER, token_usage TEXT NOT NULL DEFAULT '[]', context_selection TEXT,
-        executed_tools TEXT NOT NULL DEFAULT '[]', evaluation TEXT
-      );
-    """)
-    prompt_columns = {row[1] for row in connection.execute("PRAGMA table_info(prompts)")}
-    if "expected_terms" not in prompt_columns:
-        connection.execute("ALTER TABLE prompts ADD COLUMN expected_terms TEXT NOT NULL DEFAULT '[]'")
-    connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["dominio", "aplicación", "infraestructura"]', "Arquitectura hexagonal"))
-    connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["jpg", "png", "raw"]', "Formatos de imagen"))
-    connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["arroz", "huevo", "tomate"]', "Comida simple"))
-    if connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
-        category = connection.execute("INSERT INTO categories(name) VALUES (?) RETURNING id", ("Smoke tests",)).fetchone()[0]
-        connection.executemany(
-            "INSERT INTO prompts(category_id,name,prompt,expected_tools,expected_terms) VALUES (?,?,?,?,?)",
-            [(category, "Arquitectura hexagonal", "Explicá en tres puntos qué es una arquitectura hexagonal y cómo se separan dominio, aplicación e infraestructura.", "[]", '["dominio", "aplicación", "infraestructura"]'),
-             (category, "Formatos de imagen", "Compará JPG, PNG y RAW para conservar fotografías. Indicá una ventaja y una desventaja de cada formato.", "[]", '["jpg", "png", "raw"]'),
-             (category, "Comida simple", "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora.", "[]", '["arroz", "huevo", "tomate"]')])
-        connection.commit()
+    if _INITIALIZED_DB != DB:
+        with _DB_INITIALIZATION_LOCK:
+            if _INITIALIZED_DB != DB:
+                initialize_schema(connection)
+                _INITIALIZED_DB = DB
     return connection
+
+
+def initialize_schema(connection):
+    """Create or migrate the schema atomically across manager processes."""
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        connection.execute("CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL)")
+        connection.execute("""CREATE TABLE IF NOT EXISTS prompts(
+          id INTEGER PRIMARY KEY, category_id INTEGER NOT NULL REFERENCES categories(id),
+          name TEXT NOT NULL, prompt TEXT NOT NULL, expected_tools TEXT NOT NULL DEFAULT '[]',
+          expected_memories TEXT NOT NULL DEFAULT '[]', expected_context TEXT NOT NULL DEFAULT '[]',
+          expected_rag INTEGER NOT NULL DEFAULT 0, expected_terms TEXT NOT NULL DEFAULT '[]'
+        )""")
+        connection.execute("""CREATE TABLE IF NOT EXISTS executions(
+          id INTEGER PRIMARY KEY, prompt_id INTEGER NOT NULL REFERENCES prompts(id), created_at TEXT NOT NULL,
+          ada_message_id TEXT, status TEXT NOT NULL, response TEXT, model TEXT, input_tokens INTEGER,
+          output_tokens INTEGER, token_usage TEXT NOT NULL DEFAULT '[]', context_selection TEXT,
+          executed_tools TEXT NOT NULL DEFAULT '[]', evaluation TEXT
+        )""")
+        prompt_columns = {row[1] for row in connection.execute("PRAGMA table_info(prompts)")}
+        if "expected_terms" not in prompt_columns:
+            connection.execute("ALTER TABLE prompts ADD COLUMN expected_terms TEXT NOT NULL DEFAULT '[]'")
+        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["dominio", "aplicación", "infraestructura"]', "Arquitectura hexagonal"))
+        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["jpg", "png", "raw"]', "Formatos de imagen"))
+        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["arroz", "huevo", "tomate"]', "Comida simple"))
+        if connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
+            category = connection.execute("INSERT INTO categories(name) VALUES (?) RETURNING id", ("Smoke tests",)).fetchone()[0]
+            connection.executemany(
+                "INSERT INTO prompts(category_id,name,prompt,expected_tools,expected_terms) VALUES (?,?,?,?,?)",
+                [(category, "Arquitectura hexagonal", "Explicá en tres puntos qué es una arquitectura hexagonal y cómo se separan dominio, aplicación e infraestructura.", "[]", '["dominio", "aplicación", "infraestructura"]'),
+                 (category, "Formatos de imagen", "Compará JPG, PNG y RAW para conservar fotografías. Indicá una ventaja y una desventaja de cada formato.", "[]", '["jpg", "png", "raw"]'),
+                 (category, "Comida simple", "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora.", "[]", '["arroz", "huevo", "tomate"]')])
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
 
 
 def dumps(value):

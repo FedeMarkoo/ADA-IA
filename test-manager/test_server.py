@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 
 import server
 
@@ -21,6 +22,17 @@ class TestManagerPersistenceTest(unittest.TestCase):
         self.assertEqual(["Smoke tests"], [item[0] for item in categories])
         self.assertEqual(3, len(prompts))
         connection.close()
+
+    def test_database_initialization_is_safe_for_concurrent_requests(self):
+        def open_and_close(_):
+            """Read seeded data before closing a concurrently opened connection."""
+            connection = server.db()
+            category = connection.execute("SELECT name FROM categories").fetchone()
+            self.assertEqual("Smoke tests", category[0])
+            connection.close()
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(open_and_close, range(16)))
 
     def test_evaluation_flags_missing_tool_and_unsupported_rag(self):
         test = {
