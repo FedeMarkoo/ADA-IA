@@ -23,7 +23,7 @@ class CavemanPromptOptimizerTest {
     var optimized = new CavemanPromptOptimizer(true, 0).optimize(request);
 
     assertEquals(
-        "Relevant memories:\nusuaria trabaja como fotógrafa y community manager.\nprefiere respuestas cercanas, claras y profesionales.",
+        "Relevant memories:\nla usuaria trabaja como fotógrafa y community manager.\nprefiere respuestas cercanas, claras y profesionales.",
         optimized.messages().getFirst().content());
     assertEquals(MEMORY, request.messages().getFirst().content());
   }
@@ -52,6 +52,12 @@ class CavemanPromptOptimizerTest {
     var request = request(new LlmMessage(LlmMessageRole.SYSTEM, MEMORY, LlmContentComponent.MEMORIES));
 
     assertEquals(request, new CavemanPromptOptimizer(false, 0).optimize(request));
+  }
+
+  @Test
+  void rejectsNegativeMinimumCharacters() {
+    org.junit.jupiter.api.Assertions.assertThrows(
+        IllegalArgumentException.class, () -> new CavemanPromptOptimizer(true, -1));
   }
 
   private LlmRequest request(LlmMessage... messages) {

@@ -17,6 +17,9 @@ public class CavemanPromptOptimizer implements PromptOptimizer {
   private static final Pattern FILLER =
       Pattern.compile(
           "(?iu)(?<!\\p{L})(?:por favor,? ten en cuenta que|ten en cuenta que|es importante que|a continuación|a continuacion|simplemente|básicamente|basicamente|en general|please|simply|basically|in general|note that)(?!\\p{L})[,:]?\\s*");
+  private static final Pattern CODE_OR_DATA =
+      Pattern.compile(
+          "(?ims)(?:^|\\n)\\s*(?:select|insert|update|delete|create|alter|drop|with|def|class|import|from|return|#!/|bash\\b|sh\\b|python\\b|npm\\b|mvn\\b|curl\\b)|(?:=>|\\b(public|private|static|void|function)\\b)|^\\s*\\\"[^\\\"]+\\\"\\s*$|;\\s*$|<\\/?[A-Za-z][^>]*>");
 
   private final boolean enabled;
   private final int minimumCharacters;
@@ -24,6 +27,9 @@ public class CavemanPromptOptimizer implements PromptOptimizer {
   public CavemanPromptOptimizer(
       @Value("${ada.llm.prompt-optimization.enabled:true}") boolean enabled,
       @Value("${ada.llm.prompt-optimization.min-chars:120}") int minimumCharacters) {
+    if (minimumCharacters < 0) {
+      throw new IllegalArgumentException("Prompt optimization min-chars must be non-negative");
+    }
     this.enabled = enabled;
     this.minimumCharacters = minimumCharacters;
   }
@@ -60,7 +66,10 @@ public class CavemanPromptOptimizer implements PromptOptimizer {
   }
 
   private boolean containsStructuredBlock(String content) {
-    return content.contains("```") || content.contains("{") || content.contains("[");
+    return content.contains("```")
+        || content.contains("{")
+        || content.contains("[")
+        || CODE_OR_DATA.matcher(content).find();
   }
 
   private String compact(String content) {
