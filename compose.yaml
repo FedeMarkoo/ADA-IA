@@ -14,7 +14,8 @@ services:
       ADA_TELEGRAM_BOOTSTRAP_CHAT_ID: ${ADA_TELEGRAM_BOOTSTRAP_CHAT_ID:-}
       ADA_SECRET_MASTER_KEY: ${ADA_SECRET_MASTER_KEY:-}
       ADA_DEPLOYED_VERSION: ${ADA_VERSION:-latest}
-      ADA_MCP_WEB_SEARCH_URL: http://mcp-web-search:8000/mcp
+      ADA_MCP_WEB_SEARCH_URL: http://ada-mcps:8000/web-search
+      ADA_MCP_FILESYSTEM_URL: http://ada-mcps:8000/filesystem
       MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
     ports:
       - "127.0.0.1:8080:8080"
@@ -24,7 +25,7 @@ services:
     depends_on:
       litellm:
         condition: service_healthy
-      mcp-web-search:
+      ada-mcps:
         condition: service_healthy
 
   litellm:
@@ -73,11 +74,16 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command: ["ollama pull $${OLLAMA_ROUTING_MODEL:-llama3.2:1b} && ollama pull $${OLLAMA_MODEL:-qwen2.5:7b}"]
 
-  mcp-web-search:
-    build: ./mcp/web-search
+  ada-mcps:
+    build: ./mcp
     restart: unless-stopped
+    environment:
+      ADA_FILESYSTEM_ALLOWED_ROOTS: /data:/gdrive
+    volumes:
+      - ${ADA_DATA_DIR:-../ada-data}:/data:ro
+      - ${ADA_GDRIVE_PATH:?ADA_GDRIVE_PATH must point to the host Google Drive mount}:/gdrive:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/mcp', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/filesystem', timeout=2)"]
       interval: 10s
       timeout: 5s
       retries: 5
