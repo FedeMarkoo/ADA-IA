@@ -28,6 +28,20 @@ services:
       ada-mcps:
         condition: service_healthy
 
+  ada-test-manager:
+    build: ./test-manager
+    restart: unless-stopped
+    environment:
+      ADA_URL: http://ada:8080
+      DB_PATH: /data/test-manager.sqlite
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - ${ADA_TEST_MANAGER_DATA_DIR:-../ada-test-manager-data}:/data
+    depends_on:
+      ada:
+        condition: service_started
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     restart: unless-stopped
