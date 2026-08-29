@@ -135,7 +135,11 @@ class Handler(BaseHTTPRequestHandler):
                 result = run_ada(test["prompt"]); evaluation = evaluate(test, result)
                 cur = connection.execute("INSERT INTO executions(prompt_id,created_at,ada_message_id,status,response,model,input_tokens,output_tokens,token_usage,context_selection,executed_tools,evaluation) VALUES (?,datetime('now'),?,?,?,?,?,?,?,?,?,?)", (prompt_id, result.get("messageId"), "completed", result.get("content"), result.get("model"), result.get("inputTokens"), result.get("outputTokens"), dumps(result.get("tokenUsage")), json.dumps(result.get("contextSelection"), ensure_ascii=False), dumps(result.get("executedTools")), json.dumps(evaluation, ensure_ascii=False)))
                 connection.commit(); return self.send_json({"id": cur.lastrowid, "result": result, "evaluation": evaluation}, 201)
-            except Exception as error: return self.send_json({"error": str(error)}, 502)
+            except Exception as error:
+                evaluation = json.dumps({"score": 0, "verdict": "fail", "answer_quality": "execution_error", "findings": [str(error)], "rationale": "La ejecución no terminó correctamente."}, ensure_ascii=False)
+                connection.execute("INSERT INTO executions(prompt_id,created_at,status,response,token_usage,executed_tools,evaluation) VALUES (?,datetime('now'),?,?,?,?,?)", (prompt_id, "failed", str(error), "[]", "[]", evaluation))
+                connection.commit()
+                return self.send_json({"error": str(error)}, 502)
         self.send_json({"error": "not_found"}, 404)
 
     def log_message(self, *_): pass
