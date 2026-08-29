@@ -37,7 +37,9 @@ class SqliteRagDocumentStoreTest {
       assertThat(store.search("conversation-1", "local-first", 0)).isEmpty();
 
       jdbc.update("UPDATE rag_documents SET content = ? WHERE id = ?", "ADA is private", firstId);
-      assertThat(store.search("conversation-1", "local-first", 5)).isEmpty();
+      assertThat(store.search("conversation-1", "local-first", 5))
+          .extracting(RagDocument::source)
+          .containsExactly("notes.md");
       assertThat(store.search("conversation-1", "private", 5)).hasSize(1);
 
       jdbc.update("DELETE FROM rag_documents WHERE id = ?", secondId);
