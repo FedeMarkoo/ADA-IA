@@ -16,12 +16,12 @@ public class SqliteRagDocumentStore implements RagDocumentStore {
 
   @Override
   public long save(String conversationId, String source, String content) {
-    jdbc.update(
-        "INSERT INTO rag_documents(conversation_id, source, content) VALUES (?, ?, ?)",
+    return jdbc.queryForObject(
+        "INSERT INTO rag_documents(conversation_id, source, content) VALUES (?, ?, ?) RETURNING id",
+        Long.class,
         conversationId,
         source,
         content);
-    return jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
   }
 
   @Override
