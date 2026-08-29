@@ -86,6 +86,11 @@ dos conversaciones. El evaluador LLM devuelve un `subject` estable para
 reemplazar una preferencia existente; si no lo devuelve, se usa el contenido
 completo normalizado, nunca solo la primera palabra.
 
+La capa RAG vive junto a tools y memories como un `ContextItem` independiente.
+`RagManager` recupera documentos mediante el puerto `RagDocumentStore`; el
+adaptador actual usa SQLite FTS5, filtra por `conversationId` y aplica límites
+de cantidad y caracteres antes de agregar conocimiento al contexto.
+
 Las invocaciones de los `ContextItem` se miden transversalmente con
 `ContextMetricsAspect`: se registra un contador de invocaciones y un `Timer` de
 duración por componente.

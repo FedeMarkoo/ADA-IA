@@ -9,6 +9,8 @@ class McpFilesystemListFilesToolProviderTest {
   void publishesReadOnlyFilesystemListContract() {
     var tool = new McpFilesystemListFilesToolProvider().tools().getFirst();
     assertEquals("filesystem.list_files", tool.name());
-    assertEquals("{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"recursive\":{\"type\":\"boolean\",\"default\":false}},\"required\":[\"path\"],\"additionalProperties\":false}", tool.inputSchema());
+    assertEquals(
+        "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"recursive\":{\"type\":\"boolean\",\"default\":false}},\"required\":[\"path\"],\"additionalProperties\":false}",
+        tool.inputSchema());
   }
 }
