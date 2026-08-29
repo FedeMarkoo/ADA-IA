@@ -25,6 +25,21 @@ if [[ ! -f "${env_file}" ]]; then
     exit 1
 fi
 
+# Docker prepara los datos con el UID/GID del contenedor. El deployer necesita
+# escribir sólo los backups, por lo que se habilita acceso grupal acotado.
+configured_data_dir="$(awk -F= '$1 == "ADA_DATA_DIR" {value=$2} END {print value}' "${env_file}")"
+configured_data_dir="${configured_data_dir:-../ada-data}"
+if [[ "${configured_data_dir}" = /* ]]; then
+    data_dir="${configured_data_dir}"
+elif [[ "${configured_data_dir}" == "~" || "${configured_data_dir}" == "~/"* ]]; then
+    data_dir="${ada_home}${configured_data_dir#\~}"
+else
+    data_dir="${project_dir}/${configured_data_dir}"
+fi
+mkdir -p "${data_dir}/backups"
+chgrp 10001 "${data_dir}/backups"
+chmod 0770 "${data_dir}/backups"
+
 if ! id -nG "${ada_user}" | tr ' ' '\n' | grep -qx docker; then
     echo "El usuario ${ada_user} no pertenece al grupo docker. Añádelo con: sudo usermod -aG docker ${ada_user}" >&2
     exit 1
