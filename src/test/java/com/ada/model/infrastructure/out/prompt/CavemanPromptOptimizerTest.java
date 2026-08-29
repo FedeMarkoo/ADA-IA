@@ -64,8 +64,14 @@ class CavemanPromptOptimizerTest {
 
   @Test
   void preservesUndelimitedPythonAndEscapedJson() {
-    var python = new LlmMessage(LlmMessageRole.SYSTEM, "if value == 1:\n  result = value", LlmContentComponent.MEMORIES);
-    var json = new LlmMessage(LlmMessageRole.SYSTEM, "\\\"line\\\\nvalue\\\"", LlmContentComponent.MEMORIES);
+    var python =
+        new LlmMessage(
+            LlmMessageRole.SYSTEM,
+            "if value == 1:\n  result = value",
+            LlmContentComponent.MEMORIES);
+    var json =
+        new LlmMessage(
+            LlmMessageRole.SYSTEM, "\\\"line\\\\nvalue\\\"", LlmContentComponent.MEMORIES);
 
     var optimized = new CavemanPromptOptimizer(true, 0).optimize(request(python, json));
 
