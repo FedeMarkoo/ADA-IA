@@ -58,8 +58,9 @@ class SqliteRagDocumentStoreTest {
       var trimmed = line.trim();
       statement.append(line).append('\n');
       if (trimmed.startsWith("CREATE TRIGGER")) triggerDepth = 1;
-      if (triggerDepth > 0 && trimmed.equals("END;")) triggerDepth = 0;
-      if (triggerDepth == 0 && trimmed.endsWith(";")) {
+      if (triggerDepth > 0 && (trimmed.equals("END;") || trimmed.equals("END;;"))) triggerDepth = 0;
+      if (triggerDepth == 0 && (trimmed.endsWith(";") || trimmed.endsWith(";;"))) {
+        if (trimmed.endsWith(";;")) statement.setLength(statement.length() - 1);
         jdbc.execute(statement.toString());
         statement.setLength(0);
       }

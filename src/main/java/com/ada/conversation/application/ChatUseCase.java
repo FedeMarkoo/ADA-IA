@@ -66,6 +66,7 @@ public class ChatUseCase {
         var req =
             metrics.measureStage("context_creation", () -> factory.create(r, selection.model()));
         var completion = invoke(id, req, tokenUsage);
+        var executedTools = new ArrayList<String>();
         int rounds = 0;
         while (!completion.toolCalls().isEmpty()) {
           if (rounds++ >= 8) throw new IllegalStateException("Maximum tool rounds exceeded");
@@ -79,6 +80,7 @@ public class ChatUseCase {
           for (var call : completion.toolCalls()) {
             tracker.update(id, new MessageExecutionState.InvokingTool(call.name()));
             var result = metrics.measureStage("tool_invoke", () -> toolManager.execute(call));
+            executedTools.add(call.name());
             messages.add(
                 new LlmMessage(
                     LlmMessageRole.TOOL,
@@ -105,7 +107,9 @@ public class ChatUseCase {
                 completion.model(),
                 completion.inputTokens(),
                 completion.outputTokens(),
-                aggregateTokenUsage(tokenUsage));
+                aggregateTokenUsage(tokenUsage),
+                req.metadata().contextSelection(),
+                executedTools);
         memoryManager.review(r, result.content());
         results.save(result);
         tracker.update(id, new MessageExecutionState.Completed());

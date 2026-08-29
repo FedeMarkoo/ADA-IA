@@ -43,3 +43,26 @@ El despliegue local de LiteLLM y el layout de datos están documentados en
 
 El smoke runner HTTP y el dashboard local de Grafana están documentados en
 [Monitoreo local](monitoring/README.md).
+
+## Inicio automático en Linux
+
+El autodeployer mantiene levantado el stack de ADA, comprueba nuevas imágenes
+cada cinco minutos y se reinicia si el proceso falla. Para instalarlo como
+servicio `systemd` (se ejecuta con el usuario actual), configura primero
+`deploy/.env` y asegúrate de que ese usuario pueda ejecutar Docker:
+
+```bash
+cp deploy/.env.example deploy/.env
+# Edita deploy/.env y completa los secretos y rutas locales
+sudo usermod -aG docker "$USER"
+newgrp docker
+./scripts/deployment/install-autodeployer.sh
+```
+
+El instalador habilita `ada-deployer.service` para cada arranque y lo inicia
+en el momento. Para revisar el estado y los logs:
+
+```bash
+systemctl status ada-deployer.service
+journalctl -u ada-deployer.service -f
+```

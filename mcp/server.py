@@ -24,6 +24,29 @@ SERVERS = {
 }
 
 
+def read_chunked_body(stream):
+    chunks = []
+    while True:
+        line = stream.readline()
+        if not line:
+            raise ValueError("unexpected EOF in chunk size")
+        size = int(line.split(b";", 1)[0], 16)
+        if size == 0:
+            while True:
+                trailer = stream.readline()
+                if not trailer:
+                    raise ValueError("unexpected EOF in chunk trailers")
+                if trailer in (b"\r\n", b"\n"):
+                    return b"".join(chunks)
+        chunk = stream.read(size)
+        if len(chunk) != size:
+            raise ValueError("unexpected EOF in chunk data")
+        chunks.append(chunk)
+        terminator = stream.readline()
+        if terminator not in (b"\r\n", b"\n"):
+            raise ValueError("invalid chunk terminator")
+
+
 def call_tool(path, tool_name, arguments):
     if path == "/filesystem":
         known = {tool["name"] for tool in filesystem.TOOLS}
@@ -58,7 +81,11 @@ class McpGatewayHandler(BaseHTTPRequestHandler):
         if config is None:
             self.send_error(404)
             return
-        request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            body = read_chunked_body(self.rfile)
+        else:
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        request = json.loads(body)
         request_id = request.get("id")
         if request_id is None:
             self.send_response(202)

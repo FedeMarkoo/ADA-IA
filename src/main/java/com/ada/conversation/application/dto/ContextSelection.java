@@ -12,9 +12,10 @@ public record ContextSelection(
 
   public static ContextSelection all(List<LlmTool> availableTools, List<String> availableMemories) {
     return new ContextSelection(
-        List.of("web_search"),
-        availableTools.stream().map(LlmTool::name).toList(),
-        availableMemories,
-        false);
+        List.of(), availableTools.stream().map(LlmTool::name).toList(), availableMemories, false);
+  }
+
+  public static ContextSelection none() {
+    return new ContextSelection(List.of(), List.of(), List.of(), false);
   }
 }
