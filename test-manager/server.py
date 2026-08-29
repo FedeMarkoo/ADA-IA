@@ -2,6 +2,7 @@
 import json
 import os
 import sqlite3
+import threading
 import time
 import urllib.request
 import uuid
@@ -13,13 +14,26 @@ ADA_URL = os.environ.get("ADA_URL", "http://ada:8080").rstrip("/")
 ADA_TIMEOUT_SECONDS = int(os.environ.get("ADA_TIMEOUT_SECONDS", "900"))
 ADA_POLL_SECONDS = float(os.environ.get("ADA_POLL_SECONDS", "2"))
 STATIC = Path(__file__).parent / "static"
+_DB_INITIALIZATION_LOCK = threading.Lock()
+_INITIALIZED_DB = None
 
 
 def db():
-    connection = sqlite3.connect(DB)
+    global _INITIALIZED_DB
+    connection = sqlite3.connect(DB, timeout=30)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 30000")
     connection.execute("PRAGMA journal_mode=WAL")
+    if _INITIALIZED_DB != DB:
+        with _DB_INITIALIZATION_LOCK:
+            if _INITIALIZED_DB != DB:
+                initialize_schema(connection)
+                _INITIALIZED_DB = DB
+    return connection
+
+
+def initialize_schema(connection):
     connection.executescript("""
       CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL);
       CREATE TABLE IF NOT EXISTS prompts(
@@ -48,8 +62,7 @@ def db():
             [(category, "Arquitectura hexagonal", "Explicá en tres puntos qué es una arquitectura hexagonal y cómo se separan dominio, aplicación e infraestructura.", "[]", '["dominio", "aplicación", "infraestructura"]'),
              (category, "Formatos de imagen", "Compará JPG, PNG y RAW para conservar fotografías. Indicá una ventaja y una desventaja de cada formato.", "[]", '["jpg", "png", "raw"]'),
              (category, "Comida simple", "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora.", "[]", '["arroz", "huevo", "tomate"]')])
-        connection.commit()
-    return connection
+    connection.commit()
 
 
 def dumps(value):
