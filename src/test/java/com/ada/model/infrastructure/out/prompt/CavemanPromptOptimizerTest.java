@@ -18,7 +18,8 @@ class CavemanPromptOptimizerTest {
 
   @Test
   void compactsGeneratedMemoryContextAndKeepsFacts() {
-    var request = request(new LlmMessage(LlmMessageRole.SYSTEM, MEMORY, LlmContentComponent.MEMORIES));
+    var request =
+        request(new LlmMessage(LlmMessageRole.SYSTEM, MEMORY, LlmContentComponent.MEMORIES));
 
     var optimized = new CavemanPromptOptimizer(true, 0).optimize(request);
 

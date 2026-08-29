@@ -68,10 +68,14 @@ public class McpFilesystemReadFileToolExecutor implements ToolExecutor {
   private JsonNode post(String method, Object params) {
     var body =
         Map.of(
-            "jsonrpc", "2.0",
-            "id", UUID.randomUUID().toString(),
-            "method", method,
-            "params", params);
+            "jsonrpc",
+            "2.0",
+            "id",
+            UUID.randomUUID().toString(),
+            "method",
+            method,
+            "params",
+            params);
     var response =
         client
             .post()
