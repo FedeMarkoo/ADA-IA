@@ -56,7 +56,11 @@ public class CavemanPromptOptimizer implements PromptOptimizer {
     return optimized.equals(content)
         ? message
         : new LlmMessage(
-            message.role(), optimized, message.component(), message.toolCalls(), message.toolCallId());
+            message.role(),
+            optimized,
+            message.component(),
+            message.toolCalls(),
+            message.toolCallId());
   }
 
   private boolean isCompressible(LlmMessage message) {
@@ -75,9 +79,10 @@ public class CavemanPromptOptimizer implements PromptOptimizer {
   private String compact(String content) {
     var normalized = content.replace("\r\n", "\n").replace('\r', '\n');
     normalized = MULTIPLE_SPACES.matcher(normalized).replaceAll(" ");
-    normalized = MULTIPLE_BLANK_LINES.matcher(normalized).replaceAll("\\n\\n");
+    normalized = MULTIPLE_BLANK_LINES.matcher(normalized).replaceAll("\n\n");
     normalized = FILLER.matcher(normalized).replaceAll("");
-    return normalized.lines()
+    return normalized
+        .lines()
         .map(String::stripTrailing)
         .filter(line -> !line.isBlank())
         .reduce((left, right) -> left + "\n" + right)

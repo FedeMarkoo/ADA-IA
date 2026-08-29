@@ -48,17 +48,38 @@ public class McpFilesystemReadFileToolExecutor implements ToolExecutor {
   private ToolExecutionResult executeUnmeasured(LlmToolCall call) {
     try {
       var arguments = objectMapper.readTree(call.arguments());
-      post("initialize", Map.of("protocolVersion", "2024-11-05", "capabilities", Map.of(), "clientInfo", Map.of("name", "ada", "version", "1.0.0")));
+      post(
+          "initialize",
+          Map.of(
+              "protocolVersion",
+              "2024-11-05",
+              "capabilities",
+              Map.of(),
+              "clientInfo",
+              Map.of("name", "ada", "version", "1.0.0")));
       var result = post("tools/call", Map.of("name", call.name(), "arguments", arguments));
-      return new ToolExecutionResult(call.id(), call.name(), result.path("content").path(0).path("text").asText("{}"));
+      return new ToolExecutionResult(
+          call.id(), call.name(), result.path("content").path(0).path("text").asText("{}"));
     } catch (JsonProcessingException | RestClientException error) {
       throw new IllegalStateException("MCP filesystem read_file failed", error);
     }
   }
 
   private JsonNode post(String method, Object params) {
-    var body = Map.of("jsonrpc", "2.0", "id", UUID.randomUUID().toString(), "method", method, "params", params);
-    var response = client.post().uri(endpoint).contentType(MediaType.APPLICATION_JSON).body(body).retrieve().body(JsonNode.class);
+    var body =
+        Map.of(
+            "jsonrpc", "2.0",
+            "id", UUID.randomUUID().toString(),
+            "method", method,
+            "params", params);
+    var response =
+        client
+            .post()
+            .uri(endpoint)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body)
+            .retrieve()
+            .body(JsonNode.class);
     if (response == null || response.has("error")) {
       throw new IllegalStateException("Invalid MCP filesystem response");
     }
