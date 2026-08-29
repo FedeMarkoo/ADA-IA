@@ -25,8 +25,10 @@ class TestManagerPersistenceTest(unittest.TestCase):
 
     def test_database_initialization_is_safe_for_concurrent_requests(self):
         def open_and_close(_):
+            """Read seeded data before closing a concurrently opened connection."""
             connection = server.db()
-            connection.execute("SELECT 1").fetchone()
+            category = connection.execute("SELECT name FROM categories").fetchone()
+            self.assertEqual("Smoke tests", category[0])
             connection.close()
 
         with ThreadPoolExecutor(max_workers=8) as executor:
