@@ -29,6 +29,9 @@ ada:
     api-key: ${ADA_LLM_API_KEY:}
     default-model: ${ADA_LLM_DEFAULT_MODEL:ollama/qwen2.5:7b}
     routing-model: ${ADA_LLM_ROUTING_MODEL:ollama/llama3.2:1b}
+    prompt-optimization:
+      enabled: ${ADA_LLM_PROMPT_OPTIMIZATION_ENABLED:true}
+      min-chars: ${ADA_LLM_PROMPT_OPTIMIZATION_MIN_CHARS:120}
   mcp:
     web-search-url: ${ADA_MCP_WEB_SEARCH_URL:http://127.0.0.1:8000/web-search}
     filesystem-url: ${ADA_MCP_FILESYSTEM_URL:http://127.0.0.1:8000/filesystem}
