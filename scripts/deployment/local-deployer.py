@@ -157,7 +157,11 @@ def main():
     args = parser.parse_args()
     args.compose = args.compose.resolve()
     args.env_file = args.env_file.resolve()
-    lock_path = args.env_file.parent / ".deploy.lock"
+    configured_data_dir = load_env_file(args.env_file).get("ADA_DATA_DIR", "../ada-data")
+    lock_path = Path(configured_data_dir).expanduser()
+    if not lock_path.is_absolute():
+        lock_path = args.env_file.parent / lock_path
+    lock_path = lock_path.resolve() / ".deploy.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("w") as lock:
         try:

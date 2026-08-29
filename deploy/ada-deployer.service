@@ -6,9 +6,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=@ADA_USER@
-Group=@ADA_GROUP@
-SupplementaryGroups=docker 10001
+User=10001
+Group=10001
+SupplementaryGroups=docker
 WorkingDirectory=@ADA_DIR@
 Environment=HOME=@ADA_HOME@
 Environment=PYTHONUNBUFFERED=1
