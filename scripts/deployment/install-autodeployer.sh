@@ -31,6 +31,8 @@ configured_data_dir="$(awk -F= '$1 == "ADA_DATA_DIR" {value=$2} END {print value
 configured_data_dir="${configured_data_dir:-../ada-data}"
 if [[ "${configured_data_dir}" = /* ]]; then
     data_dir="${configured_data_dir}"
+elif [[ "${configured_data_dir}" == "~" || "${configured_data_dir}" == "~/"* ]]; then
+    data_dir="${ada_home}${configured_data_dir#\~}"
 else
     data_dir="${project_dir}/${configured_data_dir}"
 fi
