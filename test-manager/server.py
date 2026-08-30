@@ -48,6 +48,23 @@ CALENDAR_PROMPTS = (
     ),
 )
 
+WEATHER_PROMPTS = (
+    (
+        "Clima actual",
+        "¿Cómo está el clima ahora en mi ubicación? Respondé de forma breve y natural, indicando la temperatura y si hay lluvias.",
+        ["weather_current"],
+        ["weather_current"],
+        ["clima", "temperatura"],
+    ),
+    (
+        "Pronóstico de mañana",
+        "¿Cómo va a estar el clima mañana? Decime si será soleado, nublado o lluvioso, la mínima y máxima, y si habrá lluvias.",
+        ["weather_current"],
+        ["weather_current"],
+        ["mañana"],
+    ),
+)
+
 
 def db():
     """Open a configured SQLite connection and initialize its schema once."""
@@ -109,6 +126,28 @@ def initialize_schema(connection):
                     ) VALUES (?, ?, ?, ?, ?, ?)""",
                     (
                         calendar_category_id,
+                        name,
+                        prompt,
+                        dumps(expected_tools),
+                        dumps(expected_context),
+                        dumps(expected_terms),
+                    ),
+                )
+        weather_category = connection.execute("SELECT id FROM categories WHERE name = ?", ("Clima",)).fetchone()
+        if weather_category is None:
+            weather_category_id = connection.execute(
+                "INSERT INTO categories(name) VALUES (?) RETURNING id", ("Clima",)
+            ).fetchone()[0]
+        else:
+            weather_category_id = weather_category[0]
+        for name, prompt, expected_tools, expected_context, expected_terms in WEATHER_PROMPTS:
+            if connection.execute("SELECT 1 FROM prompts WHERE name = ?", (name,)).fetchone() is None:
+                connection.execute(
+                    """INSERT INTO prompts(
+                        category_id, name, prompt, expected_tools, expected_context, expected_terms
+                    ) VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        weather_category_id,
                         name,
                         prompt,
                         dumps(expected_tools),
