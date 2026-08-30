@@ -2,7 +2,14 @@ $ErrorActionPreference = "Stop"
 
 $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $ProjectDir
-$DataDir = Join-Path $ProjectDir "..\ada-data"
+$ConfiguredDataDir = $env:ADA_DATA_DIR
+if ([string]::IsNullOrWhiteSpace($ConfiguredDataDir)) {
+    $ConfiguredDataDir = "..\ada-data"
+}
+if (-not [System.IO.Path]::IsPathRooted($ConfiguredDataDir)) {
+    $ConfiguredDataDir = Join-Path $ProjectDir $ConfiguredDataDir
+}
+$DataDir = [System.IO.Path]::GetFullPath($ConfiguredDataDir)
 $EnvFile = Join-Path $DataDir ".env"
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {

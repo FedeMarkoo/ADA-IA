@@ -30,8 +30,15 @@ OLLAMA_MODEL=llama3.2:1b
 ADA_LLM_DEFAULT_MODEL=ollama/llama3.2:1b
 ```
 
-En un clon nuevo, copiar `deploy/.env.example` a `../ada-data/.env` y ejecutar
-`docker compose --env-file ../ada-data/.env up -d`. Compose espera a que Ollama esté
+En un clon nuevo:
+
+```bash
+mkdir -p ../ada-data
+cp deploy/.env.example ../ada-data/.env
+docker compose --env-file ../ada-data/.env up -d
+```
+
+Compose espera a que Ollama esté
 saludable, descarga el modelo configurado y recién después inicia LiteLLM y
 ADA. El puerto de Ollama queda limitado a `127.0.0.1:11434` para diagnóstico
 local; LiteLLM lo consume por la red interna de Compose.

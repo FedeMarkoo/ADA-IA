@@ -90,14 +90,17 @@ Las URLs locales son ADA `http://localhost:8080`, Test Manager
 docker compose --env-file ../ada-data/.env down
 ```
 
+Si definís `ADA_DATA_DIR`, reemplazá `../ada-data` por esa ruta en los
+comandos y en la ubicación del archivo `.env`.
+
 En Windows, ejecutar el mismo comando desde PowerShell.
 
 ## Inicio automático en Linux
 
 El autodeployer mantiene levantado el stack de ADA, comprueba nuevas imágenes
 cada cinco minutos y se reinicia si el proceso falla. Para instalarlo como
-servicio `systemd`, configura primero `../ada-data/.env`:
-`../ada-data/.env` y asegúrate de que el servicio pueda ejecutar Docker:
+servicio `systemd`. Configura primero `../ada-data/.env` y asegúrate de que el
+servicio pueda ejecutar Docker:
 
 ```bash
 # Edita ../ada-data/.env y completa los secretos y rutas locales

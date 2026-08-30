@@ -5,12 +5,11 @@ project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${project_dir}"
 
 data_dir="${ADA_DATA_DIR:-${project_dir}/../ada-data}"
-data_dir="$(cd -- "${data_dir}" 2>/dev/null && pwd -P || true)"
-if [[ -z "${data_dir}" ]]; then
-    data_dir="${project_dir}/../ada-data"
-    mkdir -p "${data_dir}"
-    data_dir="$(cd -- "${data_dir}" && pwd -P)"
+if [[ "${data_dir}" != /* ]]; then
+    data_dir="${project_dir}/${data_dir}"
 fi
+mkdir -p "${data_dir}"
+data_dir="$(cd -- "${data_dir}" && pwd -P)"
 env_file="${data_dir}/.env"
 
 command -v docker >/dev/null || {
