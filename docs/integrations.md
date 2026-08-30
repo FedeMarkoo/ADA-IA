@@ -65,6 +65,11 @@ expone `web_search` y `/filesystem` expone las tools de filesystem. ADA publica
 esas tools mediante sus providers y las ejecuta mediante sus adapters Java.
 
 Compose levanta los MCPs en la red interna mediante el servicio `ada-mcps`.
+En el despliegue estándar, Compose consume la imagen publicada usando
+`ADA_MCP_IMAGE` y `ADA_MCP_VERSION`; el autodeployer la descarga junto con la
+imagen de ADA y redeploya el stack cuando cambia. El workflow de MCP publica
+automáticamente los cambios de `mcp/**` realizados en `main` y también publica
+las versiones asociadas a releases.
 No se publica el puerto al host. Para agregar otra tool, se incorpora al
 gateway y al mismo contexto `mcp/`, junto con su adapter correspondiente en
 `infrastructure.out`.

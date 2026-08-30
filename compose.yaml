@@ -105,7 +105,7 @@ services:
     command: ["ollama pull $${OLLAMA_ROUTING_MODEL:-llama3.2:1b} && ollama pull $${OLLAMA_MODEL:-qwen2.5:7b}"]
 
   ada-mcps:
-    build: ./mcp
+    image: ${ADA_MCP_IMAGE:-ghcr.io/fedemarkoo/ada-mcps}:${ADA_MCP_VERSION:-latest}
     restart: unless-stopped
     environment:
       ADA_FILESYSTEM_ALLOWED_ROOTS: /data:/gdrive
