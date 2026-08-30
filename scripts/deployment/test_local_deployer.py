@@ -15,6 +15,20 @@ SPEC.loader.exec_module(DEPLOYER)
 
 
 class LocalDeployerTest(unittest.TestCase):
+    def test_data_dir_matches_compose_relative_path(self):
+        args = type(
+            "Args",
+            (),
+            {
+                "compose": Path("/opt/ada/compose.yaml"),
+                "env_file": Path("/opt/ada/../ada-data/.env"),
+            },
+        )()
+
+        data_dir = DEPLOYER.resolve_data_dir(args, {"ADA_DATA_DIR": "../ada-data"})
+
+        self.assertEqual(data_dir, Path("/opt/ada-data").resolve())
+
     def test_image_id_inspects_configured_image_tag(self):
         result = subprocess.CompletedProcess([], 0, "sha256:abc\n", "")
         with patch.object(DEPLOYER.subprocess, "run", return_value=result) as run:

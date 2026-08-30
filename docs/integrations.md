@@ -38,6 +38,11 @@ cp deploy/.env.example ../ada-data/.env
 docker compose --env-file ../ada-data/.env up -d
 ```
 
+El autodeployer usa la misma raíz del repositorio y recibe la ruta absoluta a
+`../ada-data/.env` al instalar el servicio. No debe iniciarse `systemd` desde
+otra carpeta ni depender de un `.env` del directorio personal: Compose y el
+deployer deben leer siempre el archivo persistente junto a las bases.
+
 Compose espera a que Ollama esté
 saludable, descarga el modelo configurado y recién después inicia LiteLLM y
 ADA. El puerto de Ollama queda limitado a `127.0.0.1:11434` para diagnóstico

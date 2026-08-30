@@ -22,6 +22,12 @@ chmod 600 ../ada-data/.env
 Compose no falle por variables obligatorias. Cambiá esos valores antes de un
 entorno compartido o productivo.
 
+El autodeployer recibe rutas absolutas al instalarse: el repositorio es la
+fuente de Compose y `../ada-data/.env` es siempre la configuración persistente.
+Así no depende del directorio desde el que se ejecute `systemd` ni de variables
+del shell del usuario. Si se usa `ADA_DATA_DIR`, debe configurarse de forma
+consistente en el `.env` antes de instalar el servicio.
+
 ## Linux
 
 ```bash
