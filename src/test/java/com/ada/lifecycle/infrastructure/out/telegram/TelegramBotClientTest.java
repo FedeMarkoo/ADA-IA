@@ -16,9 +16,7 @@ class TelegramBotClientTest {
     var builder = RestClient.builder();
     var server = MockRestServiceServer.bindTo(builder).build();
     var client = new TelegramBotClient(builder, new ObjectMapper());
-    server
-        .expect(anything())
-        .andRespond(withSuccess("{\"ok\":false}", MediaType.APPLICATION_JSON));
+    server.expect(anything()).andRespond(withSuccess("{\"ok\":false}", MediaType.APPLICATION_JSON));
 
     assertThatThrownBy(() -> client.sendMessage("token", "chat", "mensaje"))
         .isInstanceOf(IllegalStateException.class)
