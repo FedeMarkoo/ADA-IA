@@ -30,16 +30,20 @@ OLLAMA_MODEL=llama3.2:1b
 ADA_LLM_DEFAULT_MODEL=ollama/llama3.2:1b
 ```
 
-En un clon nuevo:
+En un clon nuevo, calculá la carpeta persistente desde la raíz del repositorio
+y pasala explícitamente a Compose:
 
 ```bash
-mkdir -p ../ada-data
-cp deploy/.env.example ../ada-data/.env
-docker compose --env-file ../ada-data/.env up -d
+repo_dir="$(pwd -P)"
+data_dir="$(realpath -m "${repo_dir}/../ada-data")"
+mkdir -p "${data_dir}"
+cp deploy/.env.example "${data_dir}/.env"
+docker compose --project-directory "${repo_dir}" \
+  --env-file "${data_dir}/.env" up -d
 ```
 
 El autodeployer usa la misma raíz del repositorio y recibe la ruta absoluta a
-`../ada-data/.env` al instalar el servicio. No debe iniciarse `systemd` desde
+`${data_dir}/.env` al instalar el servicio. No debe iniciarse `systemd` desde
 otra carpeta ni depender de un `.env` del directorio personal: Compose y el
 deployer deben leer siempre el archivo persistente junto a las bases.
 
