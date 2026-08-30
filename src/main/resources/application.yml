@@ -46,17 +46,6 @@ ada:
     enabled: ${ADA_RAG_ENABLED:true}
     top-k: ${ADA_RAG_TOP_K:5}
     max-context-characters: ${ADA_RAG_MAX_CONTEXT_CHARACTERS:6000}
-  autonomy:
-    scheduler:
-      poll-ms: ${ADA_AUTONOMY_SCHEDULER_POLL_MS:30000}
-    weather:
-      enabled: ${ADA_AUTONOMY_WEATHER_ENABLED:false}
-      timezone: ${ADA_AUTONOMY_WEATHER_TIMEZONE:America/Argentina/Buenos_Aires}
-      cron: ${ADA_AUTONOMY_WEATHER_CRON:0 0 8 * * *}
-      location: ${ADA_AUTONOMY_WEATHER_LOCATION:}
-      conversation-id: ${ADA_AUTONOMY_WEATHER_CONVERSATION_ID:autonomy-weather}
-      prompt: ${ADA_AUTONOMY_WEATHER_PROMPT:}
-
 management:
   server:
     address: 127.0.0.1

@@ -2,6 +2,9 @@ package com.ada.autonomy.infrastructure.in;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
+import java.util.List;
 
 import com.ada.autonomy.application.dto.ScheduledTrigger;
 import com.ada.autonomy.application.port.out.ScheduledTriggerStore;
@@ -28,5 +31,15 @@ class ScheduledTriggerSchedulerTest {
     verify(chat).execute(any());
     verify(sender).send("Buen día");
     verify(store).markExecuted(7, now, Instant.parse("2026-08-31T08:00:00Z"));
+  }
+
+  @Test
+  void doesNothingWhenThereAreNoDueTriggers() {
+    org.mockito.Mockito.when(store.findDue(any())).thenReturn(List.of());
+
+    new ScheduledTriggerScheduler(store, chat, sender).runDueTriggers();
+
+    verify(store).findDue(any());
+    verifyNoInteractions(chat, sender);
   }
 }

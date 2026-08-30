@@ -20,7 +20,7 @@ public class ScheduledTriggerScheduler {
   private final LifecycleMessageSender messageSender;
   private final Clock clock = Clock.systemUTC();
 
-  @Scheduled(fixedDelayString = "${ada.autonomy.scheduler.poll-ms:30000}")
+  @Scheduled(fixedDelay = 1000)
   public void runDueTriggers() {
     var now = Instant.now(clock);
     for (var trigger : store.findDue(now)) run(trigger, now);

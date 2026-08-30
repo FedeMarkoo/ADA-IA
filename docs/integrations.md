@@ -114,18 +114,15 @@ El scheduler consulta los disparadores periódicamente y ejecuta su prompt por
 el mismo caso de uso que una conversación HTTP o Telegram; la respuesta se
 envía por el canal de salida configurado.
 
-La programación inicial de clima se habilita con:
-
-```text
-ADA_AUTONOMY_WEATHER_ENABLED=true
-ADA_AUTONOMY_WEATHER_LOCATION=Buenos Aires, Argentina
-ADA_AUTONOMY_WEATHER_TIMEZONE=America/Argentina/Buenos_Aires
-ADA_AUTONOMY_WEATHER_CRON=0 0 8 * * *
-```
-
+El scheduler despierta cada segundo y consulta un índice de SQLite por las filas
+vencidas; si no hay ninguna, no ejecuta el modelo ni realiza llamadas externas.
 El horario usa la sintaxis cron de Spring, con seis campos incluyendo los
-segundos. La consulta de clima utiliza el MCP de búsqueda web y se entrega por
-Telegram cuando Telegram está habilitado.
+segundos. La programación, la zona horaria y el prompt viven en la tabla
+`scheduled_triggers`, no en variables de entorno.
+
+Para programar el clima, el prompt debe pedir a ADA que consulte los servicios
+de ubicación y clima disponibles y la respuesta se entrega por Telegram cuando
+Telegram está habilitado.
 
 También se pueden cargar disparadores adicionales mediante `POST
 /api/v1/schedules`:
@@ -136,7 +133,7 @@ También se pueden cargar disparadores adicionales mediante `POST
   "eventType": "summary",
   "cronExpression": "0 30 9 * * *",
   "timezone": "America/Argentina/Buenos_Aires",
-  "prompt": "Preparame un resumen breve de las noticias importantes del día.",
+  "prompt": "Consultá mi ubicación actual y el clima actual usando los servicios disponibles. Enviame un resumen breve para comenzar el día.",
   "conversationId": "autonomy-summary",
   "enabled": true
 }
