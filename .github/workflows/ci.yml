@@ -51,7 +51,7 @@ jobs:
         run: python3 -m unittest discover -s scripts/testing -p 'test_*.py'
 
   test:
-    name: Run tests
+    name: Run tests and coverage
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -68,8 +68,14 @@ jobs:
           cache: maven
       - name: Install vendored observability library
         run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
-      - name: Test
-        run: mvn --batch-mode --no-transfer-progress test
+      - name: Test with coverage
+        run: mvn --batch-mode --no-transfer-progress test jacoco:report
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
 
   quality:
     name: Quality (${{ matrix.check }})
@@ -120,30 +126,3 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
       - name: Package
         run: mvn --batch-mode --no-transfer-progress -DskipTests package
-
-  coverage:
-    name: Generate coverage report
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-      - name: Install vendored observability library
-        run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
-      - name: Test with coverage
-        run: mvn --batch-mode --no-transfer-progress test jacoco:report
-      - name: Upload JaCoCo report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jacoco-report
-          path: target/site/jacoco/

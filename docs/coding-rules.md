@@ -85,10 +85,10 @@
 ## CI gratuito
 
 - El workflow `CI` está organizado por dependencias: `validate` habilita
-  `test` y `quality` en paralelo; `package` espera ambas etapas y `coverage`
-  corre en paralelo después de los tests.
+  `test` y `quality` en paralelo; `package` espera ambas etapas.
 - `mvn verify` sigue siendo el check funcional local principal. El job de
-  cobertura ejecuta `mvn test jacoco:report` y publica `target/site/jacoco`.
+  tests ejecuta `mvn test jacoco:report` una sola vez y publica
+  `target/site/jacoco`.
 - Spotless valida formato y el compilador de Maven bloquea errores de código.
 - CodeQL analiza seguridad de Java y publica los resultados en GitHub
   Code Scanning.
