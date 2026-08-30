@@ -3,7 +3,7 @@ services:
     image: alpine:3.21
     restart: "no"
     user: "0:0"
-    command: ["/bin/sh", "-c", "mkdir -p /ada-data/db /ada-data/logs /ada-data/backups /ada-data/exports /ada-data/models /ada-data/runtime /test-manager-data && chown -R $${ADA_CONTAINER_UID:-10001}:$${ADA_CONTAINER_GID:-10001} /ada-data /test-manager-data"]
+    command: ["/bin/sh", "-c", "mkdir -p /ada-data/db /ada-data/logs /ada-data/backups /ada-data/exports /ada-data/models /ada-data/runtime /test-manager-data && chown -R $${ADA_CONTAINER_UID:-10001}:$${ADA_CONTAINER_GID:-10001} /ada-data/db /ada-data/logs /ada-data/exports /ada-data/models /ada-data/runtime /test-manager-data"]
     volumes:
       - ${ADA_DATA_DIR:-../ada-data}:/ada-data
       - ${ADA_TEST_MANAGER_DATA_DIR:-../ada-test-manager-data}:/test-manager-data
