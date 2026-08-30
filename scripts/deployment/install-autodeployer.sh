@@ -31,6 +31,19 @@ if [[ ! -f "${env_file}" ]]; then
     install -o "${ada_user}" -g "${ada_group}" -m 0600 "${template}" "${env_file}"
     echo "Se creó ${env_file}; completá las credenciales antes de activar Telegram."
 fi
+# Never follow a symlink from a root-privileged installer. Also reject a data
+# directory writable by group/other users before changing env ownership.
+if [[ -L "${env_file}" ]]; then
+    echo "El archivo de configuración no puede ser un enlace simbólico: ${env_file}" >&2
+    exit 1
+fi
+data_dir_mode="$(stat -c '%a' "${data_dir}")"
+case "${data_dir_mode: -2}" in
+    *[2367]*)
+        echo "La carpeta de datos debe ser privada para instalar: ${data_dir}" >&2
+        exit 1
+        ;;
+esac
 # An existing .env may have been created by a previous sudo command. Keep
 # secrets private while making the file readable by the service account.
 chown "${ada_user}:${ada_group}" "${env_file}"

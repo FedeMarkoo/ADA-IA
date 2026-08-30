@@ -17,6 +17,8 @@ class AutodeployerServiceTest(unittest.TestCase):
         self.assertIn('set_env_value "ADA_DATA_DIR" "${data_dir}"', installer)
         self.assertIn('set_env_value "ADA_GDRIVE_PATH" "${data_dir}"', installer)
         self.assertIn('install -o "${ada_user}" -g "${ada_group}" -m 0660 /dev/null', installer)
+        self.assertIn('if [[ -L "${env_file}" ]]; then', installer)
+        self.assertIn('data_dir_mode="$(stat -c \'%a\' "${data_dir}")"', installer)
         self.assertIn('chown "${ada_user}:${ada_group}" "${env_file}"', installer)
         self.assertIn('chmod 0600 "${env_file}"', installer)
 
