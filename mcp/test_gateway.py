@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import server
 
@@ -18,8 +19,41 @@ class McpGatewayTest(unittest.TestCase):
 
     def test_weather_contract_is_compact_and_routes_to_service(self):
         self.assertEqual({"type", "properties", "additionalProperties"}, set(server.weather.TOOL["inputSchema"]))
-        server.weather.current = lambda arguments: {"temperature_c": 21}
-        self.assertEqual({"temperature_c": 21}, server.call_tool("/weather", "weather_current", {}))
+        with patch.object(server.weather, "current", return_value={"temperature_c": 21}):
+            self.assertEqual(
+                {"temperature_c": 21}, server.call_tool("/weather", "weather_current", {})
+            )
+
+    def test_weather_rounds_temperature_and_returns_short_forecast(self):
+        with patch.object(
+            server.weather,
+            "_get_json",
+            side_effect=[
+                {"results": [{"latitude": -34.6, "longitude": -58.4, "name": "Buenos Aires", "country": "Argentina"}]},
+                {
+                    "current": {
+                        "temperature_2m": 20.74,
+                        "apparent_temperature": 19.96,
+                        "weather_code": 1,
+                        "precipitation": 0,
+                        "wind_speed_10m": 11.26,
+                        "time": "2026-08-30T08:00",
+                    },
+                    "daily": {
+                        "time": ["2026-08-30", "2026-08-31"],
+                        "temperature_2m_min": [10.04, 11.12],
+                        "temperature_2m_max": [21.66, 22.31],
+                        "precipitation_probability_max": [5, 10],
+                    },
+                },
+            ],
+        ):
+            result = server.weather.current({"location": "Buenos Aires"})
+
+        self.assertEqual(20.7, result["temperature_c"])
+        self.assertEqual(20.0, result["feels_like_c"])
+        self.assertEqual(2, len(result["forecast"]))
+        self.assertEqual(21.7, result["forecast"][0]["max_c"])
 
     def test_filesystem_read_file_is_routed_by_gateway(self):
         with tempfile.TemporaryDirectory() as tmp:

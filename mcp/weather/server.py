@@ -49,20 +49,36 @@ def current(arguments):
             "latitude": latitude,
             "longitude": longitude,
             "current": "temperature_2m,apparent_temperature,weather_code,precipitation,wind_speed_10m",
-            "hourly": "precipitation_probability",
-            "forecast_days": 1,
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+            "forecast_days": 3,
             "timezone": "auto",
         },
     )
     current_data = data["current"]
     probability = data.get("hourly", {}).get("precipitation_probability", [None])[0]
+    daily = data.get("daily", {})
+    forecast = [
+        {
+            "date": date,
+            "min_c": round(minimum, 1),
+            "max_c": round(maximum, 1),
+            "rain_probability_pct": rain,
+        }
+        for date, minimum, maximum, rain in zip(
+            daily.get("time", []),
+            daily.get("temperature_2m_min", []),
+            daily.get("temperature_2m_max", []),
+            daily.get("precipitation_probability_max", []),
+        )
+    ]
     return {
         "location": place or "unknown",
-        "temperature_c": current_data.get("temperature_2m"),
-        "feels_like_c": current_data.get("apparent_temperature"),
+        "temperature_c": round(current_data["temperature_2m"], 1),
+        "feels_like_c": round(current_data["apparent_temperature"], 1),
         "weather_code": current_data.get("weather_code"),
         "precipitation_mm": current_data.get("precipitation"),
         "rain_probability_pct": probability,
-        "wind_kmh": current_data.get("wind_speed_10m"),
+        "wind_kmh": round(current_data["wind_speed_10m"], 1),
         "observed_at": current_data.get("time"),
+        "forecast": forecast,
     }

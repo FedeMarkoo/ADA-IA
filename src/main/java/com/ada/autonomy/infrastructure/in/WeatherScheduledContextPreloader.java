@@ -5,8 +5,10 @@ import com.ada.autonomy.application.port.out.ScheduledContextPreloader;
 import com.ada.conversation.application.dto.LlmToolCall;
 import com.ada.conversation.application.port.out.ToolExecutor;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -38,17 +40,40 @@ public class WeatherScheduledContextPreloader implements ScheduledContextPreload
     try {
       var data = objectMapper.readTree(content);
       if (!data.isObject()) return content;
-      return "Clima actual en "
-          + data.path("location").asText("tu ubicación")
-          + ": "
-          + data.path("temperature_c").asText("sin temperatura")
-          + " °C, sensación "
-          + data.path("feels_like_c").asText("sin dato")
-          + " °C, precipitación "
-          + data.path("rain_probability_pct").asText("sin dato")
-          + "%.";
+      var location = data.path("location").asText("tu ubicación");
+      var current =
+          "Clima actual en "
+              + location
+              + ": "
+              + number(data, "temperature_c")
+              + " °C, sensación "
+              + number(data, "feels_like_c")
+              + " °C, precipitación "
+              + data.path("rain_probability_pct").asText("sin dato")
+              + "%.";
+      var forecast = data.path("forecast");
+      if (!forecast.isArray() || forecast.isEmpty()) return current;
+      var days =
+          java.util.stream.StreamSupport.stream(forecast.spliterator(), false)
+              .limit(3)
+              .map(
+                  day ->
+                      day.path("date").asText()
+                          + " entre "
+                          + number(day, "min_c")
+                          + " y "
+                          + number(day, "max_c")
+                          + " °C")
+              .toList();
+      return "¡Buen día! " + current + " Pronóstico: " + String.join("; ", days) + ".";
     } catch (JsonProcessingException error) {
       return content;
     }
+  }
+
+  private String number(JsonNode data, String field) {
+    return data.has(field) && data.get(field).isNumber()
+        ? String.format(Locale.ROOT, "%.1f", data.get(field).asDouble())
+        : "sin dato";
   }
 }
