@@ -45,3 +45,20 @@ CREATE TRIGGER IF NOT EXISTS rag_documents_au AFTER UPDATE ON rag_documents BEGI
     INSERT INTO rag_documents_fts(rowid, source, content)
     VALUES (new.id, new.source, new.content);
 END;;
+
+CREATE TABLE IF NOT EXISTS scheduled_triggers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    event_type TEXT NOT NULL,
+    cron_expression TEXT NOT NULL,
+    timezone TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    next_run_at TEXT NOT NULL,
+    last_run_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);;
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_triggers_due
+    ON scheduled_triggers(enabled, next_run_at);;

@@ -1,6 +1,7 @@
 package com.ada.lifecycle.infrastructure.in;
 
 import com.ada.lifecycle.application.port.out.LifecycleMessageSender;
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.ContextClosedEvent;
@@ -14,6 +15,7 @@ public class LifecycleNotificationListener {
   private static final String STOPPING_MESSAGE = "ADA se está apagando 📴";
 
   private final LifecycleMessageSender messageSender;
+  private final AtomicBoolean stoppingNotificationSent = new AtomicBoolean();
 
   @EventListener
   public void onApplicationReady(ApplicationReadyEvent event) {
@@ -22,6 +24,8 @@ public class LifecycleNotificationListener {
 
   @EventListener
   public void onContextClosed(ContextClosedEvent event) {
-    messageSender.send(STOPPING_MESSAGE);
+    if (stoppingNotificationSent.compareAndSet(false, true)) {
+      messageSender.send(STOPPING_MESSAGE);
+    }
   }
 }

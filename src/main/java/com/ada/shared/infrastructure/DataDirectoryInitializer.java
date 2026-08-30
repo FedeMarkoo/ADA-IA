@@ -1,5 +1,6 @@
 package com.ada.shared.infrastructure;
 
+import com.ada.conversation.infrastructure.out.prompt.SystemPromptInitializer;
 import java.nio.file.*;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
@@ -10,12 +11,14 @@ import org.springframework.context.annotation.*;
 @RequiredArgsConstructor
 public class DataDirectoryInitializer {
   private final AdaProperties properties;
+  private final SystemPromptInitializer systemPromptInitializer;
 
   @Bean
   public ApplicationRunner initializeDataDirectory() {
     return args -> {
       for (String d : List.of("db", "logs", "backups", "exports", "models", "runtime"))
         Files.createDirectories(properties.getNormalizedDataDirectory().resolve(d));
+      systemPromptInitializer.initialize();
     };
   }
 }

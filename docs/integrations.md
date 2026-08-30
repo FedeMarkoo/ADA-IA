@@ -14,6 +14,10 @@ ADA_LLM_API_KEY=...
 ADA_LLM_DEFAULT_MODEL=openai/gpt-4o-mini
 ```
 
+Cuando ADA usa el LiteLLM incluido en Compose, `ADA_LLM_API_KEY` debe coincidir
+con `LITELLM_MASTER_KEY`. Si no se define explícitamente, Compose la hereda de
+`LITELLM_MASTER_KEY` automáticamente.
+
 No se guardan claves en `application.yml`, SQLite ni logs. Timeouts, reintentos,
 backoff y circuit breaker deben ser explícitos y medidos.
 
@@ -60,7 +64,7 @@ transporte JSON-RPC y mantiene endpoints internos por servidor: `/web-search`
 expone `web_search` y `/filesystem` expone las tools de filesystem. ADA publica
 esas tools mediante sus providers y las ejecuta mediante sus adapters Java.
 
-Compose levanta ambos MCPs en la red interna mediante el servicio `ada-mcps`.
+Compose levanta los MCPs en la red interna mediante el servicio `ada-mcps`.
 No se publica el puerto al host. Para agregar otra tool, se incorpora al
 gateway y al mismo contexto `mcp/`, junto con su adapter correspondiente en
 `infrastructure.out`.
@@ -102,6 +106,38 @@ configurado. Cada mensaje se ejecuta como una conversación con ID
 chat ID, enviá primero un mensaje al bot y consultá `getUpdates` de Telegram;
 el valor debe quedar en `ADA_TELEGRAM_BOOTSTRAP_CHAT_ID` durante el primer
 inicio.
+
+## Automatizaciones
+
+ADA puede iniciar conversaciones mediante programaciones persistidas en SQLite.
+El scheduler consulta los disparadores periódicamente y ejecuta su prompt por
+el mismo caso de uso que una conversación HTTP o Telegram; la respuesta se
+envía por el canal de salida configurado.
+
+El scheduler despierta cada segundo y consulta un índice de SQLite por las filas
+vencidas; si no hay ninguna, no ejecuta el modelo ni realiza llamadas externas.
+El horario usa la sintaxis cron de Spring, con seis campos incluyendo los
+segundos. La programación, la zona horaria y el prompt viven en la tabla
+`scheduled_triggers`, no en variables de entorno.
+
+El MCP `weather_current` obtiene clima y ubicación mediante servicios externos.
+En una tarea programada de tipo `weather`, ADA precarga ese dato antes de llamar
+al modelo; así no carga el catálogo MCP ni hace una segunda vuelta de herramientas.
+
+También se pueden cargar disparadores adicionales mediante `POST
+/api/v1/schedules`:
+
+```json
+{
+  "name": "daily-summary",
+  "eventType": "weather",
+  "cronExpression": "0 30 9 * * *",
+  "timezone": "America/Argentina/Buenos_Aires",
+  "prompt": "Usá los datos meteorológicos precargados y enviame un resumen breve para comenzar el día.",
+  "conversationId": "autonomy-summary",
+  "enabled": true
+}
+```
 
 ## SQLite fuera del repositorio
 
