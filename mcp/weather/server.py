@@ -60,12 +60,14 @@ def current(arguments):
     forecast = [
         {
             "date": date,
+            "condition": _condition(code),
             "min_c": round(minimum, 1),
             "max_c": round(maximum, 1),
             "rain_probability_pct": rain,
         }
-        for date, minimum, maximum, rain in zip(
+        for date, code, minimum, maximum, rain in zip(
             daily.get("time", []),
+            daily.get("weather_code", []),
             daily.get("temperature_2m_min", []),
             daily.get("temperature_2m_max", []),
             daily.get("precipitation_probability_max", []),
@@ -82,3 +84,23 @@ def current(arguments):
         "observed_at": current_data.get("time"),
         "forecast": forecast,
     }
+
+
+def _condition(code):
+    if code == 0:
+        return "soleado"
+    if code in (1, 2):
+        return "parcialmente nublado"
+    if code == 3:
+        return "nublado"
+    if code in (45, 48):
+        return "con niebla"
+    if code in (51, 53, 55, 56, 57):
+        return "con lloviznas"
+    if code in (61, 63, 65, 66, 67, 80, 81, 82):
+        return "lluvioso"
+    if code in (71, 73, 75, 77, 85, 86):
+        return "con nieve"
+    if code in (95, 96, 99):
+        return "con tormentas"
+    return "variable"
