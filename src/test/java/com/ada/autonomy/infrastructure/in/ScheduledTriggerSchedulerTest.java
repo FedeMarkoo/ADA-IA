@@ -131,4 +131,34 @@ class ScheduledTriggerSchedulerTest {
 
     verify(sender).send("Buen día, hoy está soleado.");
   }
+
+  @Test
+  void replacesNonWeatherModelTextWithTheWeatherForecast() {
+    var scheduler =
+        new ScheduledTriggerScheduler(store, chat, sender, List.of(preloader), objectMapper);
+    var now = Instant.parse("2026-08-30T10:00:00Z");
+    var trigger =
+        new ScheduledTrigger(
+            10,
+            "weather.text",
+            "weather",
+            "0 0 8 * * *",
+            "UTC",
+            "clima",
+            "telegram:1",
+            true,
+            now,
+            null);
+    org.mockito.Mockito.when(preloader.supports("weather")).thenReturn(true);
+    org.mockito.Mockito.when(preloader.preload(trigger))
+        .thenReturn(
+            List.of(
+                "DATOS PRE-CARGADOS DEL CLIMA:\n¡Buen día! 17.4 °C. Pronóstico: días agradables."));
+    org.mockito.Mockito.when(chat.execute(any()))
+        .thenReturn(new ChatResult("id", "saludo", "model", null, null));
+
+    scheduler.run(trigger, now);
+
+    verify(sender).send("¡Buen día! 17.4 °C. Pronóstico: días agradables.");
+  }
 }
