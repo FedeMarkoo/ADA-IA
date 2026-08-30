@@ -40,6 +40,9 @@ public class ContextSelectionManager {
                       () -> client.complete(selectionRequest)));
       metrics.recordTokenBreakdown(selectionRequest, completion);
       var selection = parse(completion.content(), tools, memories, fallback);
+      if (isWeatherRequest(request) && !selection.tools().contains("web_search")) {
+        selection = new ContextSelection(List.of("web_search"), List.of("web_search"), selection.memories(), selection.compactContext());
+      }
       metrics.recordContextSelection(properties.getLlm().getRoutingModel(), selection);
       return selection;
     } catch (RuntimeException error) {
@@ -101,5 +104,10 @@ public class ContextSelectionManager {
     var lastFence = value.lastIndexOf("```");
     if (firstLineEnd < 0 || lastFence <= firstLineEnd) return value;
     return value.substring(firstLineEnd + 1, lastFence).trim();
+  }
+
+  private boolean isWeatherRequest(ChatRequest request) {
+    var message = request.message().toLowerCase(java.util.Locale.ROOT);
+    return message.contains("clima") || message.contains("tiempo") || message.contains("temperatura");
   }
 }
