@@ -49,7 +49,9 @@ public class ScheduledTriggerScheduler {
         || content.isBlank()
         || "{}".equals(content.trim())
         || "[]".equals(content.trim())) {
-      return preloaded.isEmpty() ? "No pude generar una respuesta." : preloaded.getFirst();
+      return preloaded.isEmpty()
+          ? "No pude generar una respuesta."
+          : userFacing(preloaded.getFirst());
     }
     try {
       var json = objectMapper.readTree(content.trim());
@@ -65,6 +67,13 @@ public class ScheduledTriggerScheduler {
       // Preserve non-JSON model responses unchanged.
     }
     return content;
+  }
+
+  private String userFacing(String preloaded) {
+    var separator = preloaded.indexOf('\n');
+    return preloaded.startsWith("DATOS PRE-CARGADOS DEL CLIMA") && separator >= 0
+        ? preloaded.substring(separator + 1)
+        : preloaded;
   }
 
   private List<String> preload(ScheduledTrigger trigger) {
