@@ -69,7 +69,16 @@ jobs:
       - name: Install vendored observability library
         run: mvn --batch-mode --no-transfer-progress -DskipTests -f libs/ada-observability/pom.xml install
       - name: Test with coverage
-        run: mvn --batch-mode --no-transfer-progress test jacoco:report
+        run: |
+          set +e
+          mvn --batch-mode --no-transfer-progress test
+          test_status=$?
+          mvn --batch-mode --no-transfer-progress jacoco:report
+          report_status=$?
+          if [ "$test_status" -ne 0 ]; then
+            exit "$test_status"
+          fi
+          exit "$report_status"
       - name: Upload JaCoCo report
         if: always()
         uses: actions/upload-artifact@v4
