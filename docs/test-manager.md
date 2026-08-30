@@ -31,7 +31,7 @@ open http://127.0.0.1:8088
 El archivo de entorno es necesario porque Compose valida también las rutas de
 los MCPs y de sus credenciales aunque sólo se reconstruya el gestor.
 
-### Cargar una base existente
+## Cargar una base existente
 
 Prepará una carpeta externa y configurala en `ADA_TEST_MANAGER_DATA_DIR`:
 
@@ -60,37 +60,25 @@ python3 - <<'PY'
 import json
 from urllib.request import Request, urlopen
 
-payload = json.dumps({"name": "Clima"}).encode()
-request = Request(
-    "http://127.0.0.1:8088/api/categories",
-    data=payload,
-    headers={"Content-Type": "application/json"},
-)
-print(urlopen(request).read().decode())
-PY
-```
+def post(path, payload):
+    request = Request(
+        "http://127.0.0.1:8088" + path,
+        data=json.dumps(payload, ensure_ascii=False).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    return json.load(urlopen(request))
 
-Usá el `id` devuelto para cargar un prompt y sus expectativas:
-
-```bash
-python3 - <<'PY'
-import json
-from urllib.request import Request, urlopen
-
+category = post("/api/categories", {"name": "Clima"})
 test = {
-    "category_id": 1,
+    "category_id": category["id"],
     "name": "Pronóstico de mañana",
     "prompt": "¿Cómo va a estar el clima mañana?",
     "expected_tools": ["weather_current"],
     "expected_context": ["weather_current"],
     "expected_terms": ["mañana"],
 }
-request = Request(
-    "http://127.0.0.1:8088/api/prompts",
-    data=json.dumps(test, ensure_ascii=False).encode(),
-    headers={"Content-Type": "application/json"},
-)
-print(urlopen(request).read().decode())
+print(category)
+print(post("/api/prompts", test))
 PY
 ```
 

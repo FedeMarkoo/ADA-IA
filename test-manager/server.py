@@ -59,10 +59,12 @@ def initialize_schema(connection):
         raise
 
 def dumps(value):
+    """Serialize optional API arrays without ASCII escaping."""
     return json.dumps(value if value is not None else [], ensure_ascii=False)
 
 
 def row_prompt(row):
+    """Convert a SQLite prompt row into the JSON shape used by the API."""
     item = dict(row)
     for key in ("expected_tools", "expected_memories", "expected_context", "expected_terms"):
         item[key] = json.loads(item[key])
@@ -71,6 +73,7 @@ def row_prompt(row):
 
 
 def request_json(url, payload=None, timeout=180):
+    """Send a JSON request to ADA or the test-manager API."""
     data = None if payload is None else json.dumps(payload).encode()
     request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -78,6 +81,7 @@ def request_json(url, payload=None, timeout=180):
 
 
 def run_ada(prompt, conversation_id=None):
+    """Run one prompt through ADA and wait for its asynchronous result."""
     conversation_id = conversation_id or "test-manager-" + uuid.uuid4().hex
     deadline = time.monotonic() + ADA_TIMEOUT_SECONDS
     accepted = request_json(
@@ -104,6 +108,7 @@ def run_ada(prompt, conversation_id=None):
 
 
 def remaining_timeout(deadline):
+    """Return the remaining request budget or raise when it is exhausted."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError(f"ADA execution timed out after {ADA_TIMEOUT_SECONDS} seconds")
@@ -111,6 +116,7 @@ def remaining_timeout(deadline):
 
 
 def evaluate(test, result):
+    """Combine deterministic expectations with an evaluator-model verdict."""
     selected = (result.get("contextSelection") or {})
     actual_tools = result.get("executedTools", [])
     checks = {
