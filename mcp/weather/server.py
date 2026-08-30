@@ -54,9 +54,9 @@ def current(arguments):
             "timezone": "auto",
         },
     )
-    current_data = data["current"]
-    probability = data.get("hourly", {}).get("precipitation_probability", [None])[0]
     daily = data.get("daily", {})
+    current_data = data["current"]
+    probability = daily.get("precipitation_probability_max", [None])[0]
     forecast = [
         {
             "date": date,
