@@ -6,12 +6,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=@ADA_USER@
-Group=@ADA_GROUP@
-SupplementaryGroups=docker 10001
+User=10001
+Group=10001
+SupplementaryGroups=docker
 WorkingDirectory=@ADA_DIR@
-Environment=HOME=@ADA_HOME@
+Environment=HOME=/tmp/ada-deployer-home
+Environment=DOCKER_CONFIG=/tmp/ada-deployer-docker-config
 Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/usr/bin/mkdir -p /tmp/ada-deployer-home /tmp/ada-deployer-docker-config
 ExecStartPre=/usr/bin/docker info
 ExecStart=/usr/bin/env python3 @ADA_DIR@/scripts/deployment/local-deployer.py --compose @ADA_DIR@/compose.yaml --env-file @ADA_ENV_FILE@ --interval 300
 Restart=always

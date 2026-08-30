@@ -13,9 +13,6 @@ class AutodeployerServiceTest(unittest.TestCase):
         content = SERVICE.read_text()
 
         for placeholder in (
-            "@ADA_USER@",
-            "@ADA_GROUP@",
-            "@ADA_HOME@",
             "@ADA_DIR@",
             "@ADA_ENV_FILE@",
         ):
@@ -23,7 +20,11 @@ class AutodeployerServiceTest(unittest.TestCase):
 
         self.assertIn("After=docker.service network-online.target", content)
         self.assertIn("ExecStartPre=/usr/bin/docker info", content)
-        self.assertIn("SupplementaryGroups=docker 10001", content)
+        self.assertIn("User=10001", content)
+        self.assertIn("Group=10001", content)
+        self.assertIn("SupplementaryGroups=docker", content)
+        self.assertIn("Environment=DOCKER_CONFIG=/tmp/ada-deployer-docker-config", content)
+        self.assertIn("ExecStartPre=/usr/bin/mkdir -p /tmp/ada-deployer-home /tmp/ada-deployer-docker-config", content)
         self.assertIn("Restart=always", content)
         self.assertIn("WantedBy=multi-user.target", content)
 

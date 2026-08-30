@@ -39,21 +39,71 @@ mvn verify
 ```
 
 El despliegue local de LiteLLM y el layout de datos están documentados en
-[Integraciones y configuración](docs/integrations.md).
+[Integraciones y configuración](docs/integrations.md). También hay instaladores
+listos para [Linux, macOS y Windows](instaladores/README.md).
 
 El smoke runner HTTP y el dashboard local de Grafana están documentados en
 [Monitoreo local](monitoring/README.md).
+
+## Instaladores multiplataforma
+
+Los instaladores de `instaladores/` validan Docker, crean `../ada-data/.env`
+desde el ejemplo cuando hace falta y levantan el stack completo con Docker
+Compose. La configuración queda junto con las bases, backups y demás datos
+persistentes, fuera del repositorio. Primero edita `../ada-data/.env` con tus
+valores locales; no se deben versionar secretos.
+
+### Linux
+
+```bash
+./instaladores/install-linux.sh
+```
+
+Para instalar además el autodeployer de `systemd`:
+
+```bash
+./instaladores/install-linux.sh --autodeployer
+```
+
+### macOS
+
+Con Docker Desktop abierto:
+
+```bash
+./instaladores/install-macos.sh
+```
+
+### Windows
+
+Con Docker Desktop abierto, desde PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\instaladores\install-windows.ps1
+```
+
+Las URLs locales son ADA `http://localhost:8080`, Test Manager
+`http://localhost:8088`, Grafana `http://localhost:3000` y Prometheus
+`http://localhost:9090`. Para detener el stack:
+
+```bash
+docker compose --env-file ../ada-data/.env down
+```
+
+Si definís `ADA_DATA_DIR`, reemplazá `../ada-data` por esa ruta en los
+comandos y en la ubicación del archivo `.env`.
+
+En Windows, ejecutar el mismo comando desde PowerShell.
 
 ## Inicio automático en Linux
 
 El autodeployer mantiene levantado el stack de ADA, comprueba nuevas imágenes
 cada cinco minutos y se reinicia si el proceso falla. Para instalarlo como
-servicio `systemd` (se ejecuta con el usuario actual), configura primero
-`deploy/.env` y asegúrate de que ese usuario pueda ejecutar Docker:
+servicio `systemd`. Configura primero `../ada-data/.env` y asegúrate de que el
+servicio pueda ejecutar Docker:
 
 ```bash
-cp deploy/.env.example deploy/.env
-# Edita deploy/.env y completa los secretos y rutas locales
+# Edita ../ada-data/.env y completa los secretos y rutas locales
 sudo usermod -aG docker "$USER"
 newgrp docker
 ./scripts/deployment/install-autodeployer.sh

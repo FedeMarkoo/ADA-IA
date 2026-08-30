@@ -30,6 +30,21 @@ def load_env_file(path):
     return values
 
 
+def effective_environment(args):
+    """Merge the env file with process variables, giving the latter priority."""
+    values = load_env_file(args.env_file)
+    values.update(os.environ)
+    return values
+
+
+def resolve_data_dir(args, environment):
+    """Resolve ADA_DATA_DIR relative to the Compose env file."""
+    data_dir = Path(environment.get("ADA_DATA_DIR", "../ada-data")).expanduser()
+    if not data_dir.is_absolute():
+        data_dir = args.env_file.parent / data_dir
+    return data_dir.resolve()
+
+
 def compose(args, env, *parts):
     return run(["docker", "compose", "--env-file", str(args.env_file), "-f", str(args.compose), *parts], env)
 
@@ -119,14 +134,11 @@ def mcp_healthcheck(args, env):
 
 
 def deploy(args):
-    env = os.environ.copy()
-    file_env = load_env_file(args.env_file)
-    for key, value in file_env.items():
-        env.setdefault(key, value)
+    env = effective_environment(args)
     env.update({"ADA_IMAGE": env.get("ADA_IMAGE", "ghcr.io/fedemarkoo/ada-ia"), "ADA_VERSION": env.get("ADA_VERSION", "latest")})
     old_ids = {service: image_id(args, env, service) for service in ("ada", "ada-mcps")}
     running_ids = {service: running_image_id(args, env, service) for service in ("ada", "ada-mcps")}
-    backup = backup_database(Path(env.get("ADA_DATA_DIR", "../ada-data")).expanduser().resolve())
+    backup = backup_database(resolve_data_dir(args, env))
     compose(args, env, "pull", "ada", "ada-mcps")
     new_ids = {service: image_id(args, env, service) for service in ("ada", "ada-mcps")}
     if all(old_ids[s] and old_ids[s] == new_ids[s] and running_ids[s] == new_ids[s] for s in old_ids) and healthcheck(args.health_url, 5) and mcp_healthcheck(args, env):
@@ -149,7 +161,7 @@ def deploy(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compose", type=Path, default=Path("compose.yaml"))
-    parser.add_argument("--env-file", type=Path, default=Path("deploy/.env"))
+    parser.add_argument("--env-file", type=Path, default=Path("../ada-data/.env"))
     parser.add_argument("--health-url", default="http://127.0.0.1:8081/actuator/health")
     parser.add_argument("--health-timeout", type=int, default=90)
     parser.add_argument("--once", action="store_true", help="Run one check and exit")
@@ -157,7 +169,7 @@ def main():
     args = parser.parse_args()
     args.compose = args.compose.resolve()
     args.env_file = args.env_file.resolve()
-    lock_path = args.env_file.parent / ".deploy.lock"
+    lock_path = resolve_data_dir(args, effective_environment(args)) / ".deploy.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("w") as lock:
         try:
