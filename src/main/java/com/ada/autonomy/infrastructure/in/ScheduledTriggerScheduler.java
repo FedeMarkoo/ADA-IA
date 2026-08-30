@@ -52,9 +52,7 @@ public class ScheduledTriggerScheduler {
       return preloaded.isEmpty() ? "No pude generar una respuesta." : preloadedMessage(preloaded);
     }
     var readable = readableContent(content);
-    if (!preloaded.isEmpty()
-        && !readable.contains("°C")
-        && preloadedMessage(preloaded).contains("°C")) {
+    if (!preloaded.isEmpty() && shouldUsePreloaded(readable, preloaded)) {
       return preloadedMessage(preloaded);
     }
     return readable;
@@ -79,17 +77,33 @@ public class ScheduledTriggerScheduler {
 
   private String userFacing(String preloaded) {
     var separator = preloaded.indexOf('\n');
-    return preloaded.startsWith("DATOS PRE-CARGADOS DEL CLIMA") && separator >= 0
-        ? preloaded.substring(separator + 1)
+    if (separator >= 0 && preloaded.startsWith("DATOS PRE-CARGADOS")) {
+      return preloaded.substring(separator + 1);
+    }
+    var marker = preloaded.indexOf("): ");
+    return preloaded.startsWith("DATOS PRE-CARGADOS") && marker >= 0
+        ? preloaded.substring(marker + 3)
         : preloaded;
   }
 
   private String preloadedMessage(List<String> preloaded) {
     return preloaded.stream()
         .map(this::userFacing)
-        .filter(value -> value.contains("°C"))
+        .filter(value -> value.contains("°C") || value.contains("eventos"))
         .findFirst()
         .orElseGet(() -> userFacing(preloaded.getFirst()));
+  }
+
+  private boolean shouldUsePreloaded(String readable, List<String> preloaded) {
+    var weatherAvailable = preloaded.stream().anyMatch(value -> value.contains("°C"));
+    var calendarAvailable =
+        preloaded.stream().anyMatch(value -> value.contains("calendar_upcoming_events"));
+    var calendarMentioned =
+        readable
+            .toLowerCase()
+            .matches(".*(agenda|calendario|evento|reunión|reunion|compromiso|no hay).*");
+    return (weatherAvailable && !readable.contains("°C"))
+        || (calendarAvailable && !calendarMentioned);
   }
 
   private List<String> preload(ScheduledTrigger trigger) {

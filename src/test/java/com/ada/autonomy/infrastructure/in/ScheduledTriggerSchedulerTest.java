@@ -161,4 +161,35 @@ class ScheduledTriggerSchedulerTest {
 
     verify(sender).send("¡Buen día! 17.4 °C. Pronóstico: días agradables.");
   }
+
+  @Test
+  void replacesIrrelevantModelTextWithPreloadedCalendarData() {
+    var scheduler =
+        new ScheduledTriggerScheduler(store, chat, sender, List.of(preloader), objectMapper);
+    var now = Instant.parse("2026-08-30T10:00:00Z");
+    var trigger =
+        new ScheduledTrigger(
+            11,
+            "calendar.text",
+            "assistant",
+            "0 0 8 * * *",
+            "UTC",
+            "Avisame los próximos eventos.",
+            "telegram:1",
+            true,
+            now,
+            null);
+    org.mockito.Mockito.when(preloader.supports("assistant")).thenReturn(true);
+    org.mockito.Mockito.when(preloader.preload(trigger))
+        .thenReturn(
+            List.of(
+                "CONTEXTO DE EJECUCIÓN: 08:00",
+                "DATOS PRE-CARGADOS DE AGENDA (subagente calendar_upcoming_events): No hay eventos próximos."));
+    org.mockito.Mockito.when(chat.execute(any()))
+        .thenReturn(new ChatResult("id", "mensaje", "model", null, null));
+
+    scheduler.run(trigger, now);
+
+    verify(sender).send("No hay eventos próximos.");
+  }
 }

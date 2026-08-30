@@ -129,6 +129,13 @@ El MCP `weather_current` obtiene clima y ubicación mediante servicios externos.
 En una tarea programada de tipo `weather`, ADA precarga ese dato antes de llamar
 al modelo; así no carga el catálogo MCP ni hace una segunda vuelta de herramientas.
 
+El MCP `calendar_upcoming_events` consulta, en modo solo lectura, los próximos
+eventos del calendario principal de Google. Sus credenciales se leen desde la
+bóveda cifrada legacy mediante `ADA_GOOGLE_VAULT_PATH` y
+`ADA_GOOGLE_VAULT_KEY_PATH`; nunca se guardan en el repositorio ni se imprimen
+en logs. Un prompt que mencione agenda, calendario, eventos o compromisos
+selecciona automáticamente este MCP.
+
 También se pueden cargar disparadores adicionales mediante `POST
 /api/v1/schedules`:
 
