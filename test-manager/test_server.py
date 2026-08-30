@@ -17,10 +17,12 @@ class TestManagerPersistenceTest(unittest.TestCase):
 
     def test_seed_contains_smoke_prompts(self):
         connection = server.db()
-        categories = connection.execute("SELECT name FROM categories").fetchall()
+        categories = connection.execute("SELECT name FROM categories ORDER BY name").fetchall()
         prompts = connection.execute("SELECT name FROM prompts ORDER BY id").fetchall()
-        self.assertEqual(["Smoke tests"], [item[0] for item in categories])
-        self.assertEqual(3, len(prompts))
+        self.assertEqual(["Google Calendar", "Smoke tests"], [item[0] for item in categories])
+        self.assertEqual(7, len(prompts))
+        self.assertIn("Próximos eventos del calendario", [item[0] for item in prompts])
+        self.assertIn("Resumen de clima y calendario", [item[0] for item in prompts])
         connection.close()
 
     def test_database_initialization_is_safe_for_concurrent_requests(self):
