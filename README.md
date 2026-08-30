@@ -94,23 +94,27 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 Las URLs locales son ADA `http://localhost:8080`, Test Manager
 `http://localhost:8088`, Grafana `http://localhost:3000` y Prometheus
-`http://localhost:9090`. Para detener el stack:
+`http://localhost:9090`. Para detener el stack desde la raíz del repositorio:
 
 ```bash
-docker compose --env-file ../ada-data/.env down
+repo_dir="$(pwd -P)"
+data_dir="$(realpath -m "${repo_dir}/../ada-data")"
+docker compose --project-directory "${repo_dir}" \
+  --env-file "${data_dir}/.env" down
 ```
 
-Si definís `ADA_DATA_DIR`, reemplazá `../ada-data` por esa ruta en los
-comandos y en la ubicación del archivo `.env`.
+La instalación estándar usa siempre `../ada-data` desde la raíz del repositorio.
+Si definís `ADA_DATA_DIR`, la misma ruta debe estar en `ada-data/.env`, en el
+comando de Compose y al instalar el autodeployer.
 
 En Windows, ejecutar el mismo comando desde PowerShell.
 
 ## Inicio automático en Linux
 
 El autodeployer mantiene levantado el stack de ADA, comprueba nuevas imágenes
-cada cinco minutos y se reinicia si el proceso falla. Para instalarlo como
-servicio `systemd`. Configura primero `../ada-data/.env` y asegúrate de que el
-servicio pueda ejecutar Docker:
+cada cinco minutos y se reinicia si el proceso falla. Se instala desde la raíz
+del repositorio; el instalador convierte el repositorio y
+`../ada-data/.env` en rutas absolutas dentro de la unidad `systemd`:
 
 ```bash
 # Edita ../ada-data/.env y completa los secretos y rutas locales
