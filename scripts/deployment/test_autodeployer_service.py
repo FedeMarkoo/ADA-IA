@@ -14,6 +14,9 @@ class AutodeployerServiceTest(unittest.TestCase):
 
         self.assertIn('install -o "${ada_user}" -g "${ada_group}" -m 0600', installer)
         self.assertIn('template="${project_dir}/deploy/.env.example"', installer)
+        self.assertIn('set_env_value "ADA_DATA_DIR" "${data_dir}"', installer)
+        self.assertIn('set_env_value "ADA_GDRIVE_PATH" "${data_dir}"', installer)
+        self.assertIn('install -o "${ada_user}" -g "${ada_group}" -m 0660 /dev/null', installer)
 
     def test_service_is_renderable_and_restarts_deployer(self):
         content = SERVICE.read_text()

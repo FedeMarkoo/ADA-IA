@@ -47,6 +47,30 @@ escape_sed_replacement() {
     printf '%s' "$1" | sed 's/[&|\\]/\\&/g'
 }
 
+set_env_value() {
+    local key="$1"
+    local value="$2"
+    local escaped_value
+    escaped_value="$(escape_sed_replacement "${value}")"
+    if grep -q "^${key}=" "${env_file}"; then
+        sed -i "s|^${key}=.*|${key}=${escaped_value}|" "${env_file}"
+    else
+        printf '%s=%s\n' "${key}" "${value}" >> "${env_file}"
+    fi
+}
+
+# Compose resolves relative volume paths from its project directory. Persisting
+# the normalized path in the data .env keeps the service correct even when the
+# repository is reached through a symlink such as ~/Desktop/ADA-IA.
+set_env_value "ADA_DATA_DIR" "${data_dir}"
+if grep -q '^ADA_GDRIVE_PATH=../ada-data$' "${env_file}"; then
+    set_env_value "ADA_GDRIVE_PATH" "${data_dir}"
+fi
+# The container owns the data directory with its runtime UID. Pre-create the
+# deployer's lock as the host user so systemd does not need directory write
+# access just to coordinate concurrent checks.
+install -o "${ada_user}" -g "${ada_group}" -m 0660 /dev/null "${data_dir}/.deploy.lock"
+
 rendered_service="$(mktemp)"
 trap 'rm -f -- "${rendered_service}"' EXIT
 sed \
