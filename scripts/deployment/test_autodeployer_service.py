@@ -9,6 +9,12 @@ SERVICE = Path(__file__).parents[2] / "deploy" / "ada-deployer.service"
 
 
 class AutodeployerServiceTest(unittest.TestCase):
+    def test_installer_can_create_missing_env_file(self):
+        installer = (Path(__file__).with_name("install-autodeployer.sh")).read_text()
+
+        self.assertIn('install -o "${ada_user}" -g "${ada_group}" -m 0600', installer)
+        self.assertIn('template="${project_dir}/deploy/.env.example"', installer)
+
     def test_service_is_renderable_and_restarts_deployer(self):
         content = SERVICE.read_text()
 

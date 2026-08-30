@@ -23,8 +23,13 @@ ada_user="${SUDO_USER:-${ada_user}}"
 ada_group="$(id -gn "${ada_user}")"
 
 if [[ ! -f "${env_file}" ]]; then
-    echo "Falta ${env_file}. Ejecuta un instalador o copia deploy/.env.example y configúralo antes de instalar." >&2
-    exit 1
+    template="${project_dir}/deploy/.env.example"
+    if [[ ! -f "${template}" ]]; then
+        echo "No existe la plantilla de configuración: ${template}" >&2
+        exit 1
+    fi
+    install -o "${ada_user}" -g "${ada_group}" -m 0600 "${template}" "${env_file}"
+    echo "Se creó ${env_file}; completá las credenciales antes de activar Telegram."
 fi
 
 # Docker prepara los datos con el UID/GID del contenedor. El deployer necesita
