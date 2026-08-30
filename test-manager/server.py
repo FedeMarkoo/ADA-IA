@@ -17,6 +17,37 @@ STATIC = Path(__file__).parent / "static"
 _DB_INITIALIZATION_LOCK = threading.Lock()
 _INITIALIZED_DB = None
 
+CALENDAR_PROMPTS = (
+    (
+        "Próximos eventos del calendario",
+        "¿Cuáles son mis próximos eventos del calendario durante los próximos 7 días? Si no hay eventos, decímelo claramente.",
+        ["calendar_upcoming_events"],
+        ["calendar_upcoming_events"],
+        ["eventos"],
+    ),
+    (
+        "Calendario sin eventos",
+        "Decime si tengo eventos próximos en mi calendario. Si no hay ninguno, respondé brevemente que no hay eventos próximos.",
+        ["calendar_upcoming_events"],
+        ["calendar_upcoming_events"],
+        ["eventos próximos"],
+    ),
+    (
+        "Resumen de clima y calendario",
+        "Al comenzar el día, preparame un resumen breve con el clima de hoy y mis próximos eventos del calendario. Si no hay eventos, indicálo sin inventar ninguno.",
+        ["calendar_upcoming_events", "weather_current"],
+        ["calendar_upcoming_events", "weather_current"],
+        ["clima", "eventos"],
+    ),
+    (
+        "Aviso programado del calendario",
+        "Avisame cuando corresponda cuáles son mis próximos eventos del calendario, usando un mensaje breve y natural.",
+        ["calendar_upcoming_events"],
+        ["calendar_upcoming_events"],
+        ["eventos"],
+    ),
+)
+
 
 def db():
     """Open a configured SQLite connection and initialize its schema once."""
@@ -63,6 +94,28 @@ def initialize_schema(connection):
                 [(category, "Arquitectura hexagonal", "Explicá en tres puntos qué es una arquitectura hexagonal y cómo se separan dominio, aplicación e infraestructura.", "[]", '["dominio", "aplicación", "infraestructura"]'),
                  (category, "Formatos de imagen", "Compará JPG, PNG y RAW para conservar fotografías. Indicá una ventaja y una desventaja de cada formato.", "[]", '["jpg", "png", "raw"]'),
                  (category, "Comida simple", "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora.", "[]", '["arroz", "huevo", "tomate"]')])
+        calendar_category = connection.execute("SELECT id FROM categories WHERE name = ?", ("Google Calendar",)).fetchone()
+        if calendar_category is None:
+            calendar_category_id = connection.execute(
+                "INSERT INTO categories(name) VALUES (?) RETURNING id", ("Google Calendar",)
+            ).fetchone()[0]
+        else:
+            calendar_category_id = calendar_category[0]
+        for name, prompt, expected_tools, expected_context, expected_terms in CALENDAR_PROMPTS:
+            if connection.execute("SELECT 1 FROM prompts WHERE name = ?", (name,)).fetchone() is None:
+                connection.execute(
+                    """INSERT INTO prompts(
+                        category_id, name, prompt, expected_tools, expected_context, expected_terms
+                    ) VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        calendar_category_id,
+                        name,
+                        prompt,
+                        dumps(expected_tools),
+                        dumps(expected_context),
+                        dumps(expected_terms),
+                    ),
+                )
         connection.commit()
     except Exception:
         connection.rollback()
