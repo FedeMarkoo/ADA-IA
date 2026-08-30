@@ -20,6 +20,7 @@ fi
 # sudo re-executes this script as root; SUDO_USER keeps the account that owns
 # the project and must be the account running the Docker Compose deployer.
 ada_user="${SUDO_USER:-${ada_user}}"
+ada_group="$(id -gn "${ada_user}")"
 
 if [[ ! -f "${env_file}" ]]; then
     echo "Falta ${env_file}. Ejecuta un instalador o copia deploy/.env.example y configúralo antes de instalar." >&2
@@ -29,7 +30,7 @@ fi
 # Docker prepara los datos con el UID/GID del contenedor. El deployer necesita
 # escribir sólo los backups, por lo que se habilita acceso grupal acotado.
 mkdir -p "${data_dir}/backups"
-chgrp 10001 "${data_dir}/backups"
+chown "${ada_user}:${ada_group}" "${data_dir}/backups"
 chmod 0770 "${data_dir}/backups"
 
 if ! id -nG "${ada_user}" | tr ' ' '\n' | grep -qx docker; then
@@ -46,6 +47,8 @@ trap 'rm -f -- "${rendered_service}"' EXIT
 sed \
     -e "s|@ADA_DIR@|$(escape_sed_replacement "${project_dir}")|g" \
     -e "s|@ADA_ENV_FILE@|$(escape_sed_replacement "${env_file}")|g" \
+    -e "s|@ADA_USER@|$(escape_sed_replacement "${ada_user}")|g" \
+    -e "s|@ADA_GROUP@|$(escape_sed_replacement "${ada_group}")|g" \
     "${service_source}" > "${rendered_service}"
 
 install -o root -g root -m 0644 "${rendered_service}" "${service_target}"
