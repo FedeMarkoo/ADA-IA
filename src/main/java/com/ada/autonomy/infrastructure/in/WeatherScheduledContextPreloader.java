@@ -45,19 +45,21 @@ public class WeatherScheduledContextPreloader implements ScheduledContextPreload
       if (!forecast.isArray() || forecast.size() < 2) {
         return "¡Buen día! En " + location + " hacen " + number(data, "temperature_c") + " °C.";
       }
+      var today = forecast.get(0);
       var tomorrow = forecast.get(1);
-      var adjective = tomorrow.path("max_c").asDouble(0) >= 20 ? "cálido" : "templado";
-      return "¡Buen día! Mañana va a estar "
-          + tomorrow.path("condition").asText("variable")
-          + " y "
-          + adjective
+      return "¡Buen día! Hoy va a estar "
+          + weatherSummary(today)
           + " en "
           + location
           + ": "
-          + number(tomorrow, "min_c")
-          + "/"
-          + number(tomorrow, "max_c")
-          + " °C, lluvia "
+          + temperatureRange(today)
+          + ", "
+          + rainText(today)
+          + ". Mañana, "
+          + weatherSummary(tomorrow)
+          + ": "
+          + temperatureRange(tomorrow)
+          + ", "
           + rainText(tomorrow)
           + ".";
     } catch (JsonProcessingException error) {
@@ -69,6 +71,15 @@ public class WeatherScheduledContextPreloader implements ScheduledContextPreload
     return data.has(field) && data.get(field).isNumber()
         ? String.format(Locale.ROOT, "%.1f", data.get(field).asDouble())
         : "sin dato";
+  }
+
+  private String weatherSummary(JsonNode data) {
+    var adjective = data.path("max_c").asDouble(0) >= 20 ? "cálido" : "templado";
+    return data.path("condition").asText("variable") + " y " + adjective;
+  }
+
+  private String temperatureRange(JsonNode data) {
+    return number(data, "min_c") + "/" + number(data, "max_c") + " °C";
   }
 
   private String rainText(JsonNode data) {
