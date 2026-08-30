@@ -14,56 +14,9 @@ ADA_URL = os.environ.get("ADA_URL", "http://ada:8080").rstrip("/")
 ADA_TIMEOUT_SECONDS = int(os.environ.get("ADA_TIMEOUT_SECONDS", "900"))
 ADA_POLL_SECONDS = float(os.environ.get("ADA_POLL_SECONDS", "2"))
 STATIC = Path(__file__).parent / "static"
+SEED_DB = Path(__file__).with_name("test-manager.seed.sqlite")
 _DB_INITIALIZATION_LOCK = threading.Lock()
 _INITIALIZED_DB = None
-
-CALENDAR_PROMPTS = (
-    (
-        "Próximos eventos del calendario",
-        "¿Cuáles son mis próximos eventos del calendario durante los próximos 7 días? Si no hay eventos, decímelo claramente.",
-        ["calendar_upcoming_events"],
-        ["calendar_upcoming_events"],
-        ["eventos"],
-    ),
-    (
-        "Calendario sin eventos",
-        "Decime si tengo eventos próximos en mi calendario. Si no hay ninguno, respondé brevemente que no hay eventos próximos.",
-        ["calendar_upcoming_events"],
-        ["calendar_upcoming_events"],
-        ["eventos próximos"],
-    ),
-    (
-        "Resumen de clima y calendario",
-        "Al comenzar el día, preparame un resumen breve con el clima de hoy y mis próximos eventos del calendario. Si no hay eventos, indicálo sin inventar ninguno.",
-        ["calendar_upcoming_events", "weather_current"],
-        ["calendar_upcoming_events", "weather_current"],
-        ["clima", "eventos"],
-    ),
-    (
-        "Aviso programado del calendario",
-        "Avisame cuando corresponda cuáles son mis próximos eventos del calendario, usando un mensaje breve y natural.",
-        ["calendar_upcoming_events"],
-        ["calendar_upcoming_events"],
-        ["eventos"],
-    ),
-)
-
-WEATHER_PROMPTS = (
-    (
-        "Clima actual",
-        "¿Cómo está el clima ahora en mi ubicación? Respondé de forma breve y natural, indicando la temperatura y si hay lluvias.",
-        ["weather_current"],
-        ["weather_current"],
-        ["clima", "temperatura"],
-    ),
-    (
-        "Pronóstico de mañana",
-        "¿Cómo va a estar el clima mañana? Decime si será soleado, nublado o lluvioso, la mínima y máxima, y si habrá lluvias.",
-        ["weather_current"],
-        ["weather_current"],
-        ["mañana"],
-    ),
-)
 
 
 def db():
@@ -101,64 +54,44 @@ def initialize_schema(connection):
         prompt_columns = {row[1] for row in connection.execute("PRAGMA table_info(prompts)")}
         if "expected_terms" not in prompt_columns:
             connection.execute("ALTER TABLE prompts ADD COLUMN expected_terms TEXT NOT NULL DEFAULT '[]'")
-        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["dominio", "aplicación", "infraestructura"]', "Arquitectura hexagonal"))
-        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["jpg", "png", "raw"]', "Formatos de imagen"))
-        connection.execute("UPDATE prompts SET expected_terms = ? WHERE name = ? AND expected_terms = '[]'", ('["arroz", "huevo", "tomate"]', "Comida simple"))
-        if connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
-            category = connection.execute("INSERT INTO categories(name) VALUES (?) RETURNING id", ("Smoke tests",)).fetchone()[0]
-            connection.executemany(
-                "INSERT INTO prompts(category_id,name,prompt,expected_tools,expected_terms) VALUES (?,?,?,?,?)",
-                [(category, "Arquitectura hexagonal", "Explicá en tres puntos qué es una arquitectura hexagonal y cómo se separan dominio, aplicación e infraestructura.", "[]", '["dominio", "aplicación", "infraestructura"]'),
-                 (category, "Formatos de imagen", "Compará JPG, PNG y RAW para conservar fotografías. Indicá una ventaja y una desventaja de cada formato.", "[]", '["jpg", "png", "raw"]'),
-                 (category, "Comida simple", "Tengo arroz, huevos y tomate. Dame dos ideas fáciles para comer ahora.", "[]", '["arroz", "huevo", "tomate"]')])
-        calendar_category = connection.execute("SELECT id FROM categories WHERE name = ?", ("Google Calendar",)).fetchone()
-        if calendar_category is None:
-            calendar_category_id = connection.execute(
-                "INSERT INTO categories(name) VALUES (?) RETURNING id", ("Google Calendar",)
-            ).fetchone()[0]
-        else:
-            calendar_category_id = calendar_category[0]
-        for name, prompt, expected_tools, expected_context, expected_terms in CALENDAR_PROMPTS:
-            if connection.execute("SELECT 1 FROM prompts WHERE name = ?", (name,)).fetchone() is None:
-                connection.execute(
-                    """INSERT INTO prompts(
-                        category_id, name, prompt, expected_tools, expected_context, expected_terms
-                    ) VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        calendar_category_id,
-                        name,
-                        prompt,
-                        dumps(expected_tools),
-                        dumps(expected_context),
-                        dumps(expected_terms),
-                    ),
-                )
-        weather_category = connection.execute("SELECT id FROM categories WHERE name = ?", ("Clima",)).fetchone()
-        if weather_category is None:
-            weather_category_id = connection.execute(
-                "INSERT INTO categories(name) VALUES (?) RETURNING id", ("Clima",)
-            ).fetchone()[0]
-        else:
-            weather_category_id = weather_category[0]
-        for name, prompt, expected_tools, expected_context, expected_terms in WEATHER_PROMPTS:
-            if connection.execute("SELECT 1 FROM prompts WHERE name = ?", (name,)).fetchone() is None:
-                connection.execute(
-                    """INSERT INTO prompts(
-                        category_id, name, prompt, expected_tools, expected_context, expected_terms
-                    ) VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        weather_category_id,
-                        name,
-                        prompt,
-                        dumps(expected_tools),
-                        dumps(expected_context),
-                        dumps(expected_terms),
-                    ),
-                )
+        seed_database(connection)
         connection.commit()
     except Exception:
         connection.rollback()
         raise
+
+
+def seed_database(connection):
+    """Import versioned, non-private test cases without embedding prompts in code."""
+    if not SEED_DB.exists() or Path(DB).resolve() == SEED_DB.resolve():
+        return
+    seed = sqlite3.connect(SEED_DB)
+    try:
+        for category in seed.execute("SELECT id, name FROM categories"):
+            category_row = connection.execute(
+                "SELECT id FROM categories WHERE name = ?", (category[1],)
+            ).fetchone()
+            category_id = category_row[0] if category_row else connection.execute(
+                "INSERT INTO categories(name) VALUES (?) RETURNING id", (category[1],)
+            ).fetchone()[0]
+            prompts = seed.execute(
+                """SELECT name, prompt, expected_tools, expected_memories, expected_context,
+                          expected_rag, expected_terms
+                   FROM prompts WHERE category_id = ?""",
+                (category[0],),
+            )
+            for prompt in prompts:
+                if connection.execute("SELECT 1 FROM prompts WHERE name = ?", (prompt[0],)).fetchone():
+                    continue
+                connection.execute(
+                    """INSERT INTO prompts(
+                        category_id, name, prompt, expected_tools, expected_memories,
+                        expected_context, expected_rag, expected_terms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (category_id, prompt[0], *prompt[1:]),
+                )
+    finally:
+        seed.close()
 
 
 def dumps(value):
