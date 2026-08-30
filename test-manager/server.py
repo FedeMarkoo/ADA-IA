@@ -14,7 +14,6 @@ ADA_URL = os.environ.get("ADA_URL", "http://ada:8080").rstrip("/")
 ADA_TIMEOUT_SECONDS = int(os.environ.get("ADA_TIMEOUT_SECONDS", "900"))
 ADA_POLL_SECONDS = float(os.environ.get("ADA_POLL_SECONDS", "2"))
 STATIC = Path(__file__).parent / "static"
-SEED_DB = Path(__file__).with_name("test-manager.seed.sqlite")
 _DB_INITIALIZATION_LOCK = threading.Lock()
 _INITIALIZED_DB = None
 
@@ -54,51 +53,18 @@ def initialize_schema(connection):
         prompt_columns = {row[1] for row in connection.execute("PRAGMA table_info(prompts)")}
         if "expected_terms" not in prompt_columns:
             connection.execute("ALTER TABLE prompts ADD COLUMN expected_terms TEXT NOT NULL DEFAULT '[]'")
-        seed_database(connection)
         connection.commit()
     except Exception:
         connection.rollback()
         raise
 
-
-def seed_database(connection):
-    """Import versioned, non-private test cases without embedding prompts in code."""
-    if not SEED_DB.exists() or Path(DB).resolve() == SEED_DB.resolve():
-        return
-    seed = sqlite3.connect(SEED_DB)
-    try:
-        for category in seed.execute("SELECT id, name FROM categories"):
-            category_row = connection.execute(
-                "SELECT id FROM categories WHERE name = ?", (category[1],)
-            ).fetchone()
-            category_id = category_row[0] if category_row else connection.execute(
-                "INSERT INTO categories(name) VALUES (?) RETURNING id", (category[1],)
-            ).fetchone()[0]
-            prompts = seed.execute(
-                """SELECT name, prompt, expected_tools, expected_memories, expected_context,
-                          expected_rag, expected_terms
-                   FROM prompts WHERE category_id = ?""",
-                (category[0],),
-            )
-            for prompt in prompts:
-                if connection.execute("SELECT 1 FROM prompts WHERE name = ?", (prompt[0],)).fetchone():
-                    continue
-                connection.execute(
-                    """INSERT INTO prompts(
-                        category_id, name, prompt, expected_tools, expected_memories,
-                        expected_context, expected_rag, expected_terms
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (category_id, prompt[0], *prompt[1:]),
-                )
-    finally:
-        seed.close()
-
-
 def dumps(value):
+    """Serialize optional API arrays without ASCII escaping."""
     return json.dumps(value if value is not None else [], ensure_ascii=False)
 
 
 def row_prompt(row):
+    """Convert a SQLite prompt row into the JSON shape used by the API."""
     item = dict(row)
     for key in ("expected_tools", "expected_memories", "expected_context", "expected_terms"):
         item[key] = json.loads(item[key])
@@ -107,6 +73,7 @@ def row_prompt(row):
 
 
 def request_json(url, payload=None, timeout=180):
+    """Send a JSON request to ADA or the test-manager API."""
     data = None if payload is None else json.dumps(payload).encode()
     request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -114,6 +81,7 @@ def request_json(url, payload=None, timeout=180):
 
 
 def run_ada(prompt, conversation_id=None):
+    """Run one prompt through ADA and wait for its asynchronous result."""
     conversation_id = conversation_id or "test-manager-" + uuid.uuid4().hex
     deadline = time.monotonic() + ADA_TIMEOUT_SECONDS
     accepted = request_json(
@@ -140,6 +108,7 @@ def run_ada(prompt, conversation_id=None):
 
 
 def remaining_timeout(deadline):
+    """Return the remaining request budget or raise when it is exhausted."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError(f"ADA execution timed out after {ADA_TIMEOUT_SECONDS} seconds")
@@ -147,6 +116,7 @@ def remaining_timeout(deadline):
 
 
 def evaluate(test, result):
+    """Combine deterministic expectations with an evaluator-model verdict."""
     selected = (result.get("contextSelection") or {})
     actual_tools = result.get("executedTools", [])
     checks = {

@@ -1,7 +1,6 @@
 FROM python:3.12-alpine
 WORKDIR /app
 COPY server.py .
-COPY test-manager.seed.sqlite .
 COPY static ./static
 RUN addgroup -S -g 10001 ada && adduser -S -D -u 10001 -G ada ada && mkdir -p /data && chown -R ada:ada /app /data
 USER ada
