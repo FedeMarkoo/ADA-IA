@@ -41,31 +41,25 @@ public class WeatherScheduledContextPreloader implements ScheduledContextPreload
       var data = objectMapper.readTree(content);
       if (!data.isObject()) return content;
       var location = data.path("location").asText("tu ubicación");
-      var current =
-          "Clima actual en "
-              + location
-              + ": "
-              + number(data, "temperature_c")
-              + " °C, sensación "
-              + number(data, "feels_like_c")
-              + " °C, precipitación "
-              + data.path("rain_probability_pct").asText("sin dato")
-              + "%.";
       var forecast = data.path("forecast");
-      if (!forecast.isArray() || forecast.isEmpty()) return current;
-      var days =
-          java.util.stream.StreamSupport.stream(forecast.spliterator(), false)
-              .limit(3)
-              .map(
-                  day ->
-                      day.path("date").asText()
-                          + " entre "
-                          + number(day, "min_c")
-                          + " y "
-                          + number(day, "max_c")
-                          + " °C")
-              .toList();
-      return "¡Buen día! " + current + " Pronóstico: " + String.join("; ", days) + ".";
+      if (!forecast.isArray() || forecast.size() < 2) {
+        return "¡Buen día! En " + location + " hacen " + number(data, "temperature_c") + " °C.";
+      }
+      var tomorrow = forecast.get(1);
+      var adjective = tomorrow.path("max_c").asDouble(0) >= 20 ? "cálido" : "templado";
+      return "¡Buen día! Mañana va a estar "
+          + tomorrow.path("condition").asText("variable")
+          + " y "
+          + adjective
+          + " en "
+          + location
+          + ": "
+          + number(tomorrow, "min_c")
+          + "/"
+          + number(tomorrow, "max_c")
+          + " °C, lluvia "
+          + rainText(tomorrow)
+          + ".";
     } catch (JsonProcessingException error) {
       return content;
     }
@@ -75,5 +69,16 @@ public class WeatherScheduledContextPreloader implements ScheduledContextPreload
     return data.has(field) && data.get(field).isNumber()
         ? String.format(Locale.ROOT, "%.1f", data.get(field).asDouble())
         : "sin dato";
+  }
+
+  private String rainText(JsonNode data) {
+    if (!data.has("rain_probability_pct") || !data.get("rain_probability_pct").isNumber()) {
+      return "sin dato";
+    }
+    var probability = data.get("rain_probability_pct").asInt();
+    if (probability == 0) return "sin lluvias";
+    if (probability <= 30) return "lluvias leves";
+    if (probability <= 60) return "posibles lluvias";
+    return "lluvias probables";
   }
 }

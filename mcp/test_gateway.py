@@ -41,6 +41,7 @@ class McpGatewayTest(unittest.TestCase):
                     },
                     "daily": {
                         "time": ["2026-08-30", "2026-08-31"],
+                        "weather_code": [0, 1],
                         "temperature_2m_min": [10.04, 11.12],
                         "temperature_2m_max": [21.66, 22.31],
                         "precipitation_probability_max": [5, 10],
@@ -54,6 +55,7 @@ class McpGatewayTest(unittest.TestCase):
         self.assertEqual(20.0, result["feels_like_c"])
         self.assertEqual(2, len(result["forecast"]))
         self.assertEqual(21.7, result["forecast"][0]["max_c"])
+        self.assertEqual(5, result["forecast"][0]["rain_probability_pct"])
 
     def test_filesystem_read_file_is_routed_by_gateway(self):
         with tempfile.TemporaryDirectory() as tmp:
