@@ -9,26 +9,65 @@ permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
 jobs:
   release:
-    name: Create tag and release
+    name: Create tag, release and image builds
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Release Please
-        id: release
-        uses: googleapis/release-please-action@v4
+      - name: Checkout full history
+        uses: actions/checkout@v4
         with:
-          release-type: maven
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          skip-github-pull-request: true
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Publish release images
-        if: ${{ steps.release.outputs.release_created == 'true' }}
+      - name: Calculate next version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(./scripts/release/calculate-version.sh)
+          if [[ -z "${version}" ]]; then
+            echo "No releasable commits found."
+            echo "release=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "Next version: ${version}"
+          echo "release=true" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create tag
+        if: steps.version.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" "${GITHUB_SHA}" -m "Release ${tag}"
+          git push origin "${tag}"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh workflow run docker-publish.yml --ref "${RELEASE_TAG}" --field "version=${RELEASE_VERSION}"
-          gh workflow run mcp-publish.yml --ref "${RELEASE_TAG}" --field "version=${RELEASE_VERSION}"
+          set -euo pipefail
+          tag="v${VERSION}"
+          gh release create "${tag}" --target "${GITHUB_SHA}" --title "${tag}" --generate-notes
+
+      - name: Dispatch image builds
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh workflow run docker-publish.yml --ref "v${VERSION}" --field "version=${VERSION}"
+          gh workflow run mcp-publish.yml --ref "v${VERSION}" --field "version=${VERSION}"
