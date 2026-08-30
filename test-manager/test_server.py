@@ -15,23 +15,26 @@ class TestManagerPersistenceTest(unittest.TestCase):
     def tearDown(self):
         self.directory.cleanup()
 
-    def test_seed_contains_smoke_prompts(self):
+    def test_initialization_creates_empty_test_manager_schema(self):
         connection = server.db()
         categories = connection.execute("SELECT name FROM categories ORDER BY name").fetchall()
         prompts = connection.execute("SELECT name FROM prompts ORDER BY id").fetchall()
-        self.assertEqual(["Clima", "Google Calendar", "Smoke tests"], [item[0] for item in categories])
-        self.assertEqual(9, len(prompts))
-        self.assertIn("Próximos eventos del calendario", [item[0] for item in prompts])
-        self.assertIn("Resumen de clima y calendario", [item[0] for item in prompts])
-        self.assertIn("Pronóstico de mañana", [item[0] for item in prompts])
+        self.assertEqual([], [item[0] for item in categories])
+        self.assertEqual([], [item[0] for item in prompts])
+        tables = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+        ).fetchall()
+        self.assertEqual(
+            ["categories", "executions", "prompts"], [item[0] for item in tables]
+        )
         connection.close()
 
     def test_database_initialization_is_safe_for_concurrent_requests(self):
         def open_and_close(_):
             """Read seeded data before closing a concurrently opened connection."""
             connection = server.db()
-            category = connection.execute("SELECT name FROM categories").fetchone()
-            self.assertEqual("Smoke tests", category[0])
+            category_count = connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
+            self.assertEqual(0, category_count)
             connection.close()
 
         with ThreadPoolExecutor(max_workers=8) as executor:

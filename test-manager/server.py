@@ -14,7 +14,6 @@ ADA_URL = os.environ.get("ADA_URL", "http://ada:8080").rstrip("/")
 ADA_TIMEOUT_SECONDS = int(os.environ.get("ADA_TIMEOUT_SECONDS", "900"))
 ADA_POLL_SECONDS = float(os.environ.get("ADA_POLL_SECONDS", "2"))
 STATIC = Path(__file__).parent / "static"
-SEED_DB = Path(__file__).with_name("test-manager.seed.sqlite")
 _DB_INITIALIZATION_LOCK = threading.Lock()
 _INITIALIZED_DB = None
 
@@ -54,45 +53,10 @@ def initialize_schema(connection):
         prompt_columns = {row[1] for row in connection.execute("PRAGMA table_info(prompts)")}
         if "expected_terms" not in prompt_columns:
             connection.execute("ALTER TABLE prompts ADD COLUMN expected_terms TEXT NOT NULL DEFAULT '[]'")
-        seed_database(connection)
         connection.commit()
     except Exception:
         connection.rollback()
         raise
-
-
-def seed_database(connection):
-    """Import versioned, non-private test cases without embedding prompts in code."""
-    if not SEED_DB.exists() or Path(DB).resolve() == SEED_DB.resolve():
-        return
-    seed = sqlite3.connect(SEED_DB)
-    try:
-        for category in seed.execute("SELECT id, name FROM categories"):
-            category_row = connection.execute(
-                "SELECT id FROM categories WHERE name = ?", (category[1],)
-            ).fetchone()
-            category_id = category_row[0] if category_row else connection.execute(
-                "INSERT INTO categories(name) VALUES (?) RETURNING id", (category[1],)
-            ).fetchone()[0]
-            prompts = seed.execute(
-                """SELECT name, prompt, expected_tools, expected_memories, expected_context,
-                          expected_rag, expected_terms
-                   FROM prompts WHERE category_id = ?""",
-                (category[0],),
-            )
-            for prompt in prompts:
-                if connection.execute("SELECT 1 FROM prompts WHERE name = ?", (prompt[0],)).fetchone():
-                    continue
-                connection.execute(
-                    """INSERT INTO prompts(
-                        category_id, name, prompt, expected_tools, expected_memories,
-                        expected_context, expected_rag, expected_terms
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (category_id, prompt[0], *prompt[1:]),
-                )
-    finally:
-        seed.close()
-
 
 def dumps(value):
     return json.dumps(value if value is not None else [], ensure_ascii=False)
