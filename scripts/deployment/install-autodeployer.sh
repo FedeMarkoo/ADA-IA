@@ -66,6 +66,10 @@ set_env_value "ADA_DATA_DIR" "${data_dir}"
 if grep -q '^ADA_GDRIVE_PATH=../ada-data$' "${env_file}"; then
     set_env_value "ADA_GDRIVE_PATH" "${data_dir}"
 fi
+# The container owns the data directory with its runtime UID. Pre-create the
+# deployer's lock as the host user so systemd does not need directory write
+# access just to coordinate concurrent checks.
+install -o "${ada_user}" -g "${ada_group}" -m 0660 /dev/null "${data_dir}/.deploy.lock"
 
 rendered_service="$(mktemp)"
 trap 'rm -f -- "${rendered_service}"' EXIT
