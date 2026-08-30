@@ -31,13 +31,24 @@ public class ScheduledTriggerScheduler {
 
   void run(ScheduledTrigger trigger, Instant now) {
     try {
+      var preloaded = preload(trigger);
       var result =
           chatUseCase.execute(
-              new ChatRequest(trigger.prompt(), null, trigger.conversationId(), preload(trigger)));
-      messageSender.send(result.content());
+              new ChatRequest(trigger.prompt(), null, trigger.conversationId(), preloaded));
+      messageSender.send(safeContent(result.content(), preloaded));
     } finally {
       store.markExecuted(trigger.id(), now, nextRun(trigger, now));
     }
+  }
+
+  private String safeContent(String content, List<String> preloaded) {
+    if (content == null
+        || content.isBlank()
+        || "{}".equals(content.trim())
+        || "[]".equals(content.trim())) {
+      return preloaded.isEmpty() ? "No pude generar una respuesta." : preloaded.getFirst();
+    }
+    return content;
   }
 
   private List<String> preload(ScheduledTrigger trigger) {

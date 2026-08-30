@@ -64,4 +64,31 @@ class ScheduledTriggerSchedulerTest {
     verify(store).findDue(any());
     verifyNoInteractions(chat, sender);
   }
+
+  @Test
+  void sendsPreloadedWeatherWhenModelReturnsEmptyJson() {
+    var scheduler = new ScheduledTriggerScheduler(store, chat, sender, List.of(preloader));
+    var now = Instant.parse("2026-08-30T10:00:00Z");
+    var trigger =
+        new ScheduledTrigger(
+            8,
+            "weather.empty",
+            "weather",
+            "0 0 8 * * *",
+            "UTC",
+            "clima",
+            "telegram:1",
+            true,
+            now,
+            null);
+    org.mockito.Mockito.when(preloader.supports("weather")).thenReturn(true);
+    org.mockito.Mockito.when(preloader.preload(trigger))
+        .thenReturn(List.of("Clima actual en Buenos Aires: 15 °C."));
+    org.mockito.Mockito.when(chat.execute(any()))
+        .thenReturn(new ChatResult("id", "{}", "model", null, null));
+
+    scheduler.run(trigger, now);
+
+    verify(sender).send("Clima actual en Buenos Aires: 15 °C.");
+  }
 }
