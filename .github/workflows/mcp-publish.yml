@@ -1,12 +1,14 @@
 name: Publish MCP image
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "mcp/**"
-      - ".github/workflows/mcp-publish.yml"
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the v prefix, for example 0.1.0"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -35,7 +37,7 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest
-            type=sha,format=long
+            type=semver,pattern={{version}},value=${{ github.event.release.tag_name || inputs.version }}
       - uses: docker/build-push-action@v6
         with:
           context: ./mcp

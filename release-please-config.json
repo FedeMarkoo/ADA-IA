@@ -1,0 +1,7 @@
+{
+  "release-type": "maven",
+  "initial-version": "0.1.0",
+  "include-component-in-tag": false,
+  "changelog-path": "CHANGELOG.md",
+  "pull-request-title-pattern": "chore: release v${version}"
+}
