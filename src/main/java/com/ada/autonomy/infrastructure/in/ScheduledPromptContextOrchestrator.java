@@ -115,7 +115,10 @@ public class ScheduledPromptContextOrchestrator implements ScheduledContextPrelo
     var normalized = prompt.toLowerCase(Locale.ROOT);
     return tools.stream()
         .map(LlmTool::name)
-        .filter(name -> name.equals("weather_current") && containsWeather(normalized))
+        .filter(
+            name ->
+                (name.equals("weather_current") && containsWeather(normalized))
+                    || (name.equals("calendar_upcoming_events") && containsCalendar(normalized)))
         .toList();
   }
 
@@ -126,12 +129,18 @@ public class ScheduledPromptContextOrchestrator implements ScheduledContextPrelo
         || prompt.contains("lluvia");
   }
 
+  private boolean containsCalendar(String prompt) {
+    return containsAny(
+        prompt, "agenda", "calendario", "evento", "eventos", "reunión", "reunion", "compromiso");
+  }
+
   private boolean isRelevant(String tool, String prompt) {
     var normalized = prompt.toLowerCase(Locale.ROOT);
     if (tool.equals("weather_current")) return containsWeather(normalized);
     if (tool.equals("web_search")) {
       return containsAny(normalized, "buscar", "investigar", "noticias", "internet", "web");
     }
+    if (tool.equals("calendar_upcoming_events")) return containsCalendar(normalized);
     if (tool.startsWith("filesystem.")) {
       return containsAny(normalized, "archivo", "documento", "carpeta", "directorio", "fichero");
     }
@@ -154,7 +163,30 @@ public class ScheduledPromptContextOrchestrator implements ScheduledContextPrelo
 
   private String compact(String tool, ToolExecutionResult result) {
     if ("weather_current".equals(tool)) return weatherText(result.content());
+    if ("calendar_upcoming_events".equals(tool)) return calendarText(result.content());
     return "DATOS PRE-CARGADOS (subagente " + tool + "): " + result.content();
+  }
+
+  private String calendarText(String content) {
+    try {
+      var data = objectMapper.readTree(content);
+      var events = data.path("events");
+      var text =
+          new StringBuilder("DATOS PRE-CARGADOS DE AGENDA (subagente calendar_upcoming_events): ");
+      if (!events.isArray() || events.isEmpty())
+        return text.append("No hay eventos próximos.").toString();
+      text.append("Próximos eventos:");
+      for (var event : events) {
+        text.append(" ")
+            .append(event.path("start").asText("sin horario"))
+            .append(" — ")
+            .append(event.path("title").asText("Sin título"))
+            .append(".");
+      }
+      return text.toString();
+    } catch (Exception error) {
+      return "DATOS PRE-CARGADOS DE AGENDA (subagente calendar_upcoming_events): " + content;
+    }
   }
 
   private String weatherText(String content) {

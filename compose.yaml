@@ -26,6 +26,7 @@ services:
       ADA_MCP_WEB_SEARCH_URL: http://ada-mcps:8000/web-search
       ADA_MCP_FILESYSTEM_URL: http://ada-mcps:8000/filesystem
       ADA_MCP_WEATHER_URL: http://ada-mcps:8000/weather
+      ADA_MCP_CALENDAR_URL: http://ada-mcps:8000/google-calendar
       MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
     ports:
       - "127.0.0.1:8080:8080"
@@ -106,12 +107,17 @@ services:
 
   ada-mcps:
     image: ${ADA_MCP_IMAGE:-ghcr.io/fedemarkoo/ada-mcps}:${ADA_MCP_VERSION:-latest}
+    user: "0:0"
     restart: unless-stopped
     environment:
       ADA_FILESYSTEM_ALLOWED_ROOTS: /data:/gdrive
+      ADA_GOOGLE_VAULT_PATH: /run/secrets/google-vault.db
+      ADA_GOOGLE_VAULT_KEY_PATH: /run/secrets/google-vault.key
     volumes:
       - ${ADA_DATA_DIR:-../ada-data}:/data:ro
       - ${ADA_GDRIVE_PATH:?ADA_GDRIVE_PATH must point to the host Google Drive mount}:/gdrive:ro
+      - ${ADA_GOOGLE_VAULT_PATH:?ADA_GOOGLE_VAULT_PATH must point to the legacy vault}:/run/secrets/google-vault.db:ro
+      - ${ADA_GOOGLE_VAULT_KEY_PATH:?ADA_GOOGLE_VAULT_KEY_PATH must point to the legacy vault key}:/run/secrets/google-vault.key:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/filesystem', timeout=2)"]
       interval: 10s

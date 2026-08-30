@@ -25,12 +25,22 @@ def load_weather():
     return module
 
 
+def load_calendar():
+    path = Path(__file__).parent / "google-calendar" / "server.py"
+    spec = importlib.util.spec_from_file_location("ada_google_calendar_server", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 web_search = load_web_search()
 weather = load_weather()
+calendar = load_calendar()
 SERVERS = {
     "/filesystem": {"name": "ada-filesystem", "tools": filesystem.TOOLS},
     "/web-search": {"name": "ada-web-search", "tools": [web_search.TOOL]},
     "/weather": {"name": "ada-weather", "tools": [weather.TOOL]},
+    "/google-calendar": {"name": "ada-google-calendar", "tools": [calendar.TOOL]},
 }
 
 
@@ -67,6 +77,8 @@ def call_tool(path, tool_name, arguments):
         return web_search.search(arguments.get("query", ""), min(max(int(arguments.get("max_results", 5)), 1), 8))
     if path == "/weather" and tool_name == "weather_current":
         return weather.current(arguments)
+    if path == "/google-calendar" and tool_name == "calendar_upcoming_events":
+        return calendar.upcoming_events(arguments)
     raise ValueError("unsupported MCP tool")
 
 

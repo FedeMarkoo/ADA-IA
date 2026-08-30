@@ -8,14 +8,21 @@ import server
 
 
 class McpGatewayTest(unittest.TestCase):
-    def test_gateway_exposes_both_mcp_endpoints(self):
-        self.assertEqual({"/filesystem", "/web-search", "/weather"}, set(server.SERVERS))
+    def test_gateway_exposes_all_mcp_endpoints(self):
+        self.assertEqual(
+            {"/filesystem", "/web-search", "/weather", "/google-calendar"},
+            set(server.SERVERS),
+        )
         self.assertEqual(
             ["filesystem.list_files", "filesystem.read_file"],
             [tool["name"] for tool in server.SERVERS["/filesystem"]["tools"]],
         )
         self.assertEqual("web_search", server.SERVERS["/web-search"]["tools"][0]["name"])
         self.assertEqual("weather_current", server.SERVERS["/weather"]["tools"][0]["name"])
+        self.assertEqual(
+            "calendar_upcoming_events",
+            server.SERVERS["/google-calendar"]["tools"][0]["name"],
+        )
 
     def test_weather_contract_is_compact_and_routes_to_service(self):
         self.assertEqual({"type", "properties", "additionalProperties"}, set(server.weather.TOOL["inputSchema"]))

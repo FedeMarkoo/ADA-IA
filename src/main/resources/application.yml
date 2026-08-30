@@ -37,6 +37,7 @@ ada:
     web-search-url: ${ADA_MCP_WEB_SEARCH_URL:http://127.0.0.1:8000/web-search}
     filesystem-url: ${ADA_MCP_FILESYSTEM_URL:http://127.0.0.1:8000/filesystem}
     weather-url: ${ADA_MCP_WEATHER_URL:http://127.0.0.1:8000/weather}
+    calendar-url: ${ADA_MCP_CALENDAR_URL:http://127.0.0.1:8000/google-calendar}
   telegram:
     enabled: ${ADA_TELEGRAM_ENABLED:false}
     bootstrap-bot-token: ${ADA_TELEGRAM_BOOTSTRAP_BOT_TOKEN:}
