@@ -4,9 +4,23 @@ Estos scripts levantan ADA, LiteLLM, Ollama, MCPs, Test Manager, Grafana y
 Prometheus mediante Docker Compose. Requieren Docker Desktop en macOS/Windows
 o Docker Engine con Compose en Linux.
 
-Antes de ejecutar uno, configura `../ada-data/.env`. Si todavía no existe, el
-script crea una copia de `deploy/.env.example` y termina para que puedas
-completar la configuración sin arrancar con valores de ejemplo.
+El instalador crea `../ada-data/.env` si todavía no existe y levanta el stack
+con valores locales iniciales. La configuración queda junto con las bases y
+backups, fuera del repositorio. Telegram queda deshabilitado hasta completar
+`ADA_TELEGRAM_BOOTSTRAP_BOT_TOKEN`, `ADA_TELEGRAM_BOOTSTRAP_CHAT_ID` y
+`ADA_SECRET_MASTER_KEY`, y cambiar `ADA_TELEGRAM_ENABLED=true`.
+
+Si preferís prepararlo manualmente:
+
+```bash
+mkdir -p ../ada-data
+cp deploy/.env.example ../ada-data/.env
+chmod 600 ../ada-data/.env
+```
+
+`LITELLM_MASTER_KEY` y `ADA_GDRIVE_PATH` ya tienen valores locales para que
+Compose no falle por variables obligatorias. Cambiá esos valores antes de un
+entorno compartido o productivo.
 
 ## Linux
 

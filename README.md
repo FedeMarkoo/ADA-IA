@@ -59,8 +59,9 @@ defecto; para fijar una versión, configura `ADA_VERSION=X.Y.Z`.
 Los instaladores de `instaladores/` validan Docker, crean `../ada-data/.env`
 desde el ejemplo cuando hace falta y levantan el stack completo con Docker
 Compose. La configuración queda junto con las bases, backups y demás datos
-persistentes, fuera del repositorio. Primero edita `../ada-data/.env` con tus
-valores locales; no se deben versionar secretos.
+persistentes, fuera del repositorio. Telegram queda deshabilitado inicialmente;
+para activarlo completa las credenciales y `ADA_SECRET_MASTER_KEY` en ese
+archivo. No se deben versionar secretos.
 
 ### Linux
 
