@@ -47,12 +47,12 @@ El smoke runner HTTP y el dashboard local de Grafana están documentados en
 
 ## Versiones y releases
 
-Los merges a `main` activan `release-please`, que crea o actualiza un PR de
-release. El PR calcula la siguiente versión semántica según los commits
-convencionales (`fix`, `feat` y cambios incompatibles), actualiza Maven y el
-changelog. Al mergear ese PR se crea el tag `vX.Y.Z`, el GitHub Release y se
-publican las imágenes Docker `latest` y `X.Y.Z`. El deployer sigue consumiendo
-`latest` por defecto; para fijar una versión, configura `ADA_VERSION=X.Y.Z`.
+Los merges a `main` activan `release-please`, que calcula la siguiente versión
+semántica según los commits convencionales (`fix`, `feat` y cambios
+incompatibles), actualiza Maven y el changelog, y crea directamente el tag
+`vX.Y.Z` junto con el GitHub Release. Luego se publican las imágenes Docker
+`latest` y `X.Y.Z`. El deployer sigue consumiendo `latest` por defecto; para
+fijar una versión, configura `ADA_VERSION=X.Y.Z`.
 
 ## Instaladores multiplataforma
 
