@@ -88,7 +88,9 @@ class ScheduledTriggerSchedulerTest {
             null);
     org.mockito.Mockito.when(preloader.supports("weather")).thenReturn(true);
     org.mockito.Mockito.when(preloader.preload(trigger))
-        .thenReturn(List.of("Clima actual en Buenos Aires: 15 °C."));
+        .thenReturn(
+            List.of(
+                "DATOS PRE-CARGADOS DEL CLIMA (interno):\nClima actual en Buenos Aires: 15 °C."));
     org.mockito.Mockito.when(chat.execute(any()))
         .thenReturn(new ChatResult("id", "{}", "model", null, null));
 
