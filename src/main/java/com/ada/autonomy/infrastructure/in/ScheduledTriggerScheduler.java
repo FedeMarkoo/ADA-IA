@@ -38,13 +38,13 @@ public class ScheduledTriggerScheduler {
       var result =
           chatUseCase.execute(
               new ChatRequest(trigger.prompt(), null, trigger.conversationId(), preloaded));
-      messageSender.send(safeContent(result.content(), preloaded));
+      messageSender.send(safeContent(result.content(), preloaded, trigger.eventType()));
     } finally {
       store.markExecuted(trigger.id(), now, nextRun(trigger, now));
     }
   }
 
-  private String safeContent(String content, List<String> preloaded) {
+  private String safeContent(String content, List<String> preloaded, String eventType) {
     if (content == null
         || content.isBlank()
         || "{}".equals(content.trim())
@@ -53,6 +53,17 @@ public class ScheduledTriggerScheduler {
           ? "No pude generar una respuesta."
           : userFacing(preloaded.getFirst());
     }
+    var readable = readableContent(content);
+    if ("weather".equalsIgnoreCase(eventType)
+        && !readable.contains("°C")
+        && !preloaded.isEmpty()
+        && userFacing(preloaded.getFirst()).contains("°C")) {
+      return userFacing(preloaded.getFirst());
+    }
+    return readable;
+  }
+
+  private String readableContent(String content) {
     try {
       var json = objectMapper.readTree(content.trim());
       if (json.isTextual()) return json.asText();
