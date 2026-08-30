@@ -31,7 +31,7 @@ public class TelegramLifecycleMessageSender implements LifecycleMessageSender {
 
     try {
       telegram.sendMessage(token, chatId, message);
-    } catch (RestClientException exception) {
+    } catch (RestClientException | IllegalStateException exception) {
       log.warn("Could not send ADA lifecycle notification to Telegram");
     }
   }
