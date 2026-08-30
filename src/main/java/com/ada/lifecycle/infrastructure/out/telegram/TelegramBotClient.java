@@ -20,13 +20,15 @@ public class TelegramBotClient {
   private final ObjectMapper objectMapper;
 
   public void sendMessage(String token, String chatId, String text) {
-    client(token)
-        .post()
-        .uri("/sendMessage")
-        .contentType(MediaType.APPLICATION_JSON)
-        .body(new TelegramMessage(chatId, text))
-        .retrieve()
-        .toBodilessEntity();
+    var response =
+        client(token)
+            .post()
+            .uri("/sendMessage")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(new TelegramMessage(chatId, text))
+            .retrieve()
+            .body(String.class);
+    verifySuccessfulResponse(response);
   }
 
   public List<TelegramUpdate> getUpdates(String token, long offset, int timeoutSeconds)
@@ -59,6 +61,16 @@ public class TelegramBotClient {
               item.path("update_id").asLong(), chat.path("id").asText(), text.asText()));
     }
     return updates;
+  }
+
+  void verifySuccessfulResponse(String body) {
+    try {
+      if (!objectMapper.readTree(body).path("ok").asBoolean(false)) {
+        throw new IllegalStateException("Telegram rejected the message");
+      }
+    } catch (JsonProcessingException exception) {
+      throw new IllegalStateException("Telegram returned an invalid response", exception);
+    }
   }
 
   private RestClient client(String token) {
