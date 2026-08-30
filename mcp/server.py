@@ -17,10 +17,20 @@ def load_web_search():
     return module
 
 
+def load_weather():
+    path = Path(__file__).parent / "weather" / "server.py"
+    spec = importlib.util.spec_from_file_location("ada_weather_server", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 web_search = load_web_search()
+weather = load_weather()
 SERVERS = {
     "/filesystem": {"name": "ada-filesystem", "tools": filesystem.TOOLS},
     "/web-search": {"name": "ada-web-search", "tools": [web_search.TOOL]},
+    "/weather": {"name": "ada-weather", "tools": [weather.TOOL]},
 }
 
 
@@ -55,6 +65,8 @@ def call_tool(path, tool_name, arguments):
         return filesystem.list_files(arguments) if tool_name == "filesystem.list_files" else filesystem.read_file(arguments)
     if path == "/web-search" and tool_name == "web_search":
         return web_search.search(arguments.get("query", ""), min(max(int(arguments.get("max_results", 5)), 1), 8))
+    if path == "/weather" and tool_name == "weather_current":
+        return weather.current(arguments)
     raise ValueError("unsupported MCP tool")
 
 

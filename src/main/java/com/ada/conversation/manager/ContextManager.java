@@ -16,7 +16,11 @@ public class ContextManager {
   private final ContextSelectionManager selectionManager;
 
   public ContextState build(ChatRequest request) {
-    var current = new ContextState(List.of(), List.of(), selectionManager.select(request));
+    var selection =
+        request.preloadedContext().isEmpty()
+            ? selectionManager.select(request)
+            : com.ada.conversation.application.dto.ContextSelection.none();
+    var current = new ContextState(List.of(), List.of(), selection);
     var orderedItems = new ArrayList<>(items);
     orderedItems.sort(AnnotationAwareOrderComparator.INSTANCE);
     for (var item : orderedItems) current = item.apply(request, current);

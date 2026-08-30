@@ -40,8 +40,13 @@ public class ContextSelectionManager {
                       () -> client.complete(selectionRequest)));
       metrics.recordTokenBreakdown(selectionRequest, completion);
       var selection = parse(completion.content(), tools, memories, fallback);
-      if (isWeatherRequest(request) && !selection.tools().contains("web_search")) {
-        selection = new ContextSelection(List.of("web_search"), List.of("web_search"), selection.memories(), selection.compactContext());
+      if (isWeatherRequest(request) && !selection.tools().contains("weather_current")) {
+        selection =
+            new ContextSelection(
+                List.of("weather"),
+                List.of("weather_current"),
+                selection.memories(),
+                selection.compactContext());
       }
       metrics.recordContextSelection(properties.getLlm().getRoutingModel(), selection);
       return selection;
@@ -53,7 +58,7 @@ public class ContextSelectionManager {
 
   private LlmRequest requestFor(ChatRequest request, List<LlmTool> tools, List<String> memories) {
     var catalog =
-        "MCPs: web_search (usalo solo para información actual o externa)\nRAG: enabled\nTools: "
+        "MCPs: web_search (información externa), weather (clima/ubicación)\nRAG: enabled\nTools: "
             + tools.stream().map(LlmTool::name).toList()
             + "\nMemories: "
             + memories
@@ -82,7 +87,9 @@ public class ContextSelectionManager {
       var validMemories =
           memories.stream().filter(name -> contains(json.path("memories"), name)).toList();
       var selectedMcps =
-          contains(json.path("mcps"), "web_search") ? List.of("web_search") : List.<String>of();
+          List.of("web_search", "weather").stream()
+              .filter(name -> contains(json.path("mcps"), name))
+              .toList();
       return new ContextSelection(
           selectedMcps, validTools, validMemories, json.path("compactContext").asBoolean(false));
     } catch (Exception error) {
@@ -108,6 +115,8 @@ public class ContextSelectionManager {
 
   private boolean isWeatherRequest(ChatRequest request) {
     var message = request.message().toLowerCase(java.util.Locale.ROOT);
-    return message.contains("clima") || message.contains("tiempo") || message.contains("temperatura");
+    return message.contains("clima")
+        || message.contains("tiempo")
+        || message.contains("temperatura");
   }
 }

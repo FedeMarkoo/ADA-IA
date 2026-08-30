@@ -25,6 +25,7 @@ services:
       ADA_DEPLOYED_VERSION: ${ADA_VERSION:-latest}
       ADA_MCP_WEB_SEARCH_URL: http://ada-mcps:8000/web-search
       ADA_MCP_FILESYSTEM_URL: http://ada-mcps:8000/filesystem
+      ADA_MCP_WEATHER_URL: http://ada-mcps:8000/weather
       MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
     ports:
       - "127.0.0.1:8080:8080"

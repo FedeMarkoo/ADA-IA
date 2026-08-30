@@ -64,7 +64,7 @@ transporte JSON-RPC y mantiene endpoints internos por servidor: `/web-search`
 expone `web_search` y `/filesystem` expone las tools de filesystem. ADA publica
 esas tools mediante sus providers y las ejecuta mediante sus adapters Java.
 
-Compose levanta ambos MCPs en la red interna mediante el servicio `ada-mcps`.
+Compose levanta los MCPs en la red interna mediante el servicio `ada-mcps`.
 No se publica el puerto al host. Para agregar otra tool, se incorpora al
 gateway y al mismo contexto `mcp/`, junto con su adapter correspondiente en
 `infrastructure.out`.
@@ -120,9 +120,9 @@ El horario usa la sintaxis cron de Spring, con seis campos incluyendo los
 segundos. La programación, la zona horaria y el prompt viven en la tabla
 `scheduled_triggers`, no en variables de entorno.
 
-Para programar el clima, el prompt debe pedir a ADA que consulte los servicios
-de ubicación y clima disponibles y la respuesta se entrega por Telegram cuando
-Telegram está habilitado.
+El MCP `weather_current` obtiene clima y ubicación mediante servicios externos.
+En una tarea programada de tipo `weather`, ADA precarga ese dato antes de llamar
+al modelo; así no carga el catálogo MCP ni hace una segunda vuelta de herramientas.
 
 También se pueden cargar disparadores adicionales mediante `POST
 /api/v1/schedules`:
@@ -130,10 +130,10 @@ También se pueden cargar disparadores adicionales mediante `POST
 ```json
 {
   "name": "daily-summary",
-  "eventType": "summary",
+  "eventType": "weather",
   "cronExpression": "0 30 9 * * *",
   "timezone": "America/Argentina/Buenos_Aires",
-  "prompt": "Consultá mi ubicación actual y el clima actual usando los servicios disponibles. Enviame un resumen breve para comenzar el día.",
+  "prompt": "Usá los datos meteorológicos precargados y enviame un resumen breve para comenzar el día.",
   "conversationId": "autonomy-summary",
   "enabled": true
 }

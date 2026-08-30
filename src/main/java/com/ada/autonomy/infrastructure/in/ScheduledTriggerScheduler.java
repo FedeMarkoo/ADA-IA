@@ -1,6 +1,7 @@
 package com.ada.autonomy.infrastructure.in;
 
 import com.ada.autonomy.application.dto.ScheduledTrigger;
+import com.ada.autonomy.application.port.out.ScheduledContextPreloader;
 import com.ada.autonomy.application.port.out.ScheduledTriggerStore;
 import com.ada.conversation.application.ChatUseCase;
 import com.ada.conversation.application.dto.ChatRequest;
@@ -8,6 +9,7 @@ import com.ada.lifecycle.application.port.out.LifecycleMessageSender;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -18,6 +20,7 @@ public class ScheduledTriggerScheduler {
   private final ScheduledTriggerStore store;
   private final ChatUseCase chatUseCase;
   private final LifecycleMessageSender messageSender;
+  private final List<ScheduledContextPreloader> preloaders;
   private final Clock clock = Clock.systemUTC();
 
   @Scheduled(fixedDelay = 1000)
@@ -30,15 +33,24 @@ public class ScheduledTriggerScheduler {
     try {
       var result =
           chatUseCase.execute(
-              new ChatRequest(trigger.prompt(), null, trigger.conversationId()));
+              new ChatRequest(trigger.prompt(), null, trigger.conversationId(), preload(trigger)));
       messageSender.send(result.content());
     } finally {
       store.markExecuted(trigger.id(), now, nextRun(trigger, now));
     }
   }
 
+  private List<String> preload(ScheduledTrigger trigger) {
+    return preloaders.stream()
+        .filter(preloader -> preloader.supports(trigger.eventType()))
+        .findFirst()
+        .map(preloader -> preloader.preload(trigger))
+        .orElseGet(List::of);
+  }
+
   private Instant nextRun(ScheduledTrigger trigger, Instant now) {
-    var cron = org.springframework.scheduling.support.CronExpression.parse(trigger.cronExpression());
+    var cron =
+        org.springframework.scheduling.support.CronExpression.parse(trigger.cronExpression());
     var zone = ZoneId.of(trigger.timezone());
     return cron.next(now.atZone(zone)).toInstant();
   }

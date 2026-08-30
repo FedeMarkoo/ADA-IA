@@ -48,8 +48,7 @@ public class SqliteScheduledTriggerStore implements ScheduledTriggerStore {
 
   @Override
   public List<ScheduledTrigger> findAll() {
-    return jdbc.query(
-        "SELECT * FROM scheduled_triggers ORDER BY name", (rs, row) -> fromRow(rs));
+    return jdbc.query("SELECT * FROM scheduled_triggers ORDER BY name", (rs, row) -> fromRow(rs));
   }
 
   private ScheduledTrigger fromRow(java.sql.ResultSet rs) throws java.sql.SQLException {
