@@ -7,16 +7,28 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+  actions: write
 
 jobs:
   release:
-    name: Create or update release PR
+    name: Create tag and release
     runs-on: ubuntu-latest
     steps:
       - name: Release Please
+        id: release
         uses: googleapis/release-please-action@v4
         with:
           release-type: maven
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
+
+      - name: Publish release images
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh workflow run docker-publish.yml --ref "${RELEASE_TAG}" --field "version=${RELEASE_VERSION}"
+          gh workflow run mcp-publish.yml --ref "${RELEASE_TAG}" --field "version=${RELEASE_VERSION}"
