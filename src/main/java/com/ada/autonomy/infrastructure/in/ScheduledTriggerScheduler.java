@@ -6,6 +6,8 @@ import com.ada.autonomy.application.port.out.ScheduledTriggerStore;
 import com.ada.conversation.application.ChatUseCase;
 import com.ada.conversation.application.dto.ChatRequest;
 import com.ada.lifecycle.application.port.out.LifecycleMessageSender;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -21,6 +23,7 @@ public class ScheduledTriggerScheduler {
   private final ChatUseCase chatUseCase;
   private final LifecycleMessageSender messageSender;
   private final List<ScheduledContextPreloader> preloaders;
+  private final ObjectMapper objectMapper;
   private final Clock clock = Clock.systemUTC();
 
   @Scheduled(fixedDelay = 1000)
@@ -47,6 +50,19 @@ public class ScheduledTriggerScheduler {
         || "{}".equals(content.trim())
         || "[]".equals(content.trim())) {
       return preloaded.isEmpty() ? "No pude generar una respuesta." : preloaded.getFirst();
+    }
+    try {
+      var json = objectMapper.readTree(content.trim());
+      if (json.isTextual()) return json.asText();
+      if (json.isObject()) {
+        for (var fieldName : List.of("message", "text", "content", "response")) {
+          var field = json.get(fieldName);
+          if (field != null && field.isTextual()) return field.asText();
+        }
+        if (json.size() == 1) return json.fieldNames().next();
+      }
+    } catch (JsonProcessingException ignored) {
+      // Preserve non-JSON model responses unchanged.
     }
     return content;
   }
