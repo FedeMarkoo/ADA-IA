@@ -63,7 +63,7 @@ public class TelegramBotClient {
     return updates;
   }
 
-  private void verifySuccessfulResponse(String body) {
+  void verifySuccessfulResponse(String body) {
     try {
       if (!objectMapper.readTree(body).path("ok").asBoolean(false)) {
         throw new IllegalStateException("Telegram rejected the message");
