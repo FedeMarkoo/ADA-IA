@@ -1,6 +1,11 @@
 name: Publish MCP image
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "mcp/**"
+      - ".github/workflows/mcp-publish.yml"
   release:
     types: [published]
   workflow_dispatch:
