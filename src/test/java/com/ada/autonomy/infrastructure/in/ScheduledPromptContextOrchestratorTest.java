@@ -28,9 +28,18 @@ class ScheduledPromptContextOrchestratorTest {
     properties.setLlm(new LlmProperties("http://llm", "key", "model"));
     properties.getLlm().setRoutingModel("router");
     when(toolManager.availableTools())
-        .thenReturn(List.of(new LlmTool("weather_current", "clima y pronóstico", "{}")));
+        .thenReturn(
+            List.of(
+                new LlmTool("filesystem.list_files", "lista archivos", "{}"),
+                new LlmTool("web_search", "busca en internet", "{}"),
+                new LlmTool("weather_current", "clima y pronóstico", "{}")));
     when(client.complete(any()))
-        .thenReturn(new LlmCompletion("{\"tools\":[\"weather_current\"]}", "router", 1L, 1L));
+        .thenReturn(
+            new LlmCompletion(
+                "{\"tools\":[\"filesystem.list_files\",\"web_search\",\"weather_current\"]}",
+                "router",
+                1L,
+                1L));
     when(toolManager.execute(any(LlmToolCall.class)))
         .thenReturn(
             new ToolExecutionResult(

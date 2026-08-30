@@ -54,9 +54,13 @@ public class ScheduledPromptContextOrchestrator implements ScheduledContextPrelo
     context.add(executionContext(trigger));
     for (var tool : selected) {
       log.info("scheduled_subagent_start event={} tool={}", trigger.name(), tool);
-      var result = toolManager.execute(new LlmToolCall(UUID.randomUUID().toString(), tool, "{}"));
-      context.add(compact(tool, result));
-      log.info("scheduled_subagent_done event={} tool={}", trigger.name(), tool);
+      try {
+        var result = toolManager.execute(new LlmToolCall(UUID.randomUUID().toString(), tool, "{}"));
+        context.add(compact(tool, result));
+        log.info("scheduled_subagent_done event={} tool={}", trigger.name(), tool);
+      } catch (RuntimeException error) {
+        log.warn("scheduled_subagent_failed event={} tool={}", trigger.name(), tool, error);
+      }
     }
     return List.copyOf(context);
   }
@@ -78,7 +82,10 @@ public class ScheduledPromptContextOrchestrator implements ScheduledContextPrelo
             new LlmRequestMetadata("scheduled-subagent-planner"));
     try {
       var completion = client.complete(selectionRequest);
-      var selected = parseTools(completion.content(), tools);
+      var selected =
+          parseTools(completion.content(), tools).stream()
+              .filter(tool -> isRelevant(tool, prompt))
+              .toList();
       if (!selected.isEmpty()) return selected;
     } catch (RuntimeException error) {
       log.warn("scheduled_subagent_planner_failed; using deterministic fallback", error);
@@ -117,6 +124,23 @@ public class ScheduledPromptContextOrchestrator implements ScheduledContextPrelo
         || prompt.contains("tiempo")
         || prompt.contains("temperatura")
         || prompt.contains("lluvia");
+  }
+
+  private boolean isRelevant(String tool, String prompt) {
+    var normalized = prompt.toLowerCase(Locale.ROOT);
+    if (tool.equals("weather_current")) return containsWeather(normalized);
+    if (tool.equals("web_search")) {
+      return containsAny(normalized, "buscar", "investigar", "noticias", "internet", "web");
+    }
+    if (tool.startsWith("filesystem.")) {
+      return containsAny(normalized, "archivo", "documento", "carpeta", "directorio", "fichero");
+    }
+    return true;
+  }
+
+  private boolean containsAny(String prompt, String... terms) {
+    for (var term : terms) if (prompt.contains(term)) return true;
+    return false;
   }
 
   private String executionContext(ScheduledTrigger trigger) {
