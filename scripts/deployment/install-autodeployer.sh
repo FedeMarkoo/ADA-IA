@@ -31,6 +31,10 @@ if [[ ! -f "${env_file}" ]]; then
     install -o "${ada_user}" -g "${ada_group}" -m 0600 "${template}" "${env_file}"
     echo "Se creó ${env_file}; completá las credenciales antes de activar Telegram."
 fi
+# An existing .env may have been created by a previous sudo command. Keep
+# secrets private while making the file readable by the service account.
+chown "${ada_user}:${ada_group}" "${env_file}"
+chmod 0600 "${env_file}"
 
 # Docker prepara los datos con el UID/GID del contenedor. El deployer necesita
 # escribir sólo los backups, por lo que se habilita acceso grupal acotado.
