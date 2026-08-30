@@ -56,13 +56,15 @@ saludable, descarga el modelo configurado y recién después inicia LiteLLM y
 ADA. El puerto de Ollama queda limitado a `127.0.0.1:11434` para diagnóstico
 local; LiteLLM lo consume por la red interna de Compose.
 
-## MCP de búsqueda web
+## MCPs
 
 Los servidores MCP externos a ADA viven en `mcp/<nombre>` y se distribuyen en
 una única imagen `ghcr.io/fedemarkoo/ada-mcps`. El gateway implementa el
-transporte JSON-RPC y mantiene endpoints internos por servidor: `/web-search`
-expone `web_search` y `/filesystem` expone las tools de filesystem. ADA publica
-esas tools mediante sus providers y las ejecuta mediante sus adapters Java.
+transporte JSON-RPC y mantiene endpoints internos por servidor:
+`/web-search` expone `web_search`, `/filesystem` las tools de filesystem,
+`/weather` expone `weather_current` y `/google-calendar` expone
+`calendar_upcoming_events`. ADA publica esas tools mediante sus providers y las
+ejecuta mediante sus adapters Java.
 
 Compose levanta los MCPs en la red interna mediante el servicio `ada-mcps`.
 En el despliegue estándar, Compose consume la imagen publicada usando
@@ -83,6 +85,13 @@ y `/gdrive`, y resuelve las rutas antes de validarlas para impedir escapes con
 El endpoint de gestión queda atado a `127.0.0.1:8081`; así Prometheus y los
 endpoints de Actuator no quedan expuestos por la interfaz HTTP de la aplicación.
 En un despliegue remoto debe agregarse autenticación o una ACL de red.
+
+### Clima
+
+`weather_current` consulta geolocalización aproximada por IP cuando no recibe
+`location`; si recibe una ciudad, usa geocodificación. Luego consulta Open-Meteo
+y devuelve clima actual y un pronóstico breve de tres días. La tool acepta sólo
+la ubicación opcional; el pronóstico se obtiene en la misma respuesta.
 
 ## Telegram
 
@@ -116,8 +125,9 @@ inicio.
 
 ADA puede iniciar conversaciones mediante programaciones persistidas en SQLite.
 El scheduler consulta los disparadores periódicamente y ejecuta su prompt por
-el mismo caso de uso que una conversación HTTP o Telegram; la respuesta se
-envía por el canal de salida configurado.
+el mismo `ChatUseCase` que una conversación HTTP o Telegram. Actualmente la
+salida del scheduler usa el `LifecycleMessageSender`, cuya implementación activa
+envía a Telegram cuando está habilitado y configurado.
 
 El scheduler despierta cada segundo y consulta un índice de SQLite por las filas
 vencidas; si no hay ninguna, no ejecuta el modelo ni realiza llamadas externas.
@@ -126,15 +136,27 @@ segundos. La programación, la zona horaria y el prompt viven en la tabla
 `scheduled_triggers`, no en variables de entorno.
 
 El MCP `weather_current` obtiene clima y ubicación mediante servicios externos.
-En una tarea programada de tipo `weather`, ADA precarga ese dato antes de llamar
-al modelo; así no carga el catálogo MCP ni hace una segunda vuelta de herramientas.
+Antes de llamar al modelo, el scheduler ejecuta un subagente planificador que
+selecciona las tools relevantes y luego precarga sus resultados. El tipo de
+evento no limita la selección: el prompt puede combinar clima y Calendar. Los
+logs estructurados esperados son `scheduled_subagents_selected`,
+`scheduled_subagent_start`, `scheduled_subagent_done` o
+`scheduled_subagent_failed`.
 
 El MCP `calendar_upcoming_events` consulta, en modo solo lectura, los próximos
 eventos del calendario principal de Google. Sus credenciales se leen desde la
 bóveda cifrada legacy mediante `ADA_GOOGLE_VAULT_PATH` y
 `ADA_GOOGLE_VAULT_KEY_PATH`; nunca se guardan en el repositorio ni se imprimen
-en logs. Un prompt que mencione agenda, calendario, eventos o compromisos
-selecciona automáticamente este MCP.
+en logs. En tareas programadas, un prompt que mencione agenda, calendario,
+eventos o compromisos activa el fallback determinístico de Calendar si el
+planificador no devuelve JSON válido. En conversaciones interactivas, la
+selección depende del modelo de routing y de los nombres de tools disponibles.
+
+En Compose, esos archivos del host se montan dentro de `ada-mcps` como
+`/run/secrets/google-vault.db` y `/run/secrets/google-vault.key`. La bóveda debe
+contener el token OAuth y las credenciales de cliente con permiso de lectura de
+Calendar. El MCP puede renovar el access token usando el refresh token, pero no
+modifica eventos ni escribe credenciales en la aplicación.
 
 También se pueden cargar disparadores adicionales mediante `POST
 /api/v1/schedules`:
@@ -150,6 +172,12 @@ También se pueden cargar disparadores adicionales mediante `POST
   "enabled": true
 }
 ```
+
+Los disparadores se consultan con `GET /api/v1/schedules`. El `eventType` se
+persiste como metadato; el planificador usa el texto de `prompt` para decidir
+qué MCPs ejecutar. `cronExpression` usa seis campos de Spring, incluido el de
+segundos. Cada ejecución actualiza `last_run_at` y calcula el siguiente
+`next_run_at`; el `POST` con el mismo nombre actualiza la programación.
 
 ## SQLite fuera del repositorio
 

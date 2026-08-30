@@ -1,15 +1,15 @@
 # ADA
 
 ADA es un asistente local y extensible construido con Java 21, Maven y Spring Boot.
-El proyecto se reinicia desde cero manteniendo los principios del sistema
-anterior: local-first, privacidad, modularidad, trazabilidad, reversibilidad y
-uso responsable de recursos.
+Mantiene los principios del sistema anterior: local-first, privacidad,
+modularidad, trazabilidad, reversibilidad y uso responsable de recursos.
 
 ## Estado actual
 
-Esta primera iteración define la arquitectura, las reglas de desarrollo y los
-contratos operativos. La implementación funcional se incorporará por cortes
-pequeños y verificables.
+El sistema ya cuenta con conversaciones HTTP y Telegram, selección de contexto,
+tools MCP, RAG local, automatizaciones persistidas en SQLite, observabilidad y
+un gestor separado de pruebas de prompts. Las integraciones externas se activan
+por configuración y los secretos permanecen fuera del repositorio.
 
 ## Documentación
 
@@ -17,6 +17,8 @@ pequeños y verificables.
 - [Reglas de código](docs/coding-rules.md)
 - [Observabilidad y métricas](docs/observability.md)
 - [Integraciones y configuración](docs/integrations.md)
+- [Pruebas de prompts](docs/testing.md)
+- [ADA Test Manager](docs/test-manager.md)
 - [Decisiones de arquitectura](docs/decisions/README.md)
 
 ## Principios no negociables

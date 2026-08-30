@@ -128,7 +128,9 @@ system -> prompt -> tools -> memories -> tool_response
 
 Cada componente tiene una clase propia y solo agrega o transforma su parte.
 `system` siempre sale de SQLite mediante un puerto de application; no se
-permite un prompt default hardcodeado.
+permite hardcodear el prompt principal. Los prompts auxiliares de routing y
+planificación pueden vivir en código cuando son contratos internos mínimos,
+determinísticos y no reemplazan al prompt principal configurable.
 
 `CompactedPromptContextItem` puede eliminar mensajes anteriores y reemplazarlos
 por un resumen cuando se supera el límite de tokens. Debe preservar las reglas
