@@ -49,16 +49,14 @@ public class ScheduledTriggerScheduler {
         || content.isBlank()
         || "{}".equals(content.trim())
         || "[]".equals(content.trim())) {
-      return preloaded.isEmpty()
-          ? "No pude generar una respuesta."
-          : userFacing(preloaded.getFirst());
+      return preloaded.isEmpty() ? "No pude generar una respuesta." : preloadedMessage(preloaded);
     }
     var readable = readableContent(content);
     if ("weather".equalsIgnoreCase(eventType)
         && !readable.contains("°C")
         && !preloaded.isEmpty()
-        && userFacing(preloaded.getFirst()).contains("°C")) {
-      return userFacing(preloaded.getFirst());
+        && preloadedMessage(preloaded).contains("°C")) {
+      return preloadedMessage(preloaded);
     }
     return readable;
   }
@@ -85,6 +83,14 @@ public class ScheduledTriggerScheduler {
     return preloaded.startsWith("DATOS PRE-CARGADOS DEL CLIMA") && separator >= 0
         ? preloaded.substring(separator + 1)
         : preloaded;
+  }
+
+  private String preloadedMessage(List<String> preloaded) {
+    return preloaded.stream()
+        .map(this::userFacing)
+        .filter(value -> value.contains("°C"))
+        .findFirst()
+        .orElseGet(() -> userFacing(preloaded.getFirst()));
   }
 
   private List<String> preload(ScheduledTrigger trigger) {
