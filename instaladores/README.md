@@ -13,14 +13,22 @@ backups, fuera del repositorio. Telegram queda deshabilitado hasta completar
 Si preferís prepararlo manualmente:
 
 ```bash
-mkdir -p ../ada-data
-cp deploy/.env.example ../ada-data/.env
-chmod 600 ../ada-data/.env
+repo_dir="$(pwd -P)"
+data_dir="$(realpath -m "${repo_dir}/../ada-data")"
+mkdir -p "${data_dir}"
+cp deploy/.env.example "${data_dir}/.env"
+chmod 600 "${data_dir}/.env"
 ```
 
 `LITELLM_MASTER_KEY` y `ADA_GDRIVE_PATH` ya tienen valores locales para que
 Compose no falle por variables obligatorias. Cambiá esos valores antes de un
 entorno compartido o productivo.
+
+El autodeployer recibe rutas absolutas al instalarse: el repositorio es la
+fuente de Compose y `${data_dir}/.env` es siempre la configuración persistente.
+Así no depende del directorio desde el que se ejecute `systemd` ni de variables
+del shell del usuario. Si se usa `ADA_DATA_DIR`, debe configurarse de forma
+consistente en el `.env` antes de instalar el servicio.
 
 ## Linux
 

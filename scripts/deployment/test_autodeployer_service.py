@@ -15,13 +15,15 @@ class AutodeployerServiceTest(unittest.TestCase):
         for placeholder in (
             "@ADA_DIR@",
             "@ADA_ENV_FILE@",
+            "@ADA_USER@",
+            "@ADA_GROUP@",
         ):
             self.assertIn(placeholder, content)
 
         self.assertIn("After=docker.service network-online.target", content)
         self.assertIn("ExecStartPre=/usr/bin/docker info", content)
-        self.assertIn("User=10001", content)
-        self.assertIn("Group=10001", content)
+        self.assertIn("User=@ADA_USER@", content)
+        self.assertIn("Group=@ADA_GROUP@", content)
         self.assertIn("SupplementaryGroups=docker", content)
         self.assertIn("Environment=DOCKER_CONFIG=/tmp/ada-deployer-docker-config", content)
         self.assertIn("ExecStartPre=/usr/bin/mkdir -p /tmp/ada-deployer-home /tmp/ada-deployer-docker-config", content)

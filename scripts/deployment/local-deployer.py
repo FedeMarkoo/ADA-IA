@@ -38,10 +38,10 @@ def effective_environment(args):
 
 
 def resolve_data_dir(args, environment):
-    """Resolve ADA_DATA_DIR relative to the Compose env file."""
+    """Resolve ADA_DATA_DIR using the same project root as Docker Compose."""
     data_dir = Path(environment.get("ADA_DATA_DIR", "../ada-data")).expanduser()
     if not data_dir.is_absolute():
-        data_dir = args.env_file.parent / data_dir
+        data_dir = args.compose.parent / data_dir
     return data_dir.resolve()
 
 
