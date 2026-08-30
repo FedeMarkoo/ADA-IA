@@ -81,7 +81,7 @@ jobs:
             echo "Telegram no configurado; se omite el aviso."
             exit 0
           fi
-          message=$(printf 'ADA %s publicada 🚀\nImagen: %s:%s\nCommit: %.7s' "${RELEASE_TAG}" "${IMAGE}" "${RELEASE_TAG#v}" "${GITHUB_SHA}")
+          message=$(printf 'ADA publicada 🚀\nTag: %s\nCommit: %.7s' "${RELEASE_TAG}" "${GITHUB_SHA}")
           curl --fail --silent --show-error --request POST \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${message}" \
