@@ -68,7 +68,7 @@ public class ChatUseCase {
         var completion = invoke(id, req, tokenUsage);
         var executedTools = new ArrayList<String>();
         int rounds = 0;
-        while (!completion.toolCalls().isEmpty()) {
+        while (r.preloadedContext().isEmpty() && !completion.toolCalls().isEmpty()) {
           if (rounds++ >= 8) throw new IllegalStateException("Maximum tool rounds exceeded");
           var messages = new ArrayList<>(req.messages());
           messages.add(
