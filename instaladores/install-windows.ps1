@@ -20,13 +20,16 @@ if ($LASTEXITCODE -ne 0) {
     throw "Docker Compose no esta disponible o no responde"
 }
 
+ $CreatedEnv = $false
 if (-not (Test-Path $EnvFile)) {
     New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
     Copy-Item (Join-Path $ProjectDir "deploy\.env.example") $EnvFile
-    Write-Host "Se creo $EnvFile. Configuralo y vuelve a ejecutar el instalador."
-    exit 1
+    $CreatedEnv = $true
 }
 
 docker compose --env-file $EnvFile up -d --build
 Write-Host "ADA: http://localhost:8080 | Test Manager: http://localhost:8088"
 Write-Host "Grafana: http://localhost:3000 | Prometheus: http://localhost:9090"
+if ($CreatedEnv) {
+    Write-Host "Se creo $EnvFile con valores locales para arrancar. Telegram queda deshabilitado; edita ese archivo para configurarlo."
+}

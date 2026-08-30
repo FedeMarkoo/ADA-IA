@@ -12,15 +12,19 @@ mkdir -p "${data_dir}"
 command -v docker >/dev/null || { echo "Docker no está instalado." >&2; exit 1; }
 docker compose version >/dev/null || { echo "Docker Compose no está disponible." >&2; exit 1; }
 
+created_env=false
 if [[ ! -f "${env_file}" ]]; then
     cp deploy/.env.example "${env_file}"
-    echo "Se creó ${env_file}. Configúralo y vuelve a ejecutar el instalador."
-    exit 1
+    chmod 600 "${env_file}"
+    created_env=true
 fi
 
 docker compose --env-file "${env_file}" up -d --build
 echo "ADA está disponible en http://localhost:8080 y el Test Manager en http://localhost:8088."
 echo "Grafana: http://localhost:3000 | Prometheus: http://localhost:9090"
+if [[ "${created_env}" == true ]]; then
+    echo "Se creó ${env_file} con valores locales seguros para arrancar. Telegram queda deshabilitado; edita ese archivo para configurarlo."
+fi
 
 if [[ "${1:-}" == "--autodeployer" ]]; then
     ./scripts/deployment/install-autodeployer.sh
