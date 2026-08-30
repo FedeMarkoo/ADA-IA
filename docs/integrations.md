@@ -14,6 +14,10 @@ ADA_LLM_API_KEY=...
 ADA_LLM_DEFAULT_MODEL=openai/gpt-4o-mini
 ```
 
+Cuando ADA usa el LiteLLM incluido en Compose, `ADA_LLM_API_KEY` debe coincidir
+con `LITELLM_MASTER_KEY`. Si no se define explícitamente, Compose la hereda de
+`LITELLM_MASTER_KEY` automáticamente.
+
 No se guardan claves en `application.yml`, SQLite ni logs. Timeouts, reintentos,
 backoff y circuit breaker deben ser explícitos y medidos.
 

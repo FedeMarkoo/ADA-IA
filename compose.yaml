@@ -15,7 +15,7 @@ services:
     environment:
       ADA_DATA_DIR: /data
       ADA_LLM_BASE_URL: ${ADA_LLM_BASE_URL:-http://litellm:4000}
-      ADA_LLM_API_KEY: ${ADA_LLM_API_KEY:-}
+      ADA_LLM_API_KEY: ${ADA_LLM_API_KEY:-${LITELLM_MASTER_KEY:-}}
       ADA_LLM_DEFAULT_MODEL: ${ADA_LLM_DEFAULT_MODEL:-openai/gpt-4o-mini}
       ADA_LLM_ROUTING_MODEL: ${ADA_LLM_ROUTING_MODEL:-ollama/llama3.2:1b}
       ADA_TELEGRAM_ENABLED: ${ADA_TELEGRAM_ENABLED:-false}
