@@ -49,6 +49,8 @@ jobs:
           python3 -m unittest discover -s mcp/web-search -p 'test_*.py'
       - name: Test SQLite smoke runner
         run: python3 -m unittest discover -s scripts/testing -p 'test_*.py'
+      - name: Test release version calculator
+        run: scripts/release/test_calculate_version.sh
 
   test:
     name: Run tests
