@@ -24,8 +24,6 @@ jobs:
     name: Build and publish image
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,16 +72,13 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          IMAGE_DIGEST: ${{ needs.publish.outputs.digest }}
         run: |
           set -euo pipefail
           if [[ -z "${TELEGRAM_BOT_TOKEN}" || -z "${TELEGRAM_CHAT_ID}" ]]; then
             echo "Telegram no configurado; se omite el aviso."
             exit 0
           fi
-          message="ADA actualizada 🚀
-Imagen: ${IMAGE}:latest
-Commit: ${GITHUB_SHA:0:7}"
+          message=$(printf 'ADA actualizada 🚀\nImagen: %s:latest\nCommit: %.7s' "${IMAGE}" "${GITHUB_SHA}")
           curl --fail --silent --show-error --request POST \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${message}" \
