@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("run-smoke-prompts.py")
@@ -13,6 +14,11 @@ SPEC.loader.exec_module(MODULE)
 
 
 class SmokeRunnerTest(unittest.TestCase):
+    def test_default_database_path_is_relative_to_repository(self):
+        with patch.dict(MODULE.os.environ, {}, clear=True):
+            expected = Path(MODULE.__file__).resolve().parents[2] / "../ada-data/db/ada.sqlite"
+            self.assertEqual(MODULE.database_path(None), expected.resolve())
+
     def test_rejects_non_positive_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "ada.sqlite"
