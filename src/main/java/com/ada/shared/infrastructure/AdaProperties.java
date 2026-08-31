@@ -1,5 +1,6 @@
 package com.ada.shared.infrastructure;
 
+import com.ada.shared.infrastructure.dto.DiscordProperties;
 import com.ada.shared.infrastructure.dto.LlmProperties;
 import com.ada.shared.infrastructure.dto.RagProperties;
 import com.ada.shared.infrastructure.dto.SecretsProperties;
@@ -23,6 +24,7 @@ public class AdaProperties {
   @NotBlank private String dataDir;
   @NestedConfigurationProperty private LlmProperties llm;
   @NestedConfigurationProperty private TelegramProperties telegram;
+  @NestedConfigurationProperty private DiscordProperties discord;
   @NestedConfigurationProperty private SecretsProperties secrets;
   @Valid @NestedConfigurationProperty private RagProperties rag;
 

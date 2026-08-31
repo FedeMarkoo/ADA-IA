@@ -42,6 +42,12 @@ ada:
     enabled: ${ADA_TELEGRAM_ENABLED:false}
     bootstrap-bot-token: ${ADA_TELEGRAM_BOOTSTRAP_BOT_TOKEN:}
     bootstrap-chat-id: ${ADA_TELEGRAM_BOOTSTRAP_CHAT_ID:}
+  discord:
+    enabled: ${ADA_DISCORD_ENABLED:false}
+    bootstrap-bot-token: ${ADA_DISCORD_BOOTSTRAP_BOT_TOKEN:}
+    bootstrap-channel-id: ${ADA_DISCORD_BOOTSTRAP_CHANNEL_ID:}
+    # Envía los eventos de inicio y apagado al canal configurado.
+    send-lifecycle-notifications: ${ADA_DISCORD_SEND_LIFECYCLE_NOTIFICATIONS:true}
   secrets:
     master-key: ${ADA_SECRET_MASTER_KEY:}
   rag:
