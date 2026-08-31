@@ -38,4 +38,11 @@ class DiscordSecretInitializerTest {
 
     verifyNoInteractions(secretStore);
   }
+
+  @Test
+  void doesNotPersistBootstrapValuesWhenDiscordIsNotConfigured() {
+    new DiscordSecretInitializer(secretStore, properties).run(null);
+
+    verifyNoInteractions(secretStore);
+  }
 }
