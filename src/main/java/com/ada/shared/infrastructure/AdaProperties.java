@@ -1,10 +1,10 @@
 package com.ada.shared.infrastructure;
 
+import com.ada.shared.infrastructure.dto.DiscordProperties;
 import com.ada.shared.infrastructure.dto.LlmProperties;
 import com.ada.shared.infrastructure.dto.RagProperties;
 import com.ada.shared.infrastructure.dto.SecretsProperties;
 import com.ada.shared.infrastructure.dto.TelegramProperties;
-import com.ada.shared.infrastructure.dto.DiscordProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.nio.file.*;

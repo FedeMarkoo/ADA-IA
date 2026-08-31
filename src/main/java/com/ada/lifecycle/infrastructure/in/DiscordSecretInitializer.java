@@ -20,7 +20,15 @@ public class DiscordSecretInitializer implements ApplicationRunner {
   public void run(ApplicationArguments args) {
     var discord = properties.getDiscord();
     if (discord == null || !discord.isEnabled()) return;
-    secretStore.saveIfAbsent(BOT_TOKEN, discord.getBootstrapBotToken());
-    secretStore.saveIfAbsent(CHANNEL_ID, discord.getBootstrapChannelId());
+    saveIfNotBlank(BOT_TOKEN, discord.getBootstrapBotToken());
+    saveIfNotBlank(CHANNEL_ID, discord.getBootstrapChannelId());
+  }
+
+  private void saveIfNotBlank(String name, String value) {
+    if (!isBlank(value)) secretStore.saveIfAbsent(name, value);
+  }
+
+  private boolean isBlank(String value) {
+    return value == null || value.isBlank();
   }
 }

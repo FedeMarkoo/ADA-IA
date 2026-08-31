@@ -17,13 +17,18 @@ public class DiscordBotClient {
   private final ObjectMapper objectMapper;
 
   public void sendMessage(String token, String channelId, String text) {
-    client(token).post().uri("/channels/{channelId}/messages", channelId)
+    client(token)
+        .post()
+        .uri("/channels/{channelId}/messages", channelId)
         .contentType(MediaType.APPLICATION_JSON)
-        .body(new DiscordMessage(text)).retrieve().toBodilessEntity();
+        .body(new DiscordMessage(text))
+        .retrieve()
+        .toBodilessEntity();
   }
 
   public void connect(String token, WebSocket.Listener listener) {
-    HttpClient.newHttpClient().newWebSocketBuilder()
+    HttpClient.newHttpClient()
+        .newWebSocketBuilder()
         .buildAsync(URI.create("wss://gateway.discord.gg/?v=10&encoding=json"), listener);
   }
 
@@ -36,8 +41,10 @@ public class DiscordBotClient {
   }
 
   private RestClient client(String token) {
-    return restClientBuilder.baseUrl("https://discord.com/api/v10")
-        .defaultHeader("Authorization", "Bot " + token).build();
+    return restClientBuilder
+        .baseUrl("https://discord.com/api/v10")
+        .defaultHeader("Authorization", "Bot " + token)
+        .build();
   }
 
   public record DiscordMessage(String content) {}

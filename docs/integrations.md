@@ -110,7 +110,9 @@ ADA_DISCORD_BOOTSTRAP_CHANNEL_ID=...
 Las variables `ADA_DISCORD_BOOTSTRAP_*` solo se usan para guardar los secretos
 la primera vez y luego pueden retirarse. El canal se identifica por su ID; en
 Discord se obtiene activando Developer Mode y usando “Copy Channel ID”. El
-token nunca se registra ni se guarda en texto plano.
+token nunca se registra ni se guarda en texto plano. Para no enviar los eventos
+de inicio y apagado a Discord, configurá
+`ADA_DISCORD_SEND_LIFECYCLE_NOTIFICATIONS=false`.
 
 ## SQLite fuera del repositorio
 
