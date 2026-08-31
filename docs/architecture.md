@@ -77,8 +77,10 @@ Un adapter externo transforma entre el contrato de application y su DTO de
 infraestructura. Entidades y BO nunca se exponen directamente por HTTP.
 
 `SqliteSystemPromptProvider` es un adapter de salida: implementa un puerto de
-application y lee la versión activa desde `system_prompts` en SQLite. No hay un
-prompt default hardcodeado en el código.
+application y lee la versión activa desde `system_prompts` en SQLite. El prompt
+principal de ADA no está hardcodeado. Sí existen prompts internos, pequeños y
+estructurados, para el routing y el planificador de subagentes; no representan
+la personalidad ni las instrucciones principales del asistente.
 
 Las memorias se aíslan por `conversationId`, que forma parte del request de
 application y se propaga desde el DTO REST. El manager nunca mezcla memorias de

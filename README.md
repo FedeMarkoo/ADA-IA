@@ -1,15 +1,15 @@
 # ADA
 
 ADA es un asistente local y extensible construido con Java 21, Maven y Spring Boot.
-El proyecto se reinicia desde cero manteniendo los principios del sistema
-anterior: local-first, privacidad, modularidad, trazabilidad, reversibilidad y
-uso responsable de recursos.
+Mantiene los principios del sistema anterior: local-first, privacidad,
+modularidad, trazabilidad, reversibilidad y uso responsable de recursos.
 
 ## Estado actual
 
-Esta primera iteración define la arquitectura, las reglas de desarrollo y los
-contratos operativos. La implementación funcional se incorporará por cortes
-pequeños y verificables.
+El sistema ya cuenta con conversaciones HTTP y Telegram, selección de contexto,
+tools MCP, RAG local, automatizaciones persistidas en SQLite, observabilidad y
+un gestor separado de pruebas de prompts. Las integraciones externas se activan
+por configuración y los secretos permanecen fuera del repositorio.
 
 ## Documentación
 
@@ -17,6 +17,8 @@ pequeños y verificables.
 - [Reglas de código](docs/coding-rules.md)
 - [Observabilidad y métricas](docs/observability.md)
 - [Integraciones y configuración](docs/integrations.md)
+- [Pruebas de prompts](docs/testing.md)
+- [ADA Test Manager](docs/test-manager.md)
 - [Decisiones de arquitectura](docs/decisions/README.md)
 
 ## Principios no negociables
@@ -39,7 +41,94 @@ mvn verify
 ```
 
 El despliegue local de LiteLLM y el layout de datos están documentados en
-[Integraciones y configuración](docs/integrations.md).
+[Integraciones y configuración](docs/integrations.md). También hay instaladores
+listos para [Linux, macOS y Windows](instaladores/README.md).
 
 El smoke runner HTTP y el dashboard local de Grafana están documentados en
 [Monitoreo local](monitoring/README.md).
+
+## Versiones y releases
+
+Los merges a `main` calculan automáticamente la siguiente versión semántica a
+partir de los commits convencionales (`fix`, `feat` y cambios incompatibles).
+El workflow crea el tag `vX.Y.Z`, el GitHub Release y dispara explícitamente
+la construcción de las imágenes Docker `latest` y `X.Y.Z` para ADA y MCP. La
+primera release usa `0.1.0`. El deployer sigue consumiendo `latest` por
+defecto; para fijar una versión, configura `ADA_VERSION=X.Y.Z`.
+
+## Instaladores multiplataforma
+
+Los instaladores de `instaladores/` validan Docker, crean `../ada-data/.env`
+desde el ejemplo cuando hace falta y levantan el stack completo con Docker
+Compose. La configuración queda junto con las bases, backups y demás datos
+persistentes, fuera del repositorio. Telegram queda deshabilitado inicialmente;
+para activarlo completa las credenciales y `ADA_SECRET_MASTER_KEY` en ese
+archivo. No se deben versionar secretos.
+
+### Linux
+
+```bash
+./instaladores/install-linux.sh
+```
+
+Para instalar además el autodeployer de `systemd`:
+
+```bash
+./instaladores/install-linux.sh --autodeployer
+```
+
+### macOS
+
+Con Docker Desktop abierto:
+
+```bash
+./instaladores/install-macos.sh
+```
+
+### Windows
+
+Con Docker Desktop abierto, desde PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\instaladores\install-windows.ps1
+```
+
+Las URLs locales son ADA `http://localhost:8080`, Test Manager
+`http://localhost:8088`, Grafana `http://localhost:3000` y Prometheus
+`http://localhost:9090`. Para detener el stack desde la raíz del repositorio:
+
+```bash
+repo_dir="$(pwd -P)"
+data_dir="$(realpath -m "${repo_dir}/../ada-data")"
+docker compose --project-directory "${repo_dir}" \
+  --env-file "${data_dir}/.env" down
+```
+
+La instalación estándar usa siempre `../ada-data` desde la raíz del repositorio.
+Si definís `ADA_DATA_DIR`, la misma ruta debe estar en `ada-data/.env`, en el
+comando de Compose y al instalar el autodeployer.
+
+En Windows, ejecutar el mismo comando desde PowerShell.
+
+## Inicio automático en Linux
+
+El autodeployer mantiene levantado el stack de ADA, comprueba nuevas imágenes
+cada cinco minutos y se reinicia si el proceso falla. Se instala desde la raíz
+del repositorio; el instalador convierte el repositorio y
+`../ada-data/.env` en rutas absolutas dentro de la unidad `systemd`:
+
+```bash
+# Edita ../ada-data/.env y completa los secretos y rutas locales
+sudo usermod -aG docker "$USER"
+newgrp docker
+./scripts/deployment/install-autodeployer.sh
+```
+
+El instalador habilita `ada-deployer.service` para cada arranque y lo inicia
+en el momento. Para revisar el estado y los logs:
+
+```bash
+systemctl status ada-deployer.service
+journalctl -u ada-deployer.service -f
+```

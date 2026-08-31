@@ -1,4 +1,13 @@
 services:
+  ada-data-init:
+    image: alpine:3.21
+    restart: "no"
+    user: "0:0"
+    command: ["/bin/sh", "-c", "mkdir -p /ada-data/db /ada-data/logs /ada-data/backups /ada-data/exports /ada-data/models /ada-data/runtime /test-manager-data && chown -R $${ADA_CONTAINER_UID:-10001}:$${ADA_CONTAINER_GID:-10001} /ada-data/db /ada-data/logs /ada-data/exports /ada-data/models /ada-data/runtime /test-manager-data"]
+    volumes:
+      - ${ADA_DATA_DIR:-../ada-data}:/ada-data
+      - ${ADA_TEST_MANAGER_DATA_DIR:-../ada-test-manager-data}:/test-manager-data
+
   ada:
     image: ${ADA_IMAGE:-ghcr.io/fedemarkoo/ada-ia}:${ADA_VERSION:-latest}
     user: "${ADA_CONTAINER_UID:-10001}:${ADA_CONTAINER_GID:-10001}"
@@ -6,7 +15,7 @@ services:
     environment:
       ADA_DATA_DIR: /data
       ADA_LLM_BASE_URL: ${ADA_LLM_BASE_URL:-http://litellm:4000}
-      ADA_LLM_API_KEY: ${ADA_LLM_API_KEY:-}
+      ADA_LLM_API_KEY: ${ADA_LLM_API_KEY:-${LITELLM_MASTER_KEY:-}}
       ADA_LLM_DEFAULT_MODEL: ${ADA_LLM_DEFAULT_MODEL:-openai/gpt-4o-mini}
       ADA_LLM_ROUTING_MODEL: ${ADA_LLM_ROUTING_MODEL:-ollama/llama3.2:1b}
       ADA_TELEGRAM_ENABLED: ${ADA_TELEGRAM_ENABLED:-false}
@@ -16,6 +25,8 @@ services:
       ADA_DEPLOYED_VERSION: ${ADA_VERSION:-latest}
       ADA_MCP_WEB_SEARCH_URL: http://ada-mcps:8000/web-search
       ADA_MCP_FILESYSTEM_URL: http://ada-mcps:8000/filesystem
+      ADA_MCP_WEATHER_URL: http://ada-mcps:8000/weather
+      ADA_MCP_CALENDAR_URL: http://ada-mcps:8000/google-calendar
       MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
     ports:
       - "127.0.0.1:8080:8080"
@@ -23,10 +34,30 @@ services:
     volumes:
       - ${ADA_DATA_DIR:-../ada-data}:/data
     depends_on:
+      ada-data-init:
+        condition: service_completed_successfully
       litellm:
         condition: service_healthy
       ada-mcps:
         condition: service_healthy
+
+  ada-test-manager:
+    build: ./test-manager
+    restart: unless-stopped
+    environment:
+      ADA_URL: http://ada:8080
+      DB_PATH: /data/test-manager.sqlite
+      ADA_TIMEOUT_SECONDS: ${ADA_TIMEOUT_SECONDS:-900}
+      ADA_POLL_SECONDS: ${ADA_POLL_SECONDS:-2}
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - ${ADA_TEST_MANAGER_DATA_DIR:-../ada-test-manager-data}:/data
+    depends_on:
+      ada-data-init:
+        condition: service_completed_successfully
+      ada:
+        condition: service_started
 
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
@@ -75,18 +106,26 @@ services:
     command: ["ollama pull $${OLLAMA_ROUTING_MODEL:-llama3.2:1b} && ollama pull $${OLLAMA_MODEL:-qwen2.5:7b}"]
 
   ada-mcps:
-    build: ./mcp
+    image: ${ADA_MCP_IMAGE:-ghcr.io/fedemarkoo/ada-mcps}:${ADA_MCP_VERSION:-latest}
+    user: "0:0"
     restart: unless-stopped
     environment:
       ADA_FILESYSTEM_ALLOWED_ROOTS: /data:/gdrive
+      ADA_GOOGLE_VAULT_PATH: /run/secrets/google-vault.db
+      ADA_GOOGLE_VAULT_KEY_PATH: /run/secrets/google-vault.key
     volumes:
       - ${ADA_DATA_DIR:-../ada-data}:/data:ro
       - ${ADA_GDRIVE_PATH:?ADA_GDRIVE_PATH must point to the host Google Drive mount}:/gdrive:ro
+      - ${ADA_GOOGLE_VAULT_PATH:?ADA_GOOGLE_VAULT_PATH must point to the legacy vault}:/run/secrets/google-vault.db:ro
+      - ${ADA_GOOGLE_VAULT_KEY_PATH:?ADA_GOOGLE_VAULT_KEY_PATH must point to the legacy vault key}:/run/secrets/google-vault.key:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/filesystem', timeout=2)"]
       interval: 10s
       timeout: 5s
       retries: 5
+    depends_on:
+      ada-data-init:
+        condition: service_completed_successfully
 
   prometheus:
     image: prom/prometheus:v2.55.1

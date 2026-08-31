@@ -92,7 +92,7 @@ se quiera eliminar explícitamente esos datos.
 La imagen ejecuta ADA con el usuario no root `ada` (UID/GID `10001`). En una
 instalación nueva, el directorio configurado en `ADA_DATA_DIR` debe existir y
 ser escribible por ese UID/GID, o se deben definir explícitamente
-`ADA_CONTAINER_UID` y `ADA_CONTAINER_GID` en `deploy/.env`. El primer arranque
+`ADA_CONTAINER_UID` y `ADA_CONTAINER_GID` en `../ada-data/.env`. El primer arranque
 con una ruta nueva debe validarse revisando `/actuator/health` y los logs del
 servicio.
 ## Routing de contexto

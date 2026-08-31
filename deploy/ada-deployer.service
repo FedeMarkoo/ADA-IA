@@ -1,15 +1,26 @@
 [Unit]
 Description=ADA local image deployer
-After=docker.service
-Requires=docker.service
+Wants=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/ada
-ExecStart=/usr/bin/env python3 %h/ada/scripts/deployment/local-deployer.py --interval 300
+User=@ADA_USER@
+Group=@ADA_GROUP@
+SupplementaryGroups=docker
+WorkingDirectory=@ADA_DIR@
+Environment=HOME=/tmp/ada-deployer-home
+Environment=DOCKER_CONFIG=/tmp/ada-deployer-docker-config
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/usr/bin/mkdir -p /tmp/ada-deployer-home /tmp/ada-deployer-docker-config
+ExecStartPre=/usr/bin/docker info
+ExecStart=/usr/bin/env python3 @ADA_DIR@/scripts/deployment/local-deployer.py --compose @ADA_DIR@/compose.yaml --env-file @ADA_ENV_FILE@ --interval 300
 Restart=always
 RestartSec=15
 NoNewPrivileges=true
+TimeoutStartSec=0
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

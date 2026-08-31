@@ -1,5 +1,6 @@
 package com.ada.lifecycle.infrastructure.in;
 
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.ada.lifecycle.application.port.out.LifecycleMessageSender;
@@ -24,5 +25,13 @@ class LifecycleNotificationListenerTest {
     listener.onContextClosed(new ContextClosedEvent(new GenericApplicationContext()));
 
     verify(sender).send("ADA se está apagando 📴");
+  }
+
+  @Test
+  void sendsStoppingMessageOnlyOnceWhenContextClosesMoreThanOnce() {
+    listener.onContextClosed(new ContextClosedEvent(new GenericApplicationContext()));
+    listener.onContextClosed(new ContextClosedEvent(new GenericApplicationContext()));
+
+    verify(sender, times(1)).send("ADA se está apagando 📴");
   }
 }

@@ -26,7 +26,14 @@ CREATE TABLE IF NOT EXISTS smoke_prompts (
 def database_path(argument):
     if argument:
         return Path(argument)
-    return Path(os.environ.get("ADA_DATA_DIR", "../ada-data")) / "db" / "ada.sqlite"
+    configured = os.environ.get("ADA_DATA_DIR")
+    if configured:
+        data_dir = Path(configured).expanduser()
+        if not data_dir.is_absolute():
+            data_dir = Path(__file__).resolve().parents[2] / data_dir
+    else:
+        data_dir = Path(__file__).resolve().parents[2] / "../ada-data"
+    return data_dir.resolve() / "db" / "ada.sqlite"
 
 
 def seed_prompts(database, seed_file):

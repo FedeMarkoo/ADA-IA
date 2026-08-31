@@ -28,7 +28,7 @@ public class ContextSelectionManager {
   public ContextSelection select(ChatRequest request) {
     var tools = toolManager.availableTools();
     var memories = memoryManager.memorySubjects(request);
-    var fallback = ContextSelection.all(tools, memories);
+    var fallback = ContextSelection.none();
     var selectionRequest = requestFor(request, tools, memories);
     try {
       var completion =
@@ -40,6 +40,14 @@ public class ContextSelectionManager {
                       () -> client.complete(selectionRequest)));
       metrics.recordTokenBreakdown(selectionRequest, completion);
       var selection = parse(completion.content(), tools, memories, fallback);
+      if (isWeatherRequest(request) && !selection.tools().contains("weather_current")) {
+        selection =
+            new ContextSelection(
+                List.of("weather"),
+                List.of("weather_current"),
+                selection.memories(),
+                selection.compactContext());
+      }
       metrics.recordContextSelection(properties.getLlm().getRoutingModel(), selection);
       return selection;
     } catch (RuntimeException error) {
@@ -50,7 +58,7 @@ public class ContextSelectionManager {
 
   private LlmRequest requestFor(ChatRequest request, List<LlmTool> tools, List<String> memories) {
     var catalog =
-        "MCPs: web_search\nRAG: enabled\nTools: "
+        "MCPs: web_search (información externa), weather (clima/ubicación)\nRAG: enabled\nTools: "
             + tools.stream().map(LlmTool::name).toList()
             + "\nMemories: "
             + memories
@@ -78,11 +86,12 @@ public class ContextSelectionManager {
               .toList();
       var validMemories =
           memories.stream().filter(name -> contains(json.path("memories"), name)).toList();
+      var selectedMcps =
+          List.of("web_search", "weather").stream()
+              .filter(name -> contains(json.path("mcps"), name))
+              .toList();
       return new ContextSelection(
-          List.of("web_search"),
-          validTools,
-          validMemories,
-          json.path("compactContext").asBoolean(false));
+          selectedMcps, validTools, validMemories, json.path("compactContext").asBoolean(false));
     } catch (Exception error) {
       return fallback;
     }
@@ -102,5 +111,12 @@ public class ContextSelectionManager {
     var lastFence = value.lastIndexOf("```");
     if (firstLineEnd < 0 || lastFence <= firstLineEnd) return value;
     return value.substring(firstLineEnd + 1, lastFence).trim();
+  }
+
+  private boolean isWeatherRequest(ChatRequest request) {
+    var message = request.message().toLowerCase(java.util.Locale.ROOT);
+    return message.contains("clima")
+        || message.contains("tiempo")
+        || message.contains("temperatura");
   }
 }

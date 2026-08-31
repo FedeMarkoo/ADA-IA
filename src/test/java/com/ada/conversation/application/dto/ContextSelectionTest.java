@@ -16,4 +16,9 @@ class ContextSelectionTest {
     assertThat(selection.tools()).containsExactly("web_search");
     assertThat(selection.memories()).containsExactly("preferences");
   }
+
+  @Test
+  void fallbackDoesNotEnableExternalContext() {
+    assertThat(ContextSelection.all(List.of(), List.of()).mcps()).isEmpty();
+  }
 }
